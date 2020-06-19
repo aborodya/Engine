@@ -29,16 +29,14 @@
 #include <ql/time/period.hpp>
 #include <ql/types.hpp>
 
+namespace ore {
+namespace data {
 using std::string;
 using std::vector;
 using ore::data::XMLNode;
-using ore::data::XMLDocument;
 using QuantLib::Period;
 using QuantLib::DayCounter;
 using QuantLib::Calendar;
-
-namespace ore {
-namespace data {
 
 //! FX volatility structure configuration
 /*!
@@ -58,7 +56,7 @@ public:
     FXVolatilityCurveConfig() {}
     //! Detailed constructor
     FXVolatilityCurveConfig(const string& curveID, const string& curveDescription, const Dimension& dimension,
-                            const vector<Period>& expiries, const string& fxSpotID = "",
+                            const vector<string>& expiries, const string& fxSpotID = "",
                             const string& fxForeignCurveID = "", const string& fxDomesticCurveID = "",
                             const DayCounter& dayCounter = QuantLib::Actual365Fixed(),
                             const Calendar& calendar = QuantLib::TARGET());
@@ -73,7 +71,7 @@ public:
     //! \name Inspectors
     //@{
     const Dimension& dimension() const { return dimension_; }
-    const vector<Period>& expiries() const { return expiries_; }
+    const vector<string>& expiries() const { return expiries_; }
     const DayCounter& dayCounter() const { return dayCounter_; }
     const Calendar& calendar() const { return calendar_; }
     // only required for Smile
@@ -86,7 +84,7 @@ public:
     //! \name Setters
     //@{
     Dimension& dimension() { return dimension_; }
-    vector<Period>& expiries() { return expiries_; }
+    vector<string>& expiries() { return expiries_; }
     DayCounter& dayCounter() { return dayCounter_; }
     Calendar& calendar() { return calendar_; }
     string& fxSpotID() { return fxSpotID_; }
@@ -95,7 +93,7 @@ public:
     //@}
 private:
     Dimension dimension_;
-    vector<Period> expiries_;
+    vector<string> expiries_;
     DayCounter dayCounter_;
     Calendar calendar_;
     string fxSpotID_;

@@ -25,10 +25,9 @@
 
 #include <ored/portfolio/trade.hpp>
 
-using std::string;
-
 namespace ore {
 namespace data {
+using std::string;
 
 //! Serializable FX Swap
 /*!
@@ -51,7 +50,13 @@ public:
     */
 
     //! Build QuantLib/QuantExt instrument, link pricing engine
-    void build(const boost::shared_ptr<EngineFactory>&);
+    void build(const boost::shared_ptr<EngineFactory>&) override;
+
+    //! Return no fixings for an FxSwap.
+    std::map<std::string, std::set<QuantLib::Date>> fixings(
+        const QuantLib::Date& settlementDate = QuantLib::Date()) const override {
+        return {};
+    }
 
     //! \name Inspectors
     //@{
@@ -67,8 +72,8 @@ public:
 
     //! \name Serialisation
     //@{
-    virtual void fromXML(XMLNode* node);
-    virtual XMLNode* toXML(XMLDocument& doc);
+    virtual void fromXML(XMLNode* node) override;
+    virtual XMLNode* toXML(XMLDocument& doc) override;
     //@}
 private:
     string nearDate_;

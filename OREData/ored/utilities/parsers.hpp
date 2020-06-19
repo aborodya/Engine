@@ -42,10 +42,9 @@
 #include <boost/algorithm/string/trim.hpp>
 #include <boost/tokenizer.hpp>
 
-using std::string;
-
 namespace ore {
 namespace data {
+using std::string;
 
 //! Convert std::string to QuantLib::Date
 /*!
@@ -58,6 +57,18 @@ QuantLib::Date parseDate(const string& s);
   \ingroup utilities
 */
 QuantLib::Real parseReal(const string& s);
+
+//! Attempt to convert text to Real
+/*! Attempts to convert text to Real
+    \param[in]  s      The string we wish to convert to a Real
+    \param[out] result The result of the conversion if it is valid.
+                       Null<Real>() if conversion fails
+
+    \return True if the conversion was successful, False if not
+
+    \ingroup utilities
+*/
+bool tryParseReal(const string& s, QuantLib::Real& result);
 
 //! Convert text to QuantLib::Integer
 /*!
@@ -134,6 +145,12 @@ QuantLib::Position::Type parsePositionType(const string& s);
 */
 QuantLib::Settlement::Type parseSettlementType(const string& s);
 
+//! Convert text to QuantLib::Settlement::Method
+/*!
+\ingroup utilities
+*/
+QuantLib::Settlement::Method parseSettlementMethod(const string& s);
+
 //! Convert text to QuantLib::Exercise::Type
 /*!
 \ingroup utilities
@@ -158,6 +175,18 @@ void parseDateOrPeriod(const string& s, QuantLib::Date& d, QuantLib::Period& p, 
 */
 QuantLib::LsmBasisSystem::PolynomType parsePolynomType(const std::string& s);
 
+//! Convert text to QuantLib::SobolBrownianGenerator::Ordering
+/*!
+\ingroup utilities
+*/
+QuantLib::SobolBrownianGenerator::Ordering parseSobolBrownianGeneratorOrdering(const std::string& s);
+
+//! Convert text to QuantLib::SobolRsg::DirectionIntegers
+/*!
+\ingroup utilities
+*/
+QuantLib::SobolRsg::DirectionIntegers parseSobolRsgDirectionIntegers(const std::string& s);
+
 //! Convert comma separated list of values to vector of values
 /*!
 \ingroup utilities
@@ -170,6 +199,14 @@ template <class T> std::vector<T> parseListOfValues(string s, std::function<T(st
     for (auto r : tokens) {
         boost::trim(r);
         vec.push_back(parser(r));
+    }
+    return vec;
+}
+
+template <class T> std::vector<T> parseVectorOfValues(std::vector<std::string> str, std::function<T(string)> parser) {
+    std::vector<T> vec;
+    for (auto s : str) {
+        vec.push_back(parser(s));
     }
     return vec;
 }

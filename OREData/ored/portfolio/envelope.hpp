@@ -27,15 +27,13 @@
 #include <ored/utilities/xmlutils.hpp>
 #include <set>
 
+namespace ore {
+namespace data {
 using std::string;
 using std::map;
 using std::set;
 using ore::data::XMLSerializable;
-
 using ore::data::XMLNode;
-
-namespace ore {
-namespace data {
 
 //! Serializable object holding generic trade data, reporting dimensions
 /*!
@@ -68,8 +66,8 @@ public:
 
     //! \name Serialisation
     //@{
-    virtual void fromXML(XMLNode* node);
-    virtual XMLNode* toXML(XMLDocument& doc);
+    virtual void fromXML(XMLNode* node) override;
+    virtual XMLNode* toXML(XMLDocument& doc) override;
     //@}
 
     //! \name Inspectors

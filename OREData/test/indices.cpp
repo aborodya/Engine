@@ -16,13 +16,17 @@
  FITNESS FOR A PARTICULAR PURPOSE. See the license for more details.
 */
 
-#include "indices.hpp"
+#include <boost/test/unit_test.hpp>
 #include <ored/configuration/conventions.hpp>
 #include <ored/utilities/indexparser.hpp>
+#include <oret/toplevelfixture.hpp>
 
 using namespace QuantLib;
 using namespace boost::unit_test_framework;
 using namespace ore;
+using namespace std;
+
+namespace {
 
 boost::shared_ptr<data::Conventions> convs() {
     boost::shared_ptr<data::Conventions> conventions(new data::Conventions());
@@ -84,8 +88,6 @@ boost::shared_ptr<data::Conventions> convs() {
     return conventions;
 }
 
-namespace testsuite {
-
 struct test_data {
     const char* str;
     const char* index_name;
@@ -99,6 +101,12 @@ static struct test_data index_data[] = {
     {"JPY-TONAR-1D", "TONARON Actual/365 (Fixed)", 1 * Days},
     {"CHF-TOIS", "CHF-TOISTN Actual/360", 1 * Days},
     {"USD-FedFunds", "FedFundsON Actual/360", 1 * Days},
+    {"CHF-SARON", "CHF-SARONON Actual/360", 1 * Days},
+    {"DKK-DKKOIS", "DKK-DKKOISTN Actual/360", 1 * Days},
+    {"SEK-SIOR", "SEK-SIORTN Actual/360", 1 * Days},
+    {"NOK-NOWA", "NowaON Actual/Actual (ISMA)", 1 * Days},
+    {"NZD-OCR", "NzocrON Actual/365 (Fixed)", 1 * Days},
+    {"BRL-CDI", "BRL-CDION Business/252(Brazil)", 1 * Days},
 
     {"AUD-LIBOR-1W", "AUDLibor1W Actual/360", 1 * Weeks},
     {"AUD-LIBOR-1M", "AUDLibor1M Actual/360", 1 * Months},
@@ -207,6 +215,12 @@ static struct test_data index_data[] = {
     {"CHF-LIBOR-12M", "CHFLibor1Y Actual/360", 1 * Years},
     {"CHF-LIBOR-1Y", "CHFLibor1Y Actual/360", 1 * Years},
 
+    {"SAR-SAIBOR-1W", "SAR-SAIBOR1W Actual/360", 1 * Weeks},
+    {"SAR-SAIBOR-1M", "SAR-SAIBOR1M Actual/360", 1 * Months},
+    {"SAR-SAIBOR-2M", "SAR-SAIBOR2M Actual/360", 2 * Months},
+    {"SAR-SAIBOR-3M", "SAR-SAIBOR3M Actual/360", 3 * Months},
+    {"SAR-SAIBOR-6M", "SAR-SAIBOR6M Actual/360", 6 * Months},
+
     {"SEK-STIBOR-1W", "SEK-STIBOR1W Actual/360", 1 * Weeks},
     {"SEK-STIBOR-1M", "SEK-STIBOR1M Actual/360", 1 * Months},
     {"SEK-STIBOR-2M", "SEK-STIBOR2M Actual/360", 2 * Months},
@@ -295,6 +309,13 @@ static struct test_data index_data[] = {
     {"TWD-TAIBOR-5M", "TWD-TAIBOR5M Actual/365 (Fixed)", 5 * Months},
     {"TWD-TAIBOR-6M", "TWD-TAIBOR6M Actual/365 (Fixed)", 6 * Months},
 
+    {"TRY-TRLIBOR-1M", "TRLibor1M Actual/360", 1 * Months},
+    {"TRY-TRLIBOR-2M", "TRLibor2M Actual/360", 2 * Months},
+    {"TRY-TRLIBOR-3M", "TRLibor3M Actual/360", 3 * Months},
+    {"TRY-TRLIBOR-4M", "TRLibor4M Actual/360", 4 * Months},
+    {"TRY-TRLIBOR-5M", "TRLibor5M Actual/360", 5 * Months},
+    {"TRY-TRLIBOR-6M", "TRLibor6M Actual/360", 6 * Months},
+  
     {"MYR-KLIBOR-1M", "MYR-KLIBOR1M Actual/365 (Fixed)", 1 * Months},
     {"MYR-KLIBOR-2M", "MYR-KLIBOR2M Actual/365 (Fixed)", 2 * Months},
     {"MYR-KLIBOR-3M", "MYR-KLIBOR3M Actual/365 (Fixed)", 3 * Months},
@@ -315,7 +336,14 @@ static struct test_data swap_index_data[] = {
     {"JPY-CMS-30Y", "JPYLiborSwapIsdaFix30Y Actual/365 (Fixed)", 30 * Years},
 };
 
-void IndexTest::testIborIndexParsing() {
+} // namespace
+
+BOOST_FIXTURE_TEST_SUITE(OREDataTestSuite, ore::test::TopLevelFixture)
+
+BOOST_AUTO_TEST_SUITE(IndexTests)
+
+BOOST_AUTO_TEST_CASE(testIborIndexParsing) {
+
     BOOST_TEST_MESSAGE("Testing Ibor Index name parsing...");
 
     Size len = sizeof(index_data) / sizeof(index_data[0]);
@@ -342,17 +370,19 @@ void IndexTest::testIborIndexParsing() {
     }
 }
 
-void IndexTest::testIborIndexParsingFails() {
+BOOST_AUTO_TEST_CASE(testIborIndexParsingFails) {
+
     BOOST_TEST_MESSAGE("Testing Ibor Index parsing fails...");
 
     // Test invalid strings
-    BOOST_CHECK_THROW(ore::data::parseIborIndex("EUR-EONIA-1M"), std::exception);
-    BOOST_CHECK_THROW(ore::data::parseIborIndex("EUR-EURIBOR-1D"), std::exception);
-    BOOST_CHECK_THROW(ore::data::parseIborIndex("EUR-FALSE-6M"), std::exception);
-    BOOST_CHECK_THROW(ore::data::parseIborIndex("It's a trap!"), std::exception);
+    BOOST_CHECK_THROW(ore::data::parseIborIndex("EUR-EONIA-1M"), QuantLib::Error);
+    BOOST_CHECK_THROW(ore::data::parseIborIndex("EUR-EURIBOR-1D"), QuantLib::Error);
+    BOOST_CHECK_THROW(ore::data::parseIborIndex("EUR-FALSE-6M"), QuantLib::Error);
+    BOOST_CHECK_THROW(ore::data::parseIborIndex("It's a trap!"), QuantLib::Error);
 }
 
-void IndexTest::testSwapIndexParsing() {
+BOOST_AUTO_TEST_CASE(testSwapIndexParsing) {
+
     BOOST_TEST_MESSAGE("Testing Swap Index name parsing...");
 
     Handle<YieldTermStructure> h; // dummy
@@ -389,11 +419,6 @@ void IndexTest::testSwapIndexParsing() {
     }
 }
 
-test_suite* IndexTest::suite() {
-    test_suite* suite = BOOST_TEST_SUITE("IndexTests");
-    suite->add(BOOST_TEST_CASE(&IndexTest::testIborIndexParsing));
-    suite->add(BOOST_TEST_CASE(&IndexTest::testIborIndexParsingFails));
-    suite->add(BOOST_TEST_CASE(&IndexTest::testSwapIndexParsing));
-    return suite;
-}
-} // namespace testsuite
+BOOST_AUTO_TEST_SUITE_END()
+
+BOOST_AUTO_TEST_SUITE_END()

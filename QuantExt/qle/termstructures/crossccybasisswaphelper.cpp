@@ -15,12 +15,11 @@
  ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
  FITNESS FOR A PARTICULAR PURPOSE. See the license for more details.
 */
-
+#include <qle/pricingengines/crossccyswapengine.hpp>
 #ifdef QL_USE_INDEXED_COUPON
 #include <ql/cashflows/floatingratecoupon.hpp>
 #endif
 
-#include <qle/pricingengines/crossccyswapengine.hpp>
 #include <qle/termstructures/crossccybasisswaphelper.hpp>
 
 #include <boost/make_shared.hpp>
@@ -38,11 +37,21 @@ CrossCcyBasisSwapHelper::CrossCcyBasisSwapHelper(const Handle<Quote>& spreadQuot
                                                  const boost::shared_ptr<QuantLib::IborIndex>& spreadIndex,
                                                  const Handle<YieldTermStructure>& flatDiscountCurve,
                                                  const Handle<YieldTermStructure>& spreadDiscountCurve, bool eom,
-                                                 bool flatIsDomestic)
+                                                 bool flatIsDomestic, boost::optional<Period> flatTenor,
+                                                 boost::optional<Period> spreadTenor,
+												 Real spreadOnFlatLeg,
+												 Real flatGearing,
+												 Real spreadGearing,
+												 const Calendar& flatCalendar,
+												 const Calendar& spreadCalendar)
     : RelativeDateRateHelper(spreadQuote), spotFX_(spotFX), settlementDays_(settlementDays),
       settlementCalendar_(settlementCalendar), swapTenor_(swapTenor), rollConvention_(rollConvention),
       flatIndex_(flatIndex), spreadIndex_(spreadIndex), flatDiscountCurve_(flatDiscountCurve),
-      spreadDiscountCurve_(spreadDiscountCurve), eom_(eom), flatIsDomestic_(flatIsDomestic) {
+      spreadDiscountCurve_(spreadDiscountCurve), eom_(eom), flatIsDomestic_(flatIsDomestic),
+      flatTenor_(flatTenor ? *flatTenor : flatIndex_->tenor()), 
+      spreadTenor_(spreadTenor ? *spreadTenor : spreadIndex_->tenor()),
+	  spreadOnFlatLeg_(spreadOnFlatLeg), flatGearing_(flatGearing), spreadGearing_(spreadGearing), 
+	  flatCalendar_(flatCalendar), spreadCalendar_(spreadCalendar) {
 
     flatLegCurrency_ = flatIndex_->currency();
     spreadLegCurrency_ = spreadIndex_->currency();
@@ -55,6 +64,10 @@ CrossCcyBasisSwapHelper::CrossCcyBasisSwapHelper(const Handle<Quote>& spreadQuot
     QL_REQUIRE(!(flatIndexHasCurve && spreadIndexHasCurve && haveFlatDiscountCurve && haveSpreadDiscountCurve),
                "Have all curves, "
                "nothing to solve for.");
+	if( flatCalendar_.empty() )
+		flatCalendar_ = settlementCalendar;
+	if( spreadCalendar_.empty() )
+		spreadCalendar_ = settlementCalendar;
 
     /* Link the curve being bootstrapped to the index if the index has
        no projection curve */
@@ -92,21 +105,19 @@ void CrossCcyBasisSwapHelper::initializeDates() {
     Date settlementDate = settlementCalendar_.advance(refDate, settlementDays_, Days);
     Date maturityDate = settlementDate + swapTenor_;
 
-    Period flatLegTenor = flatIndex_->tenor();
     Schedule flatLegSchedule = MakeSchedule()
                                    .from(settlementDate)
                                    .to(maturityDate)
-                                   .withTenor(flatLegTenor)
-                                   .withCalendar(settlementCalendar_)
+                                   .withTenor(flatTenor_)
+                                   .withCalendar(flatCalendar_)
                                    .withConvention(rollConvention_)
                                    .endOfMonth(eom_);
 
-    Period spreadLegTenor = spreadIndex_->tenor();
     Schedule spreadLegSchedule = MakeSchedule()
                                      .from(settlementDate)
                                      .to(maturityDate)
-                                     .withTenor(spreadLegTenor)
-                                     .withCalendar(settlementCalendar_)
+                                     .withTenor(spreadTenor_)
+                                     .withCalendar(spreadCalendar_)
                                      .withConvention(rollConvention_)
                                      .endOfMonth(eom_);
 
@@ -120,8 +131,8 @@ void CrossCcyBasisSwapHelper::initializeDates() {
 
     /* Arbitrarily set the spread leg as the pay leg */
     swap_ = boost::shared_ptr<CrossCcyBasisSwap>(
-        new CrossCcyBasisSwap(spreadLegNominal, spreadLegCurrency_, spreadLegSchedule, spreadIndex_, 0.0,
-                              flatLegNominal, flatLegCurrency_, flatLegSchedule, flatIndex_, 0.0));
+        new CrossCcyBasisSwap(spreadLegNominal, spreadLegCurrency_, spreadLegSchedule, spreadIndex_, 0.0, spreadGearing_,
+                              flatLegNominal, flatLegCurrency_, flatLegSchedule, flatIndex_, spreadOnFlatLeg_, flatGearing_));
 
     boost::shared_ptr<PricingEngine> engine;
     if (flatIsDomestic_) {

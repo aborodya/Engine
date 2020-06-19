@@ -44,18 +44,32 @@ void CreditDefaultSwapData::fromXML(XMLNode* node) {
         upfrontDate_ = parseDate(XMLUtils::getNodeValue(tmp)); // null date if empty or mssing
     else
         upfrontDate_ = Date();
-    upfrontFee_ = parseReal(XMLUtils::getChildValue(node, "UpfrontFee", false)); // zero if empty or missing
+
+    // zero if empty or missing
+    upfrontFee_ = 0.0;
+    string strUpfrontFee = XMLUtils::getChildValue(node, "UpfrontFee", false);
+    if (!strUpfrontFee.empty()) {
+        upfrontFee_ = parseReal(strUpfrontFee);
+    }
+
     if (upfrontDate_ == Date()) {
         QL_REQUIRE(close_enough(upfrontFee_, 0.0), "CreditDefaultSwapData::fromXML(): UpfronFee not zero ("
-                                                       << upfrontFee_ << "), but no upfront data given");
+                                                       << upfrontFee_ << "), but no upfront date given");
         upfrontFee_ = Null<Real>();
     }
+
+    // Recovery rate is Null<Real>() on a standard CDS i.e. if "FixedRecoveryRate" field is not populated.
+    recoveryRate_ = Null<Real>();
+    string strRecoveryRate = XMLUtils::getChildValue(node, "FixedRecoveryRate", false);
+    if (!strRecoveryRate.empty()) {
+        recoveryRate_ = parseReal(strRecoveryRate);
+    }
+
     leg_.fromXML(XMLUtils::getChildNode(node, "LegData"));
 }
 
 XMLNode* CreditDefaultSwapData::toXML(XMLDocument& doc) {
     XMLNode* node = doc.allocNode("CreditDefaultSwapData");
-    XMLUtils::appendNode(node, node);
     XMLUtils::addChild(doc, node, "IssuerId", issuerId_);
     XMLUtils::addChild(doc, node, "CreditCurveId", creditCurveId_);
     XMLUtils::addChild(doc, node, "SettlesAccrual", settlesAccrual_);
@@ -72,6 +86,10 @@ XMLNode* CreditDefaultSwapData::toXML(XMLDocument& doc) {
     }
     if (upfrontFee_ != Null<Real>())
         XMLUtils::addChild(doc, node, "UpfrontFee", upfrontFee_);
+    
+    if (recoveryRate_ != Null<Real>())
+        XMLUtils::addChild(doc, node, "FixedRecoveryRate", recoveryRate_);
+
     XMLUtils::appendNode(node, leg_.toXML(doc));
     return node;
 }

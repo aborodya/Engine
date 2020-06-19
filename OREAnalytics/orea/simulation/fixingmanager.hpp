@@ -24,13 +24,10 @@
 
 #include <ored/portfolio/portfolio.hpp>
 
-using QuantLib::Date;
-using QuantLib::Real;
-using QuantLib::Index;
-using ore::data::Portfolio;
-
 namespace ore {
 namespace analytics {
+using namespace QuantLib;
+using ore::data::Portfolio;
 
 //! Pseudo Fixings Manager
 /*!
@@ -50,24 +47,32 @@ namespace analytics {
 class FixingManager {
 public:
     FixingManager(Date today) : today_(today), fixingsEnd_(today), modifiedFixingHistory_(false) {}
+    virtual ~FixingManager() {}
 
     //! Initialise the manager with these flows and indices from the given portfolio
     void initialise(const boost::shared_ptr<Portfolio>& portfolio);
-
+  
+    virtual void processCashFlows(const boost::shared_ptr<QuantLib::CashFlow> cf);
+  
     //! Update fixings to date d
     void update(Date d);
 
     //! Reset fixings to t0 (today)
     void reset();
 
-private:
+protected:
     void applyFixings(Date start, Date end);
 
     Date today_, fixingsEnd_;
     bool modifiedFixingHistory_;
-    std::map<std::string, TimeSeries<Real>> fixingCache_;
-    std::vector<boost::shared_ptr<Index>> indices_;
-    std::map<std::string, std::vector<Date>> fixingMap_;
+
+    struct indexComp {
+        bool operator()(const boost::shared_ptr<Index>& a, const boost::shared_ptr<Index>& b) const {
+            return a->name() < b->name();
+        }
+    };
+    std::map<boost::shared_ptr<Index>, TimeSeries<Real>, indexComp> fixingCache_;
+    std::map<boost::shared_ptr<Index>, std::set<Date>, indexComp> fixingMap_;
 };
 } // namespace analytics
 } // namespace ore

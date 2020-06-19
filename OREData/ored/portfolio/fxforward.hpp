@@ -37,13 +37,19 @@ public:
     //! Default constructor
     FxForward() : Trade("FxForward"), boughtAmount_(0.0), soldAmount_(0.0) {}
     //! Constructor
-    FxForward(Envelope& env, string maturityDate, string boughtCurrency, double boughtAmount, string soldCurrency,
-              double soldAmount)
+    FxForward(Envelope& env, const string& maturityDate, const string& boughtCurrency, double boughtAmount,
+              const string& soldCurrency, double soldAmount, const string& settlement = "Physical")
         : Trade("FxForward", env), maturityDate_(maturityDate), boughtCurrency_(boughtCurrency),
-          boughtAmount_(boughtAmount), soldCurrency_(soldCurrency), soldAmount_(soldAmount) {}
+          boughtAmount_(boughtAmount), soldCurrency_(soldCurrency), soldAmount_(soldAmount), settlement_(settlement) {}
 
     //! Build QuantLib/QuantExt instrument, link pricing engine
-    void build(const boost::shared_ptr<EngineFactory>&);
+    void build(const boost::shared_ptr<EngineFactory>&) override;
+
+    //! Return no fixings for an FxForward.
+    std::map<std::string, std::set<QuantLib::Date>> fixings(
+        const QuantLib::Date& settlementDate = QuantLib::Date()) const override {
+        return {};
+    }
 
     //! \name Inspectors
     //@{
@@ -52,12 +58,14 @@ public:
     double boughtAmount() const { return boughtAmount_; }
     const string& soldCurrency() const { return soldCurrency_; }
     double soldAmount() const { return soldAmount_; }
+    //! Settlement Type can be set to "Cash" for NDF. Default value is "Physical"
+    const string& settlement() const { return settlement_; }
     //@}
 
     //! \name Serialisation
     //@{
-    virtual void fromXML(XMLNode* node);
-    virtual XMLNode* toXML(XMLDocument& doc);
+    virtual void fromXML(XMLNode* node) override;
+    virtual XMLNode* toXML(XMLDocument& doc) override;
     //@}
 private:
     string maturityDate_;
@@ -65,6 +73,7 @@ private:
     double boughtAmount_;
     string soldCurrency_;
     double soldAmount_;
+    string settlement_;
 };
 } // namespace data
 } // namespace ore

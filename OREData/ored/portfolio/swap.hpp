@@ -36,29 +36,51 @@ namespace data {
 class Swap : public Trade {
 public:
     //! Deault constructor
-    Swap() : Trade("Swap") {}
+    Swap(const string swapType = "Swap") : Trade(swapType) {}
 
     //! Constructor with vector of LegData
-    Swap(Envelope env, vector<LegData>& legData) : Trade("Swap", env), legData_(legData) {}
+    Swap(const Envelope& env, const vector<LegData>& legData, const string swapType = "Swap")
+        : Trade(swapType, env), legData_(legData) {}
 
     //! Constructor with two legs
-    Swap(Envelope env, LegData leg0, LegData leg1) : Trade("Swap", env), legData_({leg0, leg1}) {}
+    Swap(const Envelope& env, const LegData& leg0, const LegData& leg1, const string swapType = "Swap")
+        : Trade(swapType, env), legData_({leg0, leg1}) {}
 
     //! Build QuantLib/QuantExt instrument, link pricing engine
-    virtual void build(const boost::shared_ptr<EngineFactory>&);
+    virtual void build(const boost::shared_ptr<EngineFactory>&) override;
+
+    //! Return the fixings that will be requested to price the Swap given the \p settlementDate.
+    std::map<std::string, std::set<QuantLib::Date>> fixings(
+        const QuantLib::Date& settlementDate = QuantLib::Date()) const override;
 
     //! \name Serialisation
     //@{
-    virtual void fromXML(XMLNode* node);
-    virtual XMLNode* toXML(XMLDocument& doc);
+    virtual void fromXML(XMLNode* node) override;
+    virtual XMLNode* toXML(XMLDocument& doc) override;
     //@}
 
     //! \name Inspectors
     //@{
     const vector<LegData>& legData() { return legData_; }
     //@}
-private:
+
+protected:
+    virtual boost::shared_ptr<LegData> createLegData() const;
     vector<LegData> legData_;
+
+private:
+    /*! Set of pairs where first element of pair is the ORE index name and the second 
+        element of the pair is the index of the leg that contains that ORE index.
+
+        Avoid using map here because could have multiple legs with the same ORE index and 
+        don't need a mutlimap.
+    */
+    std::set<std::pair<std::string, QuantLib::Size>> nameIndexPairs_;
+
+    /*! In some rare cases, e.g. FX resetting leg, we want to store extra(s) leg and pass it
+        off to the fixings function to get additional fixing dates for an index.
+    */
+    std::map<std::string, QuantLib::Leg> additionalLegs_;
 };
 } // namespace data
 } // namespace ore
