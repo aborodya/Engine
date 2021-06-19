@@ -261,6 +261,7 @@ indexes/ibor/corra.hpp
 indexes/ibor/czkpribor.hpp
 indexes/ibor/demlibor.hpp
 indexes/ibor/dkkcibor.hpp
+indexes/ibor/dkkcita.hpp
 indexes/ibor/dkkois.hpp
 indexes/ibor/ester.hpp
 indexes/ibor/hkdhibor.hpp
@@ -285,6 +286,7 @@ indexes/ibor/rubmosprime.hpp
 indexes/ibor/saibor.hpp
 indexes/ibor/seksior.hpp
 indexes/ibor/sekstibor.hpp
+indexes/ibor/sekstina.hpp
 indexes/ibor/sgdsibor.hpp
 indexes/ibor/sgdsor.hpp
 indexes/ibor/skkbribor.hpp
@@ -328,7 +330,9 @@ math/covariancesalvage.hpp
 math/deltagammavar.hpp
 math/fillemptymatrix.hpp
 math/flatextrapolation.hpp
+math/logquadraticinterpolation.hpp
 math/nadarayawatson.hpp
+math/quadraticinterpolation.hpp
 math/stabilisedglls.hpp
 math/trace.hpp
 methods/multipathgeneratorbase.hpp
