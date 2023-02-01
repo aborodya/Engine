@@ -35,7 +35,8 @@ OptionWrapper::OptionWrapper(const boost::shared_ptr<Instrument>& inst, const bo
     : InstrumentWrapper(inst, multiplier, additionalInstruments, additionalMultipliers), isLong_(isLongOption),
       isPhysicalDelivery_(isPhysicalDelivery), contractExerciseDates_(exerciseDate),
       effectiveExerciseDates_(exerciseDate), underlyingInstruments_(undInst),
-      activeUnderlyingInstrument_(undInst.at(0)), undMultiplier_(undMultiplier), exercised_(false), exercisable_(true) {
+      activeUnderlyingInstrument_(undInst.at(0)), undMultiplier_(undMultiplier), exercised_(false), exercisable_(true),
+      exerciseDate_(Date()) {
     QL_REQUIRE(exerciseDate.size() == undInst.size(), "number of exercise dates ("
                                                           << exerciseDate.size()
                                                           << ") must be equal to underlying instrument vector size ("
@@ -90,13 +91,26 @@ Real OptionWrapper::NPV() const {
         // that we will probably need an effective cash settlement date then to
         // maintain the relative position to the effective exercise date).
         Real npv = (isPhysicalDelivery_ || today == exerciseDate_)
-                       ? (isLong_ ? 1.0 : -1.0) * activeUnderlyingInstrument_->NPV() * undMultiplier_
+                       ? (isLong_ ? 1.0 : -1.0) * getTimedNPV(activeUnderlyingInstrument_) * undMultiplier_
                        : 0.0;
         return npv + addNPV;
     } else {
         // if not exercised we just return the original option's NPV
-        Real npv = (isLong_ ? 1.0 : -1.0) * instrument_->NPV() * multiplier_;
+        Real npv = (isLong_ ? 1.0 : -1.0) * getTimedNPV(instrument_) * multiplier_;
         return npv + addNPV;
+    }
+}
+
+const std::map<std::string, boost::any>& OptionWrapper::additionalResults() const {
+    static std::map<std::string, boost::any> emptyMap;
+    NPV();
+    if (exercised_) {
+        if (activeUnderlyingInstrument_ != nullptr)
+            return activeUnderlyingInstrument_->additionalResults();
+        else
+            return emptyMap;
+    } else {
+        return instrument_->additionalResults();
     }
 }
 
@@ -105,21 +119,25 @@ bool EuropeanOptionWrapper::exercise() const {
         return false;
 
     // for European Exercise, we only require that underlying has positive PV
-    return activeUnderlyingInstrument_->NPV() * undMultiplier_ > 0.0;
+    bool res = getTimedNPV(activeUnderlyingInstrument_) * undMultiplier_ > 0.0;
+    return res;
 }
 
 bool AmericanOptionWrapper::exercise() const {
     if (!exercisable_)
         return false;
 
-    if (Settings::instance().evaluationDate() == effectiveExerciseDates_.back())
-        return activeUnderlyingInstrument_->NPV() * undMultiplier_ > 0.0;
-    else
-        return activeUnderlyingInstrument_->NPV() * undMultiplier_ > instrument_->NPV() * multiplier_;
+    if (Settings::instance().evaluationDate() == effectiveExerciseDates_.back()) {
+        bool res = getTimedNPV(activeUnderlyingInstrument_) * undMultiplier_ > 0.0;
+        return res;
+    } else {
+        bool res = getTimedNPV(activeUnderlyingInstrument_) * undMultiplier_ > getTimedNPV(instrument_) * multiplier_;
+        return res;
+    }
 }
 
 bool BermudanOptionWrapper::exercise() const {
-    if(!exercisable_)
+    if (!exercisable_)
         return false;
 
     // set active underlying instrument
@@ -130,7 +148,7 @@ bool BermudanOptionWrapper::exercise() const {
             break;
         }
     }
-    bool exercise = activeUnderlyingInstrument_->NPV() * undMultiplier_ > instrument_->NPV() * multiplier_;
+    bool exercise = getTimedNPV(activeUnderlyingInstrument_) * undMultiplier_ > getTimedNPV(instrument_) * multiplier_;
     return exercise;
 }
 } // namespace data

@@ -24,7 +24,6 @@
 #pragma once
 
 #include <ql/types.hpp>
-
 #include <string>
 
 namespace ore {
@@ -72,7 +71,7 @@ std::ostream& operator<<(std::ostream& out, const Strike& s);
 */
 bool operator==(const Strike& s1, const Strike& s2);
 
-//! Convenience function that computes an aboslute strike
+//! Convenience function that computes an absolute strike
 /*!
 \ingroup utilities
 */

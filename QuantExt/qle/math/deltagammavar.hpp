@@ -26,12 +26,12 @@
 
 #include <qle/math/covariancesalvage.hpp>
 
+#include <ql/math/comparison.hpp>
 #include <ql/math/array.hpp>
 #include <ql/math/matrix.hpp>
 #include <ql/math/matrixutilities/choleskydecomposition.hpp>
 #include <ql/math/matrixutilities/pseudosqrt.hpp>
 #include <ql/math/randomnumbers/rngtraits.hpp>
-#include <ql/utilities/disposable.hpp>
 
 // fix for boost 1.64, see https://lists.boost.org/Archives/boost/2016/11/231756.php
 #if BOOST_VERSION >= 106400
@@ -54,7 +54,7 @@ Real deltaVar(const Matrix& omega, const Array& delta, const Real p,
 //! function that computes a delta-gamma normal VaR
 /*! For a given a covariance matrix, a delta vector and a gamma matrix this function computes a parametric var
  * w.r.t. a given confidence level. The gamma matrix is taken into account when computing the variance of the PL
- * distirbution, but the PL distribution is still assumed to be normal. */
+ * distribution, but the PL distribution is still assumed to be normal. */
 Real deltaGammaVarNormal(const Matrix& omega, const Array& delta, const Matrix& gamma, const Real p,
                          const CovarianceSalvage& sal = NoCovarianceSalvage());
 
@@ -71,9 +71,9 @@ Real deltaGammaVarMc(const Matrix& omega, const Array& delta, const Matrix& gamm
  * w.r.t. a vector of given confidence levels. The var quantile is estimated from Monte-Carlo realisations of a second
  * order sensitivity based PL. */
 template <class RNG>
-Disposable<std::vector<Real> > deltaGammaVarMc(const Matrix& omega, const Array& delta, const Matrix& gamma,
-                                               const std::vector<Real>& p, const Size paths, const Size seed,
-                                               const CovarianceSalvage& sal = NoCovarianceSalvage());
+std::vector<Real> deltaGammaVarMc(const Matrix& omega, const Array& delta, const Matrix& gamma,
+				  const std::vector<Real>& p, const Size paths, const Size seed,
+				  const CovarianceSalvage& sal = NoCovarianceSalvage());
 
 namespace detail {
 void check(const Real p);
@@ -92,14 +92,14 @@ template <typename A> Real absMax(const A& a) {
 // implementation
 
 template <class RNG>
-Disposable<std::vector<Real> > deltaGammaVarMc(const Matrix& omega, const Array& delta, const Matrix& gamma,
-                                               const std::vector<Real>& p, const Size paths, const Size seed,
-                                               const CovarianceSalvage& sal) {
+std::vector<Real> deltaGammaVarMc(const Matrix& omega, const Array& delta, const Matrix& gamma,
+				  const std::vector<Real>& p, const Size paths, const Size seed,
+				  const CovarianceSalvage& sal) {
     BOOST_FOREACH (Real q, p) { detail::check(q); }
     detail::check(omega, delta, gamma);
 
     Real num = std::max(detail::absMax(delta), detail::absMax(gamma));
-    if (close_enough(num, 0.0)) {
+    if (QuantLib::close_enough(num, 0.0)) {
         std::vector<Real> res(p.size(), 0.0);
         return res;
     }

@@ -21,6 +21,8 @@
 #include <oret/fileutilities.hpp>
 #include <oret/toplevelfixture.hpp>
 
+#include <ored/model/irlgmdata.hpp>
+
 #include <ored/model/calibrationinstruments/cpicapfloor.hpp>
 #include <ored/model/crossassetmodeldata.hpp>
 #include <ored/model/inflation/infdkdata.hpp>
@@ -37,7 +39,7 @@ using ore::test::TopLevelFixture;
 
 namespace {
 
-boost::shared_ptr<vector<boost::shared_ptr<IrLgmData>>> irConfigsData() {
+boost::shared_ptr<vector<boost::shared_ptr<IrModelData>>> irConfigsData() {
 
     // Create three instances
     boost::shared_ptr<IrLgmData> lgmData1(new data::IrLgmData());
@@ -49,7 +51,7 @@ boost::shared_ptr<vector<boost::shared_ptr<IrLgmData>>> irConfigsData() {
     vector<std::string> strikes = {"ATM", "ATM", "ATM"};
 
     // First instance
-    lgmData1->ccy() = "EUR";
+    lgmData1->qualifier() = "EUR";
 
     lgmData1->calibrationType() = parseCalibrationType("BOOTSTRAP");
     lgmData1->reversionType() = parseReversionType("HULLWHITE");
@@ -79,7 +81,7 @@ boost::shared_ptr<vector<boost::shared_ptr<IrLgmData>>> irConfigsData() {
     lgmData1->scaling() = 1.0;
 
     // Second instance
-    lgmData2->ccy() = "USD";
+    lgmData2->qualifier() = "USD";
 
     lgmData2->calibrationType() = parseCalibrationType("BOOTSTRAP");
     lgmData2->reversionType() = parseReversionType("HULLWHITE");
@@ -104,7 +106,7 @@ boost::shared_ptr<vector<boost::shared_ptr<IrLgmData>>> irConfigsData() {
     lgmData2->scaling() = 1.0;
 
     // Third instance
-    lgmData3->ccy() = "JPY";
+    lgmData3->qualifier() = "JPY";
 
     lgmData3->calibrationType() = parseCalibrationType("BOOTSTRAP");
     lgmData3->reversionType() = parseReversionType("HULLWHITE");
@@ -128,7 +130,7 @@ boost::shared_ptr<vector<boost::shared_ptr<IrLgmData>>> irConfigsData() {
 
     lgmData3->scaling() = 1.0;
 
-    boost::shared_ptr<vector<boost::shared_ptr<IrLgmData>>> lgmDataVector(new vector<boost::shared_ptr<IrLgmData>>);
+    boost::shared_ptr<vector<boost::shared_ptr<IrModelData>>> lgmDataVector(new vector<boost::shared_ptr<IrModelData>>);
     *lgmDataVector = {lgmData1, lgmData2, lgmData3};
     return lgmDataVector;
 }

@@ -48,16 +48,24 @@ public:
     /*! First leg holds the pay currency cashflows and the second leg
         holds the receive currency cashflows.
     */
-    CrossCcyBasisMtMResetSwap(Real foreignNominal, const Currency& foreignCurrency, const Schedule& foreignSchedule,
-                              const boost::shared_ptr<IborIndex>& foreignIndex, Spread foreignSpread,
-                              const Currency& domesticCurrency, const Schedule& domesticSchedule,
-                              const boost::shared_ptr<IborIndex>& domesticIndex, Spread domesticSpread,
-                              const boost::shared_ptr<FxIndex>& fxIdx, bool receiveDomestic = true);
+    CrossCcyBasisMtMResetSwap(
+        Real foreignNominal, const Currency& foreignCurrency, const Schedule& foreignSchedule,
+        const boost::shared_ptr<IborIndex>& foreignIndex, Spread foreignSpread, const Currency& domesticCurrency,
+        const Schedule& domesticSchedule, const boost::shared_ptr<IborIndex>& domesticIndex, Spread domesticSpread,
+        const boost::shared_ptr<FxIndex>& fxIdx, bool receiveDomestic = true, Size foreignPaymentLag = 0,
+        Size recPaymentLag = 0, boost::optional<bool> foreignIncludeSpread = boost::none,
+        boost::optional<Period> foreignLookback = boost::none, boost::optional<Size> foreignFixingDays = boost::none,
+        boost::optional<Size> foreignRateCutoff = boost::none, boost::optional<bool> foreignIsAveraged = boost::none,
+        boost::optional<bool> domesticIncludeSpread = boost::none,
+        boost::optional<Period> domesticLookback = boost::none, boost::optional<Size> domesticFixingDays = boost::none,
+        boost::optional<Size> domesticRateCutoff = boost::none, boost::optional<bool> domesticIsAveraged = boost::none,
+        const bool telescopicValueDates = false,
+	bool fairSpreadLegIsForeign = true);
     //@}
     //! \name Instrument interface
     //@{
-    void setupArguments(PricingEngine::arguments* args) const;
-    void fetchResults(const PricingEngine::results*) const;
+    void setupArguments(PricingEngine::arguments* args) const override;
+    void fetchResults(const PricingEngine::results*) const override;
     //@}
     //! \name Inspectors
     //@{
@@ -85,12 +93,18 @@ public:
         QL_REQUIRE(fairDomesticSpread_ != Null<Real>(), "Fair domestic spread is not available");
         return fairDomesticSpread_;
     }
+    Spread fairSpread() const {
+        if (fairSpreadLegIsForeign_)
+	    return fairForeignSpread();
+	else
+	    return fairDomesticSpread();
+    }
     //@}
 
 protected:
     //! \name Instrument interface
     //@{
-    void setupExpired() const;
+    void setupExpired() const override;
     //@}
 
 private:
@@ -110,6 +124,22 @@ private:
     boost::shared_ptr<FxIndex> fxIndex_;
     bool receiveDomestic_;
 
+    Size foreignPaymentLag_;
+    Size domesticPaymentLag_;
+    // OIS only
+    boost::optional<bool> foreignIncludeSpread_;
+    boost::optional<QuantLib::Period> foreignLookback_;
+    boost::optional<QuantLib::Size> foreignFixingDays_;
+    boost::optional<Size> foreignRateCutoff_;
+    boost::optional<bool> foreignIsAveraged_;
+    boost::optional<bool> domesticIncludeSpread_;
+    boost::optional<QuantLib::Period> domesticLookback_;
+    boost::optional<QuantLib::Size> domesticFixingDays_;
+    boost::optional<Size> domesticRateCutoff_;
+    boost::optional<bool> domesticIsAveraged_;
+    bool telescopicValueDates_;
+    bool fairSpreadLegIsForeign_;
+
     mutable Spread fairForeignSpread_;
     mutable Spread fairDomesticSpread_;
 };
@@ -119,7 +149,7 @@ class CrossCcyBasisMtMResetSwap::arguments : public CrossCcySwap::arguments {
 public:
     Spread foreignSpread;
     Spread domesticSpread;
-    void validate() const;
+    void validate() const override;
 };
 
 //! \ingroup instruments
@@ -127,7 +157,7 @@ class CrossCcyBasisMtMResetSwap::results : public CrossCcySwap::results {
 public:
     Spread fairForeignSpread;
     Spread fairDomesticSpread;
-    void reset();
+    void reset() override;
 };
 } // namespace QuantExt
 

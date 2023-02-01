@@ -16,10 +16,11 @@
  FITNESS FOR A PARTICULAR PURPOSE. See the license for more details.
 */
 
+#include <ql/cashflows/cpicoupon.hpp>
+#include <ql/settings.hpp>
 #include <qle/indexes/bondindex.hpp>
 #include <qle/pricingengines/discountingriskybondengine.hpp>
-
-#include <ql/settings.hpp>
+#include <qle/utilities/inflation.hpp>
 
 #include <boost/make_shared.hpp>
 
@@ -30,10 +31,13 @@ BondIndex::BondIndex(const std::string& securityName, const bool dirty, const bo
                      const Handle<YieldTermStructure>& discountCurve,
                      const Handle<DefaultProbabilityTermStructure>& defaultCurve, const Handle<Quote>& recoveryRate,
                      const Handle<Quote>& securitySpread, const Handle<YieldTermStructure>& incomeCurve,
-                     const bool conditionalOnSurvival)
+                     const bool conditionalOnSurvival, const PriceQuoteMethod priceQuoteMethod,
+                     const double priceQuoteBaseValue, const bool isInflationLinked, const double bidAskAdjustment)
     : securityName_(securityName), dirty_(dirty), relative_(relative), fixingCalendar_(fixingCalendar), bond_(bond),
       discountCurve_(discountCurve), defaultCurve_(defaultCurve), recoveryRate_(recoveryRate),
-      securitySpread_(securitySpread), incomeCurve_(incomeCurve), conditionalOnSurvival_(conditionalOnSurvival) {
+      securitySpread_(securitySpread), incomeCurve_(incomeCurve), conditionalOnSurvival_(conditionalOnSurvival),
+      priceQuoteMethod_(priceQuoteMethod), priceQuoteBaseValue_(priceQuoteBaseValue),
+      isInflationLinked_(isInflationLinked), bidAskAdjustment_(bidAskAdjustment) {
 
     registerWith(Settings::instance().evaluationDate());
     registerWith(IndexManager::instance().notifier(BondIndex::name()));
@@ -62,18 +66,19 @@ Real BondIndex::fixing(const Date& fixingDate, bool forecastTodaysFixing) const 
     Date today = Settings::instance().evaluationDate();
     if (fixingDate > today || (fixingDate == today && forecastTodaysFixing))
         return forecastFixing(fixingDate);
+    Real adj = priceQuoteMethod_ == PriceQuoteMethod::CurrencyPerUnit ? 1.0 / priceQuoteBaseValue_ : 1.0;
     if (fixingDate < today || Settings::instance().enforcesTodaysHistoricFixings()) {
         // must have been fixed
         // do not catch exceptions
         Rate result = pastFixing(fixingDate);
         QL_REQUIRE(result != Null<Real>(), "Missing " << name() << " fixing for " << fixingDate);
-        return result;
+        return result * adj;
     }
     try {
         // might have been fixed
         Rate result = pastFixing(fixingDate);
         if (result != Null<Real>())
-            return result;
+            return result * adj;
         else
             ; // fall through and forecast
     } catch (Error&) {
@@ -102,9 +107,13 @@ Rate BondIndex::forecastFixing(const Date& fixingDate) const {
     // simply discounting its cashflows
 
     if (price == Null<Real>()) {
-        price = vanillaBondEngine_->calculateNpv(bond_->settlementDate(fixingDate), bond_->settlementDate(fixingDate),
-                                                 bond_->cashflows(), boost::none, incomeCurve_, conditionalOnSurvival_);
+        auto res = vanillaBondEngine_->calculateNpv(bond_->settlementDate(fixingDate),
+                                                    bond_->settlementDate(fixingDate), bond_->cashflows(), boost::none,
+                                                    incomeCurve_, conditionalOnSurvival_, false);
+        price = res.npv;
     }
+
+    price += bidAskAdjustment_ * bond_->notional(fixingDate);
 
     if (!dirty_) {
         price -= bond_->accruedAmount(fixingDate) / 100.0 * bond_->notional(fixingDate);
@@ -122,13 +131,18 @@ Rate BondIndex::forecastFixing(const Date& fixingDate) const {
 
 Real BondIndex::pastFixing(const Date& fixingDate) const {
     QL_REQUIRE(isValidFixingDate(fixingDate), fixingDate << " is not a valid fixing date for '" << name() << "'");
-    Real price = timeSeries()[fixingDate];
+    Real price = timeSeries()[fixingDate] + bidAskAdjustment_;
     if (price == Null<Real>())
         return price;
     if (dirty_) {
         QL_REQUIRE(bond_, "BondIndex::pastFixing(): bond required for dirty prices");
         price += bond_->accruedAmount(fixingDate) / 100.0;
     }
+
+    if (isInflationLinked_) {
+        price *= QuantExt::inflationLinkedBondQuoteFactor(bond_);
+    }
+
     if (!relative_) {
         QL_REQUIRE(bond_, "BondIndex::pastFixing(): bond required for absolute prices");
         price *= bond_->notional(fixingDate);
@@ -142,9 +156,10 @@ BondFuturesIndex::BondFuturesIndex(const QuantLib::Date& expiryDate, const std::
                                    const Handle<YieldTermStructure>& discountCurve,
                                    const Handle<DefaultProbabilityTermStructure>& defaultCurve,
                                    const Handle<Quote>& recoveryRate, const Handle<Quote>& securitySpread,
-                                   const Handle<YieldTermStructure>& incomeCurve, const bool conditionalOnSurvival)
+                                   const Handle<YieldTermStructure>& incomeCurve, const bool conditionalOnSurvival,
+                                   const PriceQuoteMethod priceQuoteMethod, const double priceQuoteBaseValue)
     : BondIndex(securityName, dirty, relative, fixingCalendar, bond, discountCurve, defaultCurve, recoveryRate,
-                securitySpread, incomeCurve, conditionalOnSurvival),
+                securitySpread, incomeCurve, conditionalOnSurvival, priceQuoteMethod, priceQuoteBaseValue),
       expiryDate_(expiryDate) {}
 
 std::string BondFuturesIndex::name() const {
@@ -165,9 +180,10 @@ Rate BondFuturesIndex::forecastFixing(const Date& fixingDate) const {
                                         << fixingDate << ") must be >= today (" << today << ")");
     QL_REQUIRE(bond_, "BondFuturesIndex::forecastFixing(): bond required");
 
-    Real price =
-        vanillaBondEngine_->calculateNpv(bond()->settlementDate(expiryDate_), bond()->settlementDate(expiryDate_),
-                                         bond()->cashflows(), boost::none, incomeCurve(), conditionalOnSurvival());
+    auto bondNpvResults = vanillaBondEngine_->calculateNpv(bond()->settlementDate(expiryDate_),
+                                                           bond()->settlementDate(expiryDate_), bond()->cashflows(),
+                                                           boost::none, incomeCurve(), conditionalOnSurvival(), false);
+    Real price = bondNpvResults.npv;
 
     if (!dirty()) {
         price -= bond()->accruedAmount(expiryDate_) / 100.0 * bond()->notional(expiryDate_);
@@ -181,6 +197,18 @@ Rate BondFuturesIndex::forecastFixing(const Date& fixingDate) const {
     }
 
     return price;
+}
+
+Date ConstantMaturityBondIndex::maturityDate(const Date& valueDate) const {
+    // same as IborIndex
+    return fixingCalendar().advance(valueDate, tenor_, convention_, endOfMonth_);
+}
+
+Rate ConstantMaturityBondIndex::forecastFixing(const Date& fixingDate) const {
+    QL_REQUIRE(bond_, "cannot forecast ConstantMaturityBondIndex fixing, because underlying bond not set");
+    QL_REQUIRE(fixingDate == bondStartDate_, "bond yield fixing only available at bond start date, "
+	       << io::iso_date(fixingDate) << " != " << io::iso_date(bondStartDate_));
+    return bond_->yield(dayCounter_, compounding_, frequency_, accuracy_, maxEvaluations_, guess_, priceType_);
 }
 
 } // namespace QuantExt

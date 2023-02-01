@@ -35,24 +35,39 @@ using namespace QuantLib;
  */
 class EquityCouponPricer : public virtual Observer, public virtual Observable {
 public:
+    struct AdditionalResultCache {
+        Real initialPrice;
+        Real startFixingTotal;
+        Real startFixing;
+        Real startFxFixing;
+        Real endFixingTotal;
+        Real endFixing;
+        Real endFxFixing;
+        Real pastDividends;
+        Real forecastDividends;
+
+        void clear();
+    };
+
     virtual ~EquityCouponPricer() {}
     //! \name Interface
     //@{
-    virtual Rate swapletRate() const;
+    virtual Rate swapletRate();
     virtual void initialize(const EquityCoupon& coupon);
+    const AdditionalResultCache& additionalResultCache() const { return additionalResultCache_; };
     //@}
 
     //! \name Observer interface
     //@{
-    virtual void update() { notifyObservers(); }
+    virtual void update() override { notifyObservers(); }
     //@}
 protected:
     const EquityCoupon* coupon_;
     boost::shared_ptr<EquityIndex> equityCurve_;
     boost::shared_ptr<FxIndex> fxIndex_;
-    bool isTotalReturn_;
-    bool absoluteReturn_;
+    EquityReturnType returnType_;
     Real dividendFactor_;
+    AdditionalResultCache additionalResultCache_;
 };
 } // namespace QuantExt
 

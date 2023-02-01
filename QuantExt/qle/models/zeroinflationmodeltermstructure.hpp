@@ -32,7 +32,7 @@ namespace QuantExt {
 /*! Base class for cross asset model implied zero inflation term structures.
     
     The termstructure has the reference date of the model's term structure at construction, but you can vary this as 
-    well as the state. This purely time based variant is mainly here for perfomance reasons. Note that it does not 
+    well as the state. This purely time based variant is mainly here for performance reasons. Note that it does not 
     provide the full term structure interface and does not send notifications on reference time updates.
     
     \ingroup models
@@ -43,7 +43,7 @@ public:
     /*! Constructor taking the cross asset model, \p model, and the index of the relevant inflation component within 
         the model, \p index.
     */
-    ZeroInflationModelTermStructure(const boost::shared_ptr<CrossAssetModel>& model, QuantLib::Size index);
+    ZeroInflationModelTermStructure(const boost::shared_ptr<CrossAssetModel>& model, QuantLib::Size index, bool indexIsInterpolated);
 
     //! \name Observer interface
     //@{
@@ -74,6 +74,7 @@ public:
 protected:
     boost::shared_ptr<CrossAssetModel> model_;
     QuantLib::Size index_;
+    bool indexIsInterpolated_;
     // Hides referenceDate_ in TermStructure.
     QuantLib::Date referenceDate_;
     QuantLib::Time relativeTime_;

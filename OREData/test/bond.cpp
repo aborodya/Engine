@@ -46,7 +46,7 @@ namespace {
 
 class TestMarket : public MarketImpl {
 public:
-    TestMarket() {
+    TestMarket() : MarketImpl(false) {
         asof_ = Date(3, Feb, 2016);
         // build discount
         yieldCurves_[make_tuple(Market::defaultConfiguration, YieldCurveType::Yield, "BANK_EUR_LEND")] =
@@ -73,7 +73,7 @@ public:
         hEUR->addFixing(Date(30, Jan, 2020), -0.00191);
     }
 
-    TestMarket(Real defaultFlatRate) {
+    TestMarket(Real defaultFlatRate) : MarketImpl(false) {
         asof_ = Date(3, Feb, 2016);
         // build discount
         yieldCurves_[make_tuple(Market::defaultConfiguration, YieldCurveType::Yield, "BANK_EUR_LEND")] =
@@ -89,13 +89,15 @@ public:
 
 private:
     Handle<YieldTermStructure> flatRateYts(Real forward) {
-        boost::shared_ptr<YieldTermStructure> yts(new FlatForward(0, NullCalendar(), forward, ActualActual()));
+        boost::shared_ptr<YieldTermStructure> yts(new FlatForward(0, NullCalendar(), forward, ActualActual(ActualActual::ISDA)));
         yts->enableExtrapolation();
         return Handle<YieldTermStructure>(yts);
     }
-    Handle<DefaultProbabilityTermStructure> flatRateDcs(Real forward) {
-        boost::shared_ptr<DefaultProbabilityTermStructure> dcs(new FlatHazardRate(asof_, forward, ActualActual()));
-        return Handle<DefaultProbabilityTermStructure>(dcs);
+    Handle<QuantExt::CreditCurve> flatRateDcs(Real forward) {
+        boost::shared_ptr<DefaultProbabilityTermStructure> dcs(
+            new FlatHazardRate(asof_, forward, ActualActual(ActualActual::ISDA)));
+        return Handle<QuantExt::CreditCurve>(
+            boost::make_shared<QuantExt::CreditCurve>(Handle<DefaultProbabilityTermStructure>(dcs)));
     }
 };
 
@@ -146,7 +148,7 @@ struct CommonVars {
         AmortizationData amortizationData(amortType, value, start, end, fixtenor, underflow);
         LegData fixedLegData(boost::make_shared<FixedLegData>(vector<double>(1, fixedRate)), isPayer, ccy,
                              fixedSchedule, fixDC, notionals, vector<string>(), conv, false, false, false, true, "", 0,
-                             "", 0, "", {amortizationData});
+                             "", {amortizationData});
 
         Envelope env("CP1");
 
@@ -162,7 +164,7 @@ struct CommonVars {
         AmortizationData amortizationData(amortType, value, start, end, fixtenor, underflow);
         LegData floatingLegData(boost::make_shared<FloatingLegData>("EUR-EURIBOR-6M", 2, false, spread), isPayer, ccy,
                                 floatingSchedule, fixDC, notionals, vector<string>(), conv, false, false, false, true,
-                                "", 0, "", 0, "", {amortizationData});
+                                "", 0, "", {amortizationData});
 
         Envelope env("CP1");
 
@@ -182,7 +184,7 @@ struct CommonVars {
         AmortizationData amortizationData2(amortType2, value2, end1, end, fixtenor, underflow2);
         LegData fixedLegData(boost::make_shared<FixedLegData>(vector<double>(1, fixedRate)), isPayer, ccy,
                              fixedSchedule, fixDC, notionals, vector<string>(), conv, false, false, false, true, "", 0,
-                             "", 0, "", {amortizationData1, amortizationData2});
+                             "", {amortizationData1, amortizationData2});
 
         Envelope env("CP1");
 
@@ -202,7 +204,7 @@ struct CommonVars {
         AmortizationData amortizationData2(amortType2, value2, end1, end, fixtenor, underflow2);
         LegData floatingLegData(boost::make_shared<FloatingLegData>("EUR-EURIBOR-6M", 2, false, spread), isPayer, ccy,
                                 floatingSchedule, fixDC, notionals, vector<string>(), conv, false, false, false, true,
-                                "", 0, "", 0, "", {amortizationData1, amortizationData2});
+                                "", 0, "", {amortizationData1, amortizationData2});
 
         Envelope env("CP1");
 
@@ -486,7 +488,7 @@ BOOST_AUTO_TEST_CASE(testMultiPhaseBond) {
     printBondSchedule(bond);
     auto qlInstr = boost::dynamic_pointer_cast<QuantLib::Bond>(bond->instrument()->qlInstrument());
     BOOST_REQUIRE(qlInstr != nullptr);
-    // annualy
+    // annually
     BOOST_REQUIRE_EQUAL(qlInstr->cashflows().size(), 7);
     BOOST_CHECK_EQUAL(qlInstr->cashflows()[0]->date(), Date(6, Feb, 2017));
     BOOST_CHECK_EQUAL(qlInstr->cashflows()[1]->date(), Date(5, Feb, 2018));

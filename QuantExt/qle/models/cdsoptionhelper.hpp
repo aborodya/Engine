@@ -25,7 +25,7 @@
 #define quantext_cdsoptionhelper_hpp
 
 #include <qle/instruments/cdsoption.hpp>
-#include <qle/instruments/creditdefaultswap.hpp>
+#include <ql/instruments/creditdefaultswap.hpp>
 
 #include <ql/models/calibrationhelper.hpp>
 #include <ql/quotes/simplequote.hpp>
@@ -50,9 +50,9 @@ public:
         const boost::shared_ptr<Claim>& claim = boost::shared_ptr<Claim>(),
         const BlackCalibrationHelper::CalibrationErrorType errorType = BlackCalibrationHelper::RelativePriceError);
 
-    virtual void addTimesTo(std::list<Time>& times) const {}
-    virtual Real modelValue() const;
-    virtual Real blackPrice(Volatility volatility) const;
+    virtual void addTimesTo(std::list<Time>& times) const override {}
+    virtual Real modelValue() const override;
+    virtual Real blackPrice(Volatility volatility) const override;
 
     boost::shared_ptr<CreditDefaultSwap> underlying() const { return cds_; }
     boost::shared_ptr<QuantExt::CdsOption> option() const { return option_; }

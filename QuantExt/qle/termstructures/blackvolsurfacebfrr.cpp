@@ -100,6 +100,14 @@ SimpleDeltaInterpolatedSmile::SimpleDeltaInterpolatedSmile(
         y_.push_back(y[perm[i]]);
     }
 
+    /* check the strikes are not (numerically) identical */
+
+    for (Size i = 0; i < x_.size() - 1; ++i) {
+        QL_REQUIRE(!close_enough(x_[i], x_[i + 1]), "SmileDeltaInterpolatedSmile: interpolation points x["
+                                                        << i << "] = x[" << (i + 1) << "] = " << x_[i]
+                                                        << " are numerically identical.");
+    }
+
     /* Create the interpolation object */
 
     if (smileInterpolation_ == BlackVolatilitySurfaceBFRR::SmileInterpolation::Linear) {
@@ -275,7 +283,7 @@ createSmile(const Real spot, const Real domDisc, const Real forDisc, const Real 
             mutable Real bestValue = QL_MAX_REAL;
             mutable boost::shared_ptr<SimpleDeltaInterpolatedSmile> bestSmile;
 
-            Disposable<Array> values(const Array& x) const override {
+            Array values(const Array& x) const override {
 
                 Array rrTmp(rrQuotes.begin(), rrQuotes.end());
                 Array smileBfVol = Exp(x) - atmVol + 0.5 * Abs(rrTmp);
@@ -394,15 +402,21 @@ BlackVolatilitySurfaceBFRR::BlackVolatilitySurfaceBFRR(
     registerWith(spot_);
     registerWith(domesticTS_);
     registerWith(foreignTS_);
-
-    // initialise
-
-    init();
 }
 
-void BlackVolatilitySurfaceBFRR::init() {
+const std::vector<bool>& BlackVolatilitySurfaceBFRR::smileHasError() const {
+    calculate();
+    return smileHasError_;
+}
 
-    // calcluate switch time
+const std::vector<std::string>& BlackVolatilitySurfaceBFRR::smileErrorMessage() const {
+    calculate();
+    return smileErrorMessage_;
+}
+
+void BlackVolatilitySurfaceBFRR::performCalculations() const {
+
+    // calculate switch time
 
     switchTime_ = switchTenor_ == 0 * Days ? QL_MAX_REAL : timeFromReference(optionDateFromTenor(switchTenor_));
 
@@ -438,14 +452,18 @@ void BlackVolatilitySurfaceBFRR::init() {
 
 void BlackVolatilitySurfaceBFRR::update() {
     BlackVolatilityTermStructure::update();
-    init();
+    LazyObject::update();
 }
 
 Volatility BlackVolatilitySurfaceBFRR::blackVolImpl(Time t, Real strike) const {
 
+    calculate();
+
     /* minimum supported time is 1D, i.e. if t is smaller, we return the vol at 1D */
 
     t = std::max(t, 1.0 / 365.0);
+
+    t = t <= expiryTimes_.back() ? t : expiryTimes_.back();
 
     /* if we have cached the interpolated smile at t, we use that */
 
@@ -621,7 +639,7 @@ Volatility BlackVolatilitySurfaceBFRR::blackVolImpl(Time t, Real strike) const {
         }
     }
 
-    /* build a new smile using the interpolated vols and artifical conventions
+    /* build a new smile using the interpolated vols and artificial conventions
        (querying the dom / for TS at t + settlLag_ is not entirely correct, because
         - of possibly different dcs in the curves and the vol ts and
         - because settLag_ is the time from today
@@ -629,10 +647,21 @@ Volatility BlackVolatilitySurfaceBFRR::blackVolImpl(Time t, Real strike) const {
         but the best we can realistically do in this context, because we don't have a date
         corresponding to t) */
 
-    auto smile = boost::make_shared<detail::SimpleDeltaInterpolatedSmile>(
-        spot_->value(), domesticTS_->discount(t + settlLag_) / settlDomDisc_,
-        foreignTS_->discount(t + settlLag_) / settlForDisc_, t, deltas_, putVols_i, callVols_i, atmVol_i, dt_c, at_c,
-        smileInterpolation_);
+    boost::shared_ptr<detail::SimpleDeltaInterpolatedSmile> smile;
+
+    try {
+        smile = boost::make_shared<detail::SimpleDeltaInterpolatedSmile>(
+            spot_->value(), domesticTS_->discount(t + settlLag_) / settlDomDisc_,
+            foreignTS_->discount(t + settlLag_) / settlForDisc_, t, deltas_, putVols_i, callVols_i, atmVol_i, dt_c,
+            at_c, smileInterpolation_);
+    } catch (const std::exception& e) {
+        // the interpolated smile failed to build => mark the "m" smile as a failure if available and retry, otherwise
+        // market the "p" smile as a failure and retry
+        Size failureIndex = index_m != Null<Size>() ? index_m : index_p;
+        smileHasError_[failureIndex] = true;
+        smileErrorMessage_[failureIndex] = e.what();
+        return blackVolImpl(t, strike);
+    }
 
     /* store the new smile in the cache */
 

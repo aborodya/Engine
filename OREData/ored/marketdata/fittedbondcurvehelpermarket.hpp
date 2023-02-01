@@ -41,7 +41,7 @@ namespace data {
 class FittedBondCurveHelperMarket : public MarketImpl {
 public:
     explicit FittedBondCurveHelperMarket(const std::map<std::string, Handle<YieldTermStructure>>& iborIndexCurves = {},
-                                         const Conventions& conventions = Conventions());
+                                         const bool handlePseudoCurrencies = true);
 
     Handle<YieldTermStructure> yieldCurve(const string& name,
                                           const string& configuration = Market::defaultConfiguration) const override;
@@ -49,7 +49,7 @@ public:
     Handle<Quote> securitySpread(const string& securityID,
                                  const string& configuration = Market::defaultConfiguration) const override;
 
-    Handle<DefaultProbabilityTermStructure>
+    Handle<QuantExt::CreditCurve>
     defaultCurve(const string&, const string& configuration = Market::defaultConfiguration) const override;
 
     Handle<Quote> recoveryRate(const string&,

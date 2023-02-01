@@ -45,11 +45,11 @@ public:
         registerWith(yts1);
         registerWith(yts2);
     }
-    Date maxDate() const;
-    const Date& referenceDate() const;
+    Date maxDate() const override;
+    const Date& referenceDate() const override;
 
 protected:
-    Real discountImpl(Time t) const;
+    Real discountImpl(Time t) const override;
     const Handle<YieldTermStructure> yts1_, yts2_;
     const Real w1_, w2_;
 };
@@ -60,7 +60,7 @@ inline Date WeightedYieldTermStructure::maxDate() const { return std::min(yts1_-
 
 inline const Date& WeightedYieldTermStructure::referenceDate() const {
     QL_REQUIRE(yts1_->referenceDate() == yts2_->referenceDate(),
-               "WeightedYieldTermStructure::referenceDate(): inconsitent reference dates in sources ("
+               "WeightedYieldTermStructure::referenceDate(): inconsistent reference dates in sources ("
                    << yts1_->referenceDate() << " vs. " << yts2_->referenceDate());
     return yts1_->referenceDate();
 }

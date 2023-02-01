@@ -251,8 +251,9 @@ std::set<string> CurveConfigurations::conventions() const {
     }
 
     for (auto& d : defaultCurveConfigs_) {
-        if (d.second->conventionID() != "")
-            conventions.insert(d.second->conventionID());
+        for (auto const& c : d.second->configs())
+            if (c.second.conventionID() != "")
+                conventions.insert(c.second.conventionID());
     }
 
     for (auto& i : inflationCurveConfigs_) {
@@ -474,6 +475,7 @@ CurveConfigurations::correlationCurveConfig(const string& curveID) const {
     return get(curveID, correlationCurveConfigs_);
 }
 
+#include <iostream>
 void CurveConfigurations::fromXML(XMLNode* node) {
     XMLUtils::checkNode(node, "CurveConfiguration");
 
@@ -487,8 +489,25 @@ void CurveConfigurations::fromXML(XMLNode* node) {
             if (auto tmp3 = XMLUtils::getChildNode(tmp2, "Report"))
                 reportConfigFxVols_.fromXML(tmp3);
         }
+        if (auto tmp2 = XMLUtils::getChildNode(tmp, "IRCapFloorVolatilities")) {
+            if (auto tmp3 = XMLUtils::getChildNode(tmp2, "Report"))
+                reportConfigIrCapFloorVols_.fromXML(tmp3);
+        }
+        if (auto tmp2 = XMLUtils::getChildNode(tmp, "IRSwaptionVolatilities")) {
+            if (auto tmp3 = XMLUtils::getChildNode(tmp2, "Report"))
+                reportConfigIrSwaptionVols_.fromXML(tmp3);
+        }
     }
 
+    if (auto tmp = XMLUtils::getChildNode(node, "SmileDynamics")) {
+      LOG("smile dynamics node found");
+      smileDynamicsConfig_.fromXML(tmp);
+    }
+    else {
+      WLOG("smile dynamics node not found in curve config, using default values");
+    }
+      
+    
     // Load YieldCurves, FXVols, etc, etc
     parseNode(node, "YieldCurves", "YieldCurve", yieldCurveConfigs_);
     parseNode(node, "FXVolatilities", "FXVolatility", fxVolCurveConfigs_);

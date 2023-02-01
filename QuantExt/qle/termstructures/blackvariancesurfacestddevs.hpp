@@ -17,7 +17,7 @@
 */
 
 /*! \file blackvariancesurfacestddevs.hpp
- \brief Black volatility surface modelled as variance surface
+ \brief Black volatility surface modeled as variance surface
  */
 
 #ifndef quantext_black_variance_surface_stddevs_hpp
@@ -50,7 +50,7 @@ public:
     // Inputs: - termStructre       - the BlackVolTermStructure from which to get the values.
     //         - quotesToPopulate   - vector of vector of quotes, matching the given expiries and std dev points.
     //         - expiries & stdDevPoints   - the points matching the quotesToPopulate axes.
-    //         - fowardCurve & atmVolCurve - foward curve and atm vol curve, used in the calcs for strike values.
+    //         - fowardCurve & atmVolCurve - forward curve and atm vol curve, used in the calcs for strike values.
     static void populateVolMatrix(const QuantLib::Handle<QuantLib::BlackVolTermStructure>& termStructre,
                                   std::vector<std::vector<Handle<QuantLib::Quote> > >& quotesToPopulate,
                                   const std::vector<Real>& times, const std::vector<Real>& stdDevPoints,
@@ -58,14 +58,14 @@ public:
                                   const QuantLib::Interpolation atmVolCurve);
 
 private:
-    virtual Real moneyness(Time t, Real strike) const;
+    virtual Real moneyness(Time t, Real strike) const override;
     boost::shared_ptr<EqFxIndexBase> index_;
     std::vector<Real> forwards_; // cache fwd values if StickyStrike==true
     Interpolation forwardCurve_;
     Interpolation atmVarCurve_;
     std::vector<Time> atmTimes_;
     std::vector<Real> atmVariances_;
-    bool flatExtrapolateMoneyness_; // flatly extraplate on moneyness axis
+    bool flatExtrapolateMoneyness_; // flatly extrapolate on moneyness axis
 };
 
 } // namespace QuantExt

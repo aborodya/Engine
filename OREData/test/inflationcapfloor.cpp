@@ -44,10 +44,10 @@ using namespace ore::data;
 // FX Swap test
 class TestMarket : public MarketImpl {
 public:
-    TestMarket(Date asof) {
+    TestMarket(Date asof) : MarketImpl(false) {
         // valuation date
 
-        dc = ActualActual();
+        dc = ActualActual(ActualActual::ISDA);
         bdc = Following;
         cal = TARGET();
 
@@ -170,7 +170,7 @@ BOOST_AUTO_TEST_CASE(testYoYCapFloor) {
     Leg yyLeg =
         yoyInflationLeg(schedule, TARGET(), market->yoyInflationIndex("EUHICPXT").currentLink(), Period(3, Months))
             .withNotionals(10000000)
-            .withPaymentDayCounter(ActualActual())
+            .withPaymentDayCounter(ActualActual(ActualActual::ISDA))
             .withPaymentAdjustment(Following)
             .withRateCurve(nominalTs);
 
@@ -181,6 +181,7 @@ BOOST_AUTO_TEST_CASE(testYoYCapFloor) {
         market->yoyInflationIndex("EUHICPXT").currentLink(), hovs, nominalTs);
     qlCap->setPricingEngine(dscEngine);
     BOOST_CHECK_CLOSE(yyCap->instrument()->NPV(), qlCap->NPV(), 1E-8); // this is 1E-10 rel diff
+    BOOST_CHECK_NO_THROW(yyCap->additionalData());
 }
 
 BOOST_AUTO_TEST_SUITE_END()

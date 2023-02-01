@@ -12,7 +12,6 @@
 #include <ored/portfolio/builders/quantovanillaoption.hpp>
 #include <ored/portfolio/vanillaoption.hpp>
 #include <ored/utilities/log.hpp>
-#include <ored/utilities/currencycheck.hpp>
 #include <ql/instruments/vanillaoption.hpp>
 #include <ql/instruments/quantovanillaoption.hpp>
 #include <qle/instruments/vanillaforwardoption.hpp>
@@ -30,14 +29,17 @@ void VanillaOptionTrade::build(const boost::shared_ptr<ore::data::EngineFactory>
 
     // If underlying currency is empty, then set to payment currency by default.
     // If non-empty, then check if the currencies are different for a Quanto payoff
-    Currency underlyingCurrency = underlyingCurrency_.empty() ? ccy : parseCurrencyWithMinors(underlyingCurrency_);
+    Currency underlyingCurrency = underlyingCurrency_.empty() ? ccy : underlyingCurrency_;
     bool sameCcy = underlyingCurrency == ccy;
+    
+    if (strike_.currency().empty())
+        strike_.setCurrency(ccy.code());
 
     // Payoff
     Option::Type type = parseOptionType(option_.callPut());
-    boost::shared_ptr<StrikedTypePayoff> payoff(new PlainVanillaPayoff(type, strike_));
+    boost::shared_ptr<StrikedTypePayoff> payoff(new PlainVanillaPayoff(type, strike_.value()));
     QuantLib::Exercise::Type exerciseType = parseExerciseType(option_.style());
-    QL_REQUIRE(option_.exerciseDates().size() == 1, "Invalid number of excercise dates");
+    QL_REQUIRE(option_.exerciseDates().size() == 1, "Invalid number of exercise dates");
     expiryDate_ = parseDate(option_.exerciseDates().front());
     // Set the maturity date equal to the expiry date. It may get updated below if option is cash settled with
     // payment after expiry.
@@ -123,7 +125,7 @@ void VanillaOptionTrade::build(const boost::shared_ptr<ore::data::EngineFactory>
             // Build the instrument
             LOG("Build CashSettledEuropeanOption for trade " << id());
             vanilla = boost::make_shared<CashSettledEuropeanOption>(
-                type, strike_, expiryDate_, paymentDate, option_.isAutomaticExercise(), index_, exercised, exercisePrice);
+                type, strike_.value(), expiryDate_, paymentDate, option_.isAutomaticExercise(), index_, exercised, exercisePrice);
 
             // Allow for a separate pricing engine that takes care of payment on a date after expiry. Do this by
             // appending 'EuropeanCS' to the trade type.
@@ -187,54 +189,48 @@ void VanillaOptionTrade::build(const boost::shared_ptr<ore::data::EngineFactory>
     LOG("tradeTypeBuilder set to " << tradeTypeBuilder << " for trade " << id());
 
     // Generally we need to set the pricing engine here even if the option is expired at build time, since the valuation date
-    // might change after build, and we get errors for the edge case valuation date = expiry date for Europen options.
-    // We keep the previous behaviour for expired American style options for now, because of engine builders that rely on the
-    // expiry date being in the future e.g. AmericanOptionFDEngineBuilder.
+    // might change after build, and we get errors for the edge case valuation date = expiry date for European options.
     string configuration = Market::defaultConfiguration;
-    bool skipEngine = (vanilla->isExpired() && exerciseType == QuantLib::Exercise::American);
-    if (skipEngine) {
-       DLOG("No engine attached for option on trade " << id() << " with expiry date " << io::iso_date(expiryDate_)
-                                                       << " because it is expired and american style.");
-    } else {
-        boost::shared_ptr<EngineBuilder> builder = engineFactory->builder(tradeTypeBuilder);
-        QL_REQUIRE(builder, "No builder found for " << tradeTypeBuilder);
+    boost::shared_ptr<EngineBuilder> builder = engineFactory->builder(tradeTypeBuilder);
+    QL_REQUIRE(builder, "No builder found for " << tradeTypeBuilder);
 
-        if (sameCcy) {
-            boost::shared_ptr<VanillaOptionEngineBuilder> vanillaOptionBuilder =
+    if (sameCcy) {
+        boost::shared_ptr<VanillaOptionEngineBuilder> vanillaOptionBuilder =
                 boost::dynamic_pointer_cast<VanillaOptionEngineBuilder>(builder);
-            QL_REQUIRE(vanillaOptionBuilder != nullptr, "No engine builder found for trade type " << tradeTypeBuilder);
+	QL_REQUIRE(vanillaOptionBuilder != nullptr, "No engine builder found for trade type " << tradeTypeBuilder);
 
-            vanilla->setPricingEngine(vanillaOptionBuilder->engine(assetName_, ccy, expiryDate_));
+	vanilla->setPricingEngine(vanillaOptionBuilder->engine(assetName_, ccy, expiryDate_));
 
-            configuration = vanillaOptionBuilder->configuration(MarketContext::pricing);
-        } else {
-            boost::shared_ptr<QuantoVanillaOptionEngineBuilder> quantoVanillaOptionBuilder =
+	configuration = vanillaOptionBuilder->configuration(MarketContext::pricing);
+    } else {
+        boost::shared_ptr<QuantoVanillaOptionEngineBuilder> quantoVanillaOptionBuilder =
                 boost::dynamic_pointer_cast<QuantoVanillaOptionEngineBuilder>(builder);
-            QL_REQUIRE(quantoVanillaOptionBuilder != nullptr, "No (Quanto) engine builder found for trade type "
+	QL_REQUIRE(quantoVanillaOptionBuilder != nullptr, "No (Quanto) engine builder found for trade type "
                                                                 << tradeTypeBuilder);
 
-            vanilla->setPricingEngine(quantoVanillaOptionBuilder->engine(assetName_, underlyingCurrency, ccy, expiryDate_));
+	vanilla->setPricingEngine(quantoVanillaOptionBuilder->engine(assetName_, underlyingCurrency, ccy, expiryDate_));
 
-            configuration = quantoVanillaOptionBuilder->configuration(MarketContext::pricing);
-        }
+	configuration = quantoVanillaOptionBuilder->configuration(MarketContext::pricing);
     }
+
     Position::Type positionType = parsePositionType(option_.longShort());
     Real bsInd = (positionType == QuantLib::Position::Long ? 1.0 : -1.0);
     Real mult = quantity_ * bsInd;
 
     std::vector<boost::shared_ptr<Instrument>> additionalInstruments;
     std::vector<Real> additionalMultipliers;
-    addPremiums(additionalInstruments, additionalMultipliers, mult, option_.premiumData(), -bsInd, ccy, engineFactory,
-                configuration);
+    maturity_ = std::max(maturity_, addPremiums(additionalInstruments, additionalMultipliers, mult,
+                                                option_.premiumData(), -bsInd, ccy, engineFactory, configuration));
 
     instrument_ = boost::shared_ptr<InstrumentWrapper>(
         new VanillaInstrument(vanilla, mult, additionalInstruments, additionalMultipliers));
-    npvCurrency_ = currency_;
+    npvCurrency_ = ccy.code();
 
     // Notional - we really need todays spot to get the correct notional.
     // But rather than having it move around we use strike * quantity
-    notional_ = strike_ * quantity_;
-    notionalCurrency_ = currency_;
+    notional_ = strike_.value() * quantity_;
+    // the following is correct for vanilla (sameCcy = true) and quanto (sameCcy = false)
+    notionalCurrency_ = ccy.code();
 }
 
 void VanillaOptionTrade::fromXML(XMLNode* node) { Trade::fromXML(node); }

@@ -18,6 +18,7 @@
 
 #include <boost/algorithm/string.hpp>
 #include <ored/configuration/cdsvolcurveconfig.hpp>
+#include <ored/marketdata/curvespecparser.hpp>
 #include <ored/utilities/parsers.hpp>
 #include <ored/utilities/to_string.hpp>
 #include <ql/errors.hpp>
@@ -29,19 +30,22 @@ using std::string;
 namespace ore {
 namespace data {
 
-CDSVolatilityCurveConfig::CDSVolatilityCurveConfig(bool parseTerm) : parseTerm_(parseTerm) {}
-
 CDSVolatilityCurveConfig::CDSVolatilityCurveConfig(const string& curveId, const string& curveDescription,
                                                    const boost::shared_ptr<VolatilityConfig>& volatilityConfig,
                                                    const string& dayCounter, const string& calendar,
                                                    const string& strikeType, const string& quoteName, Real strikeFactor,
-                                                   bool parseTerm)
+                                                   const std::vector<QuantLib::Period>& terms,
+                                                   const std::vector<std::string>& termCurves,
+						   const string& smileDynamics)
     : CurveConfig(curveId, curveDescription), volatilityConfig_(volatilityConfig), dayCounter_(dayCounter),
-      calendar_(calendar), strikeType_(strikeType), quoteName_(quoteName), strikeFactor_(strikeFactor),
-      parseTerm_(parseTerm) {
+      calendar_(calendar), strikeType_(strikeType), quoteName_(quoteName), strikeFactor_(strikeFactor), terms_(terms),
+      termCurves_(termCurves), smileDynamics_(smileDynamics) {
 
-    populateNameTerm();
+    QL_REQUIRE(terms_.size() == termCurves_.size(),
+               "CDSVolatilityCurveConfig: " << curveId
+                                            << " specifies different number of terms / curves (built via constructor)");
     populateQuotes();
+    populateRequiredCurveIds();
 }
 
 const boost::shared_ptr<VolatilityConfig>& CDSVolatilityCurveConfig::volatilityConfig() const {
@@ -58,9 +62,9 @@ const string& CDSVolatilityCurveConfig::quoteName() const { return quoteName_; }
 
 Real CDSVolatilityCurveConfig::strikeFactor() const { return strikeFactor_; }
 
-bool CDSVolatilityCurveConfig::parseTerm() const { return parseTerm_; }
+const std::vector<QuantLib::Period>& CDSVolatilityCurveConfig::terms() const { return terms_; }
 
-const pair<string, string>& CDSVolatilityCurveConfig::nameTerm() const { return nameTerm_; }
+const std::vector<std::string>& CDSVolatilityCurveConfig::termCurves() const { return termCurves_; }
 
 void CDSVolatilityCurveConfig::fromXML(XMLNode* node) {
 
@@ -69,14 +73,19 @@ void CDSVolatilityCurveConfig::fromXML(XMLNode* node) {
     curveID_ = XMLUtils::getChildValue(node, "CurveId", true);
     curveDescription_ = XMLUtils::getChildValue(node, "CurveDescription", true);
 
-    XMLNode* n;
-    if ((n = XMLUtils::getChildNode(node, "ParseTerm")))
-        parseTerm_ = parseBool(XMLUtils::getNodeValue(n));
-
-    populateNameTerm();
+    terms_.clear();
+    termCurves_.clear();
+    if (auto n = XMLUtils::getChildNode(node, "Terms")) {
+        terms_.clear();
+        termCurves_.clear();
+        for (auto c : XMLUtils::getChildrenNodes(n, "Term")) {
+            terms_.push_back(XMLUtils::getChildValueAsPeriod(c, "Label", true));
+            termCurves_.push_back(XMLUtils::getChildValue(c, "Curve", true));
+        }
+    }
 
     quoteName_ = "";
-    if ((n = XMLUtils::getChildNode(node, "QuoteName")))
+    if (auto n = XMLUtils::getChildNode(node, "QuoteName"))
         quoteName_ = XMLUtils::getNodeValue(n);
 
     if (XMLUtils::getChildNode(node, "Expiries")) {
@@ -86,13 +95,21 @@ void CDSVolatilityCurveConfig::fromXML(XMLNode* node) {
              << "A volatility configuration node should be used instead.");
 
         // Get the expiries
-        vector<string> quotes = XMLUtils::getChildrenValuesAsStrings(node, "Expiries", true);
-        QL_REQUIRE(quotes.size() > 0, "Need at least one expiry in the Expiries node.");
+        vector<string> expiries = XMLUtils::getChildrenValuesAsStrings(node, "Expiries", true);
+        QL_REQUIRE(expiries.size() > 0, "Need at least one expiry in the Expiries node.");
 
-        // Build the quotes by appending the expiries to the quote stem.
+        // Build the quotes by appending the expiries and terms to the quote stem.
+	std::vector<std::string> quotes;
         string stem = quoteStem();
-        for (string& q : quotes) {
-            q = stem + q;
+        for (const string& exp : expiries) {
+            for (auto const& p : terms_) {
+                quotes.push_back(stem + exp + "/" + ore::data::to_string(p));
+            }
+        }
+
+	// If we have at most 1 term specified, we add quotes without term as well
+        for (const string& exp : expiries) {
+	    quotes.push_back(stem + exp);
         }
 
         // Create the relevant volatilityConfig_ object.
@@ -114,30 +131,35 @@ void CDSVolatilityCurveConfig::fromXML(XMLNode* node) {
             QL_FAIL("CDSVolatilityCurveConfig does not yet support a DeltaSurface.");
         } else if ((n = XMLUtils::getChildNode(node, "MoneynessSurface"))) {
             QL_FAIL("CDSVolatilityCurveConfig does not yet support a MoneynessSurface.");
+        } else if ((n = XMLUtils::getChildNode(node, "ProxySurface"))) {
+            volatilityConfig_ = boost::make_shared<CDSProxyVolatilityConfig>();
         } else {
             QL_FAIL("CDSVolatility node expects one child node with name in list: Constant,"
-                    << " Curve, StrikeSurface.");
+                    << " Curve, StrikeSurface, ProxySurface.");
         }
         volatilityConfig_->fromXML(n);
     }
 
     dayCounter_ = "A365";
-    if ((n = XMLUtils::getChildNode(node, "DayCounter")))
+    if (auto n = XMLUtils::getChildNode(node, "DayCounter"))
         dayCounter_ = XMLUtils::getNodeValue(n);
 
     calendar_ = "NullCalendar";
-    if ((n = XMLUtils::getChildNode(node, "Calendar")))
+    if (auto n = XMLUtils::getChildNode(node, "Calendar"))
         calendar_ = XMLUtils::getNodeValue(n);
 
     strikeType_ = "";
-    if ((n = XMLUtils::getChildNode(node, "StrikeType")))
+    if (auto n = XMLUtils::getChildNode(node, "StrikeType"))
         strikeType_ = XMLUtils::getNodeValue(n);
 
     strikeFactor_ = 1.0;
-    if ((n = XMLUtils::getChildNode(node, "StrikeFactor")))
+    if (auto n = XMLUtils::getChildNode(node, "StrikeFactor"))
         strikeFactor_ = parseReal(XMLUtils::getNodeValue(n));
 
+    smileDynamics_ = XMLUtils::getChildValue(node, "SmileDynamics", false, "");
+
     populateQuotes();
+    populateRequiredCurveIds();
 }
 
 XMLNode* CDSVolatilityCurveConfig::toXML(XMLDocument& doc) {
@@ -146,6 +168,18 @@ XMLNode* CDSVolatilityCurveConfig::toXML(XMLDocument& doc) {
 
     XMLUtils::addChild(doc, node, "CurveId", curveID_);
     XMLUtils::addChild(doc, node, "CurveDescription", curveDescription_);
+
+    if (!terms_.empty()) {
+        QL_REQUIRE(terms_.size() == termCurves_.size(),
+                   "CDSVolatilityCurveConfig::toXML(): internal error, terms size ("
+                       << terms_.size() << ") != termCurves size (" << termCurves_.size() << "), curveId = curveID_");
+        auto termsNode = XMLUtils::addChild(doc, node, "Terms");
+        for (Size i = 0; i < terms_.size(); ++i) {
+            auto tmp = XMLUtils::addChild(doc, termsNode, "Term");
+            XMLUtils::addChild(doc, tmp, "Label", ore::data::to_string(terms_[i]));
+            XMLUtils::addChild(doc, tmp, "Curve", ore::data::to_string(termCurves_[i]));
+        }
+    }
 
     XMLNode* n = volatilityConfig_->toXML(doc);
     XMLUtils::appendNode(node, n);
@@ -157,20 +191,9 @@ XMLNode* CDSVolatilityCurveConfig::toXML(XMLDocument& doc) {
     if (!quoteName_.empty())
         XMLUtils::addChild(doc, node, "QuoteName", quoteName_);
     XMLUtils::addChild(doc, node, "StrikeFactor", strikeFactor_);
-    XMLUtils::addChild(doc, node, "ParseTerm", parseTerm_);
+    XMLUtils::addChild(doc, node, "SmileDynamics", smileDynamics_);
 
     return node;
-}
-
-void CDSVolatilityCurveConfig::populateNameTerm() {
-
-    // If parsing of term from ID has been turned off, just return early.
-    if (!parseTerm_)
-        return;
-
-    // Attempt to parse "<name>-<tenor>" from curve configuration ID.
-    // If not of this form, nameTerm_ is left as ("", "").
-    nameTerm_ = extractTermFromId(curveID_);
 }
 
 void CDSVolatilityCurveConfig::populateQuotes() {
@@ -185,14 +208,32 @@ void CDSVolatilityCurveConfig::populateQuotes() {
         // Clear the quotes_ if necessary and populate with surface quotes
         quotes_.clear();
 
-        // Build the quotes by appending the expiries and strikes to the quote stem.
         string stem = quoteStem();
         for (const pair<string, string>& p : vc->quotes()) {
-            quotes_.push_back(stem + p.first + "/" + p.second);
+            // build quotes of the form .../TERM/EXPIRY/STRIKE
+            for (auto const& t : terms_) {
+                quotes_.push_back(stem + ore::data::to_string(t) + "/" + p.first + "/" + p.second);
+            }
+            // if only one or even no term is configured, also build quotes of the form .../EXPIRY/STRIKE
+            if (terms_.size() <= 1) {
+                quotes_.push_back(stem + p.first + "/" + p.second);
+            }
         }
 
+    } else if (auto vc = boost::dynamic_pointer_cast<CDSProxyVolatilityConfig>(volatilityConfig_)) {
+        // no quotes required in this case
     } else {
         QL_FAIL("CDSVolatilityCurveConfig expected a constant, curve or surface");
+    }
+}
+
+void CDSVolatilityCurveConfig::populateRequiredCurveIds() {
+    if (auto vc = boost::dynamic_pointer_cast<CDSProxyVolatilityConfig>(volatilityConfig_)) {
+        requiredCurveIds_[CurveSpec::CurveType::CDSVolatility].insert(vc->cdsVolatilityCurve());
+    }
+    for (auto const& c : termCurves_) {
+        auto spec = parseCurveSpec(c);
+        requiredCurveIds_[CurveSpec::CurveType::Default].insert(spec->curveConfigID());
     }
 }
 
@@ -203,43 +244,12 @@ string CDSVolatilityCurveConfig::quoteStem() const {
     if (!quoteName_.empty()) {
         // If an explicit quote name has been provided use this.
         stem += quoteName_;
-    } else if (!nameTerm_.first.empty()) {
-        // If we have parsed the curveID_ from <name>-<term> to a (name, term) pair, use name.
-        stem += nameTerm_.first;
     } else {
-        // Fallback to just using the curveID_.
+        // If not, fallback to just using the curveID_.
         stem += curveID_;
     }
     stem += "/";
-
-    // If we have parsed the curveID_ from <name>-<term> to a (name, term) pair, append term.
-    if (!nameTerm_.second.empty())
-        stem += nameTerm_.second + "/";
-
     return stem;
-}
-
-pair<string, string> extractTermFromId(const string& id) {
-
-    pair<string, string> result;
-
-    // Attempt to parse suffix "-<tenor_string>" from id.
-    auto pos = id.find_last_of('-');
-    if (pos != string::npos && pos != id.size() - 1 && pos != 0) {
-        Period tmp;
-        string term = id.substr(pos + 1);
-        if (tryParse<Period>(id.substr(pos + 1), tmp, parsePeriod)) {
-            DLOG("Parsed term suffix, " << term << ", from id " << id);
-            result.first = id.substr(0, pos);
-            result.second = term;
-        } else {
-            DLOG("Could not convert suffix, " << term << ", from id " << id << " to term.");
-        }
-    } else {
-        DLOG("Could not parse a term suffix from id " << id);
-    }
-
-    return result;
 }
 
 } // namespace data

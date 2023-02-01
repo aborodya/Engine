@@ -66,9 +66,9 @@ void ValuationEngine::buildCube(const boost::shared_ptr<data::Portfolio>& portfo
                                 vector<boost::shared_ptr<ValuationCalculator>> calculators, bool mporStickyDate,
                                 boost::shared_ptr<analytics::NPVCube> outputCubeNettingSet,
                                 boost::shared_ptr<analytics::NPVCube> outputCptyCube,
-                                vector<boost::shared_ptr<CounterpartyCalculator>> cptyCalculators) {
+                                vector<boost::shared_ptr<CounterpartyCalculator>> cptyCalculators, bool dryRun) {
 
-    LOG("Build cube with mporStickyDate=" << mporStickyDate);
+    LOG("Build cube with mporStickyDate=" << mporStickyDate << ", dryRun=" << std::boolalpha << dryRun);
 
     QL_REQUIRE(portfolio->size() > 0, "ValuationEngine: Error portfolio is empty");
 
@@ -101,16 +101,21 @@ void ValuationEngine::buildCube(const boost::shared_ptr<data::Portfolio>& portfo
     Real pricingTime = 0.0;
     Real fixingTime = 0.0;
 
+    LOG("Initialise " << calculators.size() << " valuation calculators");
+    for (auto const& c : calculators) {
+        c->init(portfolio, simMarket_);
+        c->initScenario();
+    }
+
     // Loop is Samples, Dates, Trades
     const auto& dates = dg_->dates();
     const auto& trades = portfolio->trades();
     auto& counterparties = outputCptyCube ? outputCptyCube->ids() : vector<string>();
     std::vector<bool> tradeHasError(trades.size(), false);
     LOG("Initialise state objects...");
-    Size numFRC = 0;
     // initialise state objects for each trade (required for path-dependent derivatives in particular)
     for (Size i = 0; i < trades.size(); i++) {
-        QL_REQUIRE(trades[i]->npvCurrency() != "", "NPV currency not set for trade " << trades[i]->id());
+        QL_REQUIRE(!trades[i]->npvCurrency().empty(), "NPV currency not set for trade " << trades[i]->id());
 
         DLOG("Initialise wrapper for trade " << trades[i]->id());
         trades[i]->instrument()->initialise(dates);
@@ -119,7 +124,7 @@ void ValuationEngine::buildCube(const boost::shared_ptr<data::Portfolio>& portfo
 
         // T0 values
         try {
-            for (auto calc : calculators)
+            for (auto& calc : calculators)
                 calc->calculateT0(trades[i], i, simMarket_, outputCube, outputCubeNettingSet);
         } catch (const std::exception& e) {
             string expMsg = string("T0 valuation error: ") + e.what();
@@ -145,16 +150,19 @@ void ValuationEngine::buildCube(const boost::shared_ptr<data::Portfolio>& portfo
         }
     }
     LOG("Total number of swaps = " << portfolio->size());
-    LOG("Total number of FRC = " << numFRC);
 
-    simMarket_->fixingManager()->initialise(portfolio, simMarket_);
+    if (dates.size() > 1) {
+        // only need to init the fixing manager if there is more than one sim date
+        simMarket_->fixingManager()->initialise(portfolio, simMarket_);
+    }
 
     cpu_timer timer;
     cpu_timer loopTimer;
 
     // We call Cube::samples() each time her to allow for dynamic stopping times
     // e.g. MC convergence tests
-    for (Size sample = 0; sample < outputCube->samples(); ++sample) {
+    for (Size sample = 0; sample < (dryRun ? std::min<Size>(1, outputCube->samples()) : outputCube->samples());
+         ++sample) {
         updateProgress(sample, outputCube->samples());
 
         for (auto& trade : trades)
@@ -239,6 +247,22 @@ void ValuationEngine::buildCube(const boost::shared_ptr<data::Portfolio>& portfo
         fixingTime += timer.elapsed().wall * 1e-9;
     }
 
+    if (dryRun) {
+        LOG("Doing a dry run - fill remaining cube with random values.");
+        for (Size sample = 1; sample < outputCube->samples(); ++sample) {
+            for (Size i = 0; i < dates.size(); ++i) {
+                for (Size j = 0; j < trades.size(); ++j) {
+                    for (Size d = 0; d < outputCube->depth(); ++d) {
+                        // add some noise, but only for the first few samples, so that e.g.
+                        // a sensi run is not polluted with too many sensis for each trade
+                        Real noise = sample < 10 ? static_cast<Real>(i + j + d + sample) : 0.0;
+                        outputCube->set(outputCube->getT0(j, d) + noise, j, i, sample, d);
+                    }
+                }
+            }
+        }
+    }
+
     simMarket_->reset();
     updateProgress(outputCube->samples(), outputCube->samples());
     loopTimer.stop();
@@ -255,7 +279,7 @@ void ValuationEngine::buildCube(const boost::shared_ptr<data::Portfolio>& portfo
                  << trades[i]->id() << "' since there was at least one error during simulation");
             for (Size index = 0; index < outputCube->depth(); ++index) {
                 outputCube->setT0(0.0, i, index);
-                for (Size dateIndex = 0; dateIndex < dates.size(); ++dateIndex) {
+                for (Size dateIndex = 0; dateIndex < outputCube->numDates(); ++dateIndex) {
                     for (Size sample = 0; sample < outputCube->samples(); ++sample) {
                         outputCube->set(0.0, i, dateIndex, sample, index);
                     }
@@ -272,16 +296,18 @@ void ValuationEngine::runCalculators(bool isCloseOutDate, const std::vector<boos
                                      boost::shared_ptr<analytics::NPVCube>& outputCubeNettingSet, const Date& d,
                                      const Size cubeDateIndex, const Size sample, const string& label) {
     ObservationMode::Mode om = ObservationMode::instance().mode();
+    for(auto& calc: calculators)
+        calc->initScenario();
     // loop over trades
     for (Size j = 0; j < trades.size(); ++j) {
         if (tradeHasError[j])
             continue;
         auto trade = trades[j];
         // We can avoid checking mode here and always call updateQlInstruments()
-        if (om == ObservationMode::Mode::Disable)
+        if (om == ObservationMode::Mode::Disable || om == ObservationMode::Mode::Unregister)
             trade->instrument()->updateQlInstruments();
         try {
-            for (auto calc : calculators)
+            for (auto& calc : calculators)
                 calc->calculate(trade, j, simMarket_, outputCube, outputCubeNettingSet, d, cubeDateIndex, sample,
                                 isCloseOutDate);
         } catch (const std::exception& e) {
@@ -300,7 +326,7 @@ void ValuationEngine::runCalculators(bool isCloseOutDate, const std::vector<std:
     // loop over counterparties
     for (Size j = 0; j < counterparties.size(); ++j) {
         auto counterparty = counterparties[j];
-        for (auto calc : calculators)
+        for (auto& calc : calculators)
             calc->calculate(counterparty, j, simMarket_, cptyCube, d, cubeDateIndex, sample, isCloseOutDate);
     }
 }

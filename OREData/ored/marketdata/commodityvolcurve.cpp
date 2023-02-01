@@ -1,5 +1,6 @@
 /*
 Copyright (C) 2018 Quaternion Risk Management Ltd
+Copyright (C) 2022 Skandinaviska Enskilda Banken AB (publ)
 All rights reserved.
 
 This file is part of ORE, a free-software/open-source library
@@ -38,10 +39,12 @@ FITNESS FOR A PARTICULAR PURPOSE. See the license for more details.
 #include <qle/indexes/commodityindex.hpp>
 #include <qle/math/flatextrapolation.hpp>
 #include <qle/termstructures/aposurface.hpp>
+#include <qle/termstructures/blackinvertedvoltermstructure.hpp>
 #include <qle/termstructures/blackvariancesurfacemoneyness.hpp>
 #include <qle/termstructures/blackvariancesurfacesparse.hpp>
 #include <qle/termstructures/blackvolsurfacedelta.hpp>
 #include <qle/termstructures/eqcommoptionsurfacestripper.hpp>
+#include <qle/termstructures/blackvolsurfaceproxy.hpp>
 #include <qle/termstructures/pricetermstructureadapter.hpp>
 
 using namespace std;
@@ -156,21 +159,26 @@ namespace ore {
 namespace data {
 
 CommodityVolCurve::CommodityVolCurve(const Date& asof, const CommodityVolatilityCurveSpec& spec, const Loader& loader,
-                                     const CurveConfigurations& curveConfigs, const Conventions& conventions,
+                                     const CurveConfigurations& curveConfigs,
                                      const map<string, boost::shared_ptr<YieldCurve>>& yieldCurves,
                                      const map<string, boost::shared_ptr<CommodityCurve>>& commodityCurves,
-                                     const map<string, boost::shared_ptr<CommodityVolCurve>>& commodityVolCurves) {
+                                     const map<string, boost::shared_ptr<CommodityVolCurve>>& commodityVolCurves,
+                                     const map<string, boost::shared_ptr<FXVolCurve>>& fxVolCurves,
+                                     const map<string, boost::shared_ptr<CorrelationCurve>>& correlationCurves,
+                                     const Market* fxIndices) {
 
     try {
         LOG("CommodityVolCurve: start building commodity volatility structure with ID " << spec.curveConfigID());
 
         auto config = *curveConfigs.commodityVolatilityConfig(spec.curveConfigID());
 
+        boost::shared_ptr<Conventions> conventions = InstrumentConventions::instance().conventions();
+
         if (!config.futureConventionsId().empty()) {
             const auto& cId = config.futureConventionsId();
-            QL_REQUIRE(conventions.has(cId), "Conventions, " << cId <<
-                " for config " << config.curveID() << " not found.");
-            convention_ = boost::dynamic_pointer_cast<CommodityFutureConvention>(conventions.get(cId));
+            QL_REQUIRE(conventions->has(cId),
+                       "Conventions, " << cId << " for config " << config.curveID() << " not found.");
+            convention_ = boost::dynamic_pointer_cast<CommodityFutureConvention>(conventions->get(cId));
             QL_REQUIRE(convention_, "Convention with ID '" << cId << "' should be of type CommodityFutureConvention");
             expCalc_ = boost::make_shared<ConventionsBasedFutureExpiry>(*convention_);
         }
@@ -178,63 +186,89 @@ CommodityVolCurve::CommodityVolCurve(const Date& asof, const CommodityVolatility
         calendar_ = parseCalendar(config.calendar());
         dayCounter_ = parseDayCounter(config.dayCounter());
 
-        // Do different things depending on the type of volatility configured
-        boost::shared_ptr<VolatilityConfig> vc = config.volatilityConfig();
-        if (auto cvc = boost::dynamic_pointer_cast<ConstantVolatilityConfig>(vc)) {
-            buildVolatility(asof, config, *cvc, loader);
-        } else if (auto vcc = boost::dynamic_pointer_cast<VolatilityCurveConfig>(vc)) {
-            buildVolatility(asof, config, *vcc, loader);
-        } else if (auto vssc = boost::dynamic_pointer_cast<VolatilityStrikeSurfaceConfig>(vc)) {
-            // Try to populate the price and yield term structure. Need them in some cases here.
-            populateCurves(config, yieldCurves, commodityCurves, true, true);
-            buildVolatility(asof, config, *vssc, loader);
-        } else if (auto vdsc = boost::dynamic_pointer_cast<VolatilityDeltaSurfaceConfig>(vc)) {
-            // Need a yield curve and price curve to create a delta surface.
-            populateCurves(config, yieldCurves, commodityCurves, true);
-            buildVolatility(asof, config, *vdsc, loader);
-        } else if (auto vmsc = boost::dynamic_pointer_cast<VolatilityMoneynessSurfaceConfig>(vc)) {
-            // Need a yield curve (if forward moneyness) and price curve to create a moneyness surface.
-            MoneynessStrike::Type moneynessType = parseMoneynessType(vmsc->moneynessType());
-            bool fwdMoneyness = moneynessType == MoneynessStrike::Type::Forward;
-            populateCurves(config, yieldCurves, commodityCurves, fwdMoneyness);
-            buildVolatility(asof, config, *vmsc, loader);
-        } else if (auto vapo = boost::dynamic_pointer_cast<VolatilityApoFutureSurfaceConfig>(vc)) {
+        // loop over the volatility configs attempting to build in the order provided
+        DLOG("CommodityVolCurve: Attempting to build equity vol curve from volatilityConfig, "
+             << config.volatilityConfig().size() << " volatility configs provided.");
+        for (auto vc : config.volatilityConfig()) {
+            try {
+                // if the volatility config has it's own calendar, we use that.
+                if (!vc->calendar().empty())
+                    calendar_ = vc->calendar();
+                // Do different things depending on the type of volatility configured
+                if (auto eqvc = boost::dynamic_pointer_cast<ProxyVolatilityConfig>(vc)) {
+                    buildVolatility(asof, spec, curveConfigs, *eqvc, commodityCurves, commodityVolCurves, fxVolCurves,
+                                    correlationCurves, fxIndices);
+                } else if (auto qvc = boost::dynamic_pointer_cast<QuoteBasedVolatilityConfig>(vc)) {
 
-            // Get the base conventions and create the associated expiry calculator.
-            QL_REQUIRE(!vapo->baseConventionsId().empty(),
-                       "The APO FutureConventions must be populated to build a future APO surface");
-            QL_REQUIRE(conventions.has(vapo->baseConventionsId()), "Conventions, " << vapo->baseConventionsId()
-                                                                                   << " for config " << config.curveID()
-                                                                                   << " not found.");
-            auto convention =
-                boost::dynamic_pointer_cast<CommodityFutureConvention>(conventions.get(vapo->baseConventionsId()));
-            QL_REQUIRE(convention, "Convention with ID '" << config.futureConventionsId()
-                                                          << "' should be of type CommodityFutureConvention");
-            auto baseExpCalc = boost::make_shared<ConventionsBasedFutureExpiry>(*convention);
+                    if (auto cvc = boost::dynamic_pointer_cast<ConstantVolatilityConfig>(vc)) {
+                        buildVolatility(asof, config, *cvc, loader);
+                    } else if (auto vcc = boost::dynamic_pointer_cast<VolatilityCurveConfig>(vc)) {
+                        buildVolatility(asof, config, *vcc, loader);
+                    } else if (auto vssc = boost::dynamic_pointer_cast<VolatilityStrikeSurfaceConfig>(vc)) {
+                        // Try to populate the price and yield term structure. Need them in some cases here.
+                        populateCurves(config, yieldCurves, commodityCurves, true, true);
+                        buildVolatility(asof, config, *vssc, loader);
+                    } else if (auto vdsc = boost::dynamic_pointer_cast<VolatilityDeltaSurfaceConfig>(vc)) {
+                        // Need a yield curve and price curve to create a delta surface.
+                        populateCurves(config, yieldCurves, commodityCurves, true);
+                        buildVolatility(asof, config, *vdsc, loader);
+                    } else if (auto vmsc = boost::dynamic_pointer_cast<VolatilityMoneynessSurfaceConfig>(vc)) {
+                        // Need a yield curve (if forward moneyness) and price curve to create a moneyness surface.
+                        MoneynessStrike::Type moneynessType = parseMoneynessType(vmsc->moneynessType());
+                        bool fwdMoneyness = moneynessType == MoneynessStrike::Type::Forward;
+                        populateCurves(config, yieldCurves, commodityCurves, fwdMoneyness);
+                        buildVolatility(asof, config, *vmsc, loader);
+                    } else if (auto vapo = boost::dynamic_pointer_cast<VolatilityApoFutureSurfaceConfig>(vc)) {
 
-            // Need to get the base commodity volatility structure.
-            QL_REQUIRE(!vapo->baseVolatilityId().empty(),
-                       "The APO VolatilityId must be populated to build a future APO surface.");
-            auto itVs = commodityVolCurves.find(vapo->baseVolatilityId());
-            QL_REQUIRE(itVs != commodityVolCurves.end(),
-                       "Can't find commodity volatility with id " << vapo->baseVolatilityId());
-            auto baseVs = Handle<BlackVolTermStructure>(itVs->second->volatility());
+                        // Get the base conventions and create the associated expiry calculator.
+                        QL_REQUIRE(!vapo->baseConventionsId().empty(),
+                                   "The APO FutureConventions must be populated to build a future APO surface");
+                        QL_REQUIRE(conventions->has(vapo->baseConventionsId()),
+                                   "Conventions, " << vapo->baseConventionsId() << " for config " << config.curveID()
+                                                   << " not found.");
+                        auto convention = boost::dynamic_pointer_cast<CommodityFutureConvention>(
+                            conventions->get(vapo->baseConventionsId()));
+                        QL_REQUIRE(convention, "Convention with ID '"
+                                                   << config.futureConventionsId()
+                                                   << "' should be of type CommodityFutureConvention");
+                        auto baseExpCalc = boost::make_shared<ConventionsBasedFutureExpiry>(*convention);
 
-            // Need to get the base price curve
-            QL_REQUIRE(!vapo->basePriceCurveId().empty(),
-                       "The APO PriceCurveId must be populated to build a future APO surface.");
-            auto itPts = commodityCurves.find(vapo->basePriceCurveId());
-            QL_REQUIRE(itPts != commodityCurves.end(), "Can't find price curve with id " << vapo->basePriceCurveId());
-            auto basePts = Handle<PriceTermStructure>(itPts->second->commodityPriceCurve());
+                        // Need to get the base commodity volatility structure.
+                        QL_REQUIRE(!vapo->baseVolatilityId().empty(),
+                                   "The APO VolatilityId must be populated to build a future APO surface.");
+                        auto itVs = commodityVolCurves.find(vapo->baseVolatilityId());
+                        QL_REQUIRE(itVs != commodityVolCurves.end(),
+                                   "Can't find commodity volatility with id " << vapo->baseVolatilityId());
+                        auto baseVs = Handle<BlackVolTermStructure>(itVs->second->volatility());
 
-            // Need a yield curve and price curve to create an APO surface.
-            populateCurves(config, yieldCurves, commodityCurves, true);
+                        // Need to get the base price curve
+                        QL_REQUIRE(!vapo->basePriceCurveId().empty(),
+                                   "The APO PriceCurveId must be populated to build a future APO surface.");
+                        auto itPts = commodityCurves.find(vapo->basePriceCurveId());
+                        QL_REQUIRE(itPts != commodityCurves.end(),
+                                   "Can't find price curve with id " << vapo->basePriceCurveId());
+                        auto basePts = Handle<PriceTermStructure>(itPts->second->commodityPriceCurve());
 
-            buildVolatility(asof, config, *vapo, baseVs, basePts, conventions);
+                        // Need a yield curve and price curve to create an APO surface.
+                        populateCurves(config, yieldCurves, commodityCurves, true);
 
-        } else {
-            QL_FAIL("Unexpected VolatilityConfig in CommodityVolatilityConfig");
+                        buildVolatility(asof, config, *vapo, baseVs, basePts);
+
+                    } else {
+                        QL_FAIL("Unexpected VolatilityConfig in CommodityVolatilityConfig");
+                    }
+                } else {
+                    QL_FAIL("CommodityVolCurve: VolatilityConfig must be QuoteBased or a Proxy");
+                }
+
+            } catch (std::exception& e) {
+                DLOG("CommodityVolCurve: equity vol curve building failed :" << e.what());
+            } catch (...) {
+                DLOG("CommodityVolCurve: equity vol curve building failed: unknown error");
+            }
         }
+        QL_REQUIRE(volatility_ , "CommodityVolCurve: Failed to build commodity volatility structure from "
+                    << config.volatilityConfig().size() << " volatility configs provided.");
 
         LOG("CommodityVolCurve: finished building commodity volatility structure with ID " << spec.curveConfigID());
 
@@ -250,22 +284,16 @@ void CommodityVolCurve::buildVolatility(const Date& asof, const CommodityVolatil
 
     LOG("CommodityVolCurve: start building constant volatility structure");
 
-    // Loop over all market datums and find the single quote
-    // Return error if there are duplicates (this is why we do not use loader.get() method)
-    Real quoteValue = Null<Real>();
-    for (const boost::shared_ptr<MarketDatum>& md : loader.loadQuotes(asof)) {
-        if (md->asofDate() == asof && md->instrumentType() == MarketDatum::InstrumentType::COMMODITY_OPTION) {
-
-            boost::shared_ptr<CommodityOptionQuote> q = boost::dynamic_pointer_cast<CommodityOptionQuote>(md);
-
-            if (q->name() == cvc.quote()) {
-                TLOG("Found the constant volatility quote " << q->name());
-                QL_REQUIRE(quoteValue == Null<Real>(), "Duplicate quote found for quote with id " << cvc.quote());
-                quoteValue = q->quote()->value();
-            }
-        }
-    }
-    QL_REQUIRE(quoteValue != Null<Real>(), "Quote not found for id " << cvc.quote());
+    const boost::shared_ptr<MarketDatum>& md = loader.get(cvc.quote(), asof);
+    QL_REQUIRE(md->asofDate() == asof, "MarketDatum asofDate '" << md->asofDate() << "' <> asof '" << asof << "'");
+    QL_REQUIRE(md->instrumentType() == MarketDatum::InstrumentType::COMMODITY_OPTION,
+        "MarketDatum instrument type '" << md->instrumentType() << "' <> 'MarketDatum::InstrumentType::COMMODITY_OPTION'");
+    boost::shared_ptr<CommodityOptionQuote> q = boost::dynamic_pointer_cast<CommodityOptionQuote>(md);
+    QL_REQUIRE(q, "Internal error: could not downcast MarketDatum '" << md->name() << "' to CommodityOptionQuote");
+    QL_REQUIRE(q->name() == cvc.quote(),
+        "CommodityOptionQuote name '" << q->name() << "' <> ConstantVolatilityConfig quote '" << cvc.quote() << "'");
+    TLOG("Found the constant volatility quote " << q->name());
+    Real quoteValue = q->quote()->value();
 
     DLOG("Creating BlackConstantVol structure");
     volatility_ = boost::make_shared<BlackConstantVol>(asof, calendar_, quoteValue, dayCounter_);
@@ -294,33 +322,35 @@ void CommodityVolCurve::buildVolatility(const QuantLib::Date& asof, const Commod
     // Different approaches depending on whether we are using a regex or searching for a list of explicit quotes.
     if (wildcard) {
 
-        DLOG("Have single quote with pattern " << (*wildcard).regex());
+        DLOG("Have single quote with pattern " << wildcard->pattern());
 
         // Loop over quotes and process commodity option quotes matching pattern on asof
-        for (const boost::shared_ptr<MarketDatum>& md : loader.loadQuotes(asof)) {
+        for (const auto& md : loader.get(*wildcard, asof)) {
 
             // Go to next quote if the market data point's date does not equal our asof
             if (md->asofDate() != asof)
                 continue;
 
             auto q = boost::dynamic_pointer_cast<CommodityOptionQuote>(md);
-            if (q && (*wildcard).matches(q->name())) {
+            if (!q)
+                continue;
+            QL_REQUIRE(q->quoteType() == vcc.quoteType(),
+                "EquityOptionQuote type '" << q->quoteType() << "' <> VolatilityCurveConfig quote type '" << vcc.quoteType() << "'");
 
-                TLOG("The quote " << q->name() << " matched the pattern");
+            TLOG("The quote " << q->name() << " matched the pattern");
 
-                Date expiryDate = getExpiry(asof, q->expiry(), vc.futureConventionsId(), vc.optionExpiryRollDays());
-                if (expiryDate > asof) {
-                    // Add the quote to the curve data
-                    auto it = curveData.find(expiryDate);
-                    if (it != curveData.end()) {
-                        LOG("Already added quote " << fixed << setprecision(9) << it->second << " for the expiry" <<
-                            " date " << io::iso_date(expiryDate) << " for commodity curve " << vc.curveID() <<
-                            " so not adding " << q->name());
-                    } else {
-                        curveData[expiryDate] = q->quote()->value();
-                        TLOG("Added quote " << q->name() << ": (" << io::iso_date(expiryDate) << "," <<
-                            fixed << setprecision(9) << q->quote()->value() << ")");
-                    }
+            Date expiryDate = getExpiry(asof, q->expiry(), vc.futureConventionsId(), vc.optionExpiryRollDays());
+            if (expiryDate > asof) {
+                // Add the quote to the curve data
+                auto it = curveData.find(expiryDate);
+                if (it != curveData.end()) {
+                    LOG("Already added quote " << fixed << setprecision(9) << it->second << " for the expiry" <<
+                        " date " << io::iso_date(expiryDate) << " for commodity curve " << vc.curveID() <<
+                        " so not adding " << q->name());
+                } else {
+                    curveData[expiryDate] = q->quote()->value();
+                    TLOG("Added quote " << q->name() << ": (" << io::iso_date(expiryDate) << "," <<
+                        fixed << setprecision(9) << q->quote()->value() << ")");
                 }
             }
         }
@@ -333,40 +363,43 @@ void CommodityVolCurve::buildVolatility(const QuantLib::Date& asof, const Commod
         DLOG("Have " << vcc.quotes().size() << " explicit quotes");
 
         // Loop over quotes and process commodity option quotes that are explicitly specified in the config
-        for (const boost::shared_ptr<MarketDatum>& md : loader.loadQuotes(asof)) {
+        Size quotesAdded = 0;
+        Size skippedExpiredQuotes = 0;
+        for (const auto& quoteName : vcc.quotes()) {
+            auto md = loader.get(quoteName, asof);
+            QL_REQUIRE(md, "Unable to load quote '" << quoteName << "'");
 
-            // Go to next quote if the market data point's date does not equal our asof
-            if (md->asofDate() != asof)
-                continue;
+            QL_REQUIRE(md->asofDate() == asof, "MarketDatum asofDate '" << md->asofDate() << "' <> asof '" << asof << "'");
 
-            if (auto q = boost::dynamic_pointer_cast<CommodityOptionQuote>(md)) {
+            auto q = boost::dynamic_pointer_cast<CommodityOptionQuote>(md);
+            QL_REQUIRE(q, "Internal error: could not downcast MarketDatum '" << md->name() << "' to CommodityOptionQuote");
 
-                // Find quote name in configured quotes.
-                auto it = find(vcc.quotes().begin(), vcc.quotes().end(), q->name());
+            TLOG("Found the configured quote " << q->name());
 
-                if (it != vcc.quotes().end()) {
-                    TLOG("Found the configured quote " << q->name());
-
-                    Date expiryDate = getExpiry(asof, q->expiry(), vc.futureConventionsId(), vc.optionExpiryRollDays());
-                    QL_REQUIRE(expiryDate > asof, "Commodity volatility quote '" << q->name()
-                                                                                 << "' has expiry in the past ("
-                                                                                 << io::iso_date(expiryDate) << ")");
-                    QL_REQUIRE(curveData.count(expiryDate) == 0, "Duplicate quote for the date "
-                                                                     << io::iso_date(expiryDate)
-                                                                     << " provided by commodity volatility config "
-                                                                     << vc.curveID());
-                    curveData[expiryDate] = q->quote()->value();
-
-                    TLOG("Added quote " << q->name() << ": (" << io::iso_date(expiryDate) << "," << fixed
-                                        << setprecision(9) << q->quote()->value() << ")");
-                }
+            Date expiryDate = getExpiry(asof, q->expiry(), vc.futureConventionsId(), vc.optionExpiryRollDays());
+            if (expiryDate > asof) {
+                QL_REQUIRE(expiryDate > asof, "Commodity volatility quote '"
+                                                  << q->name() << "' has expiry in the past ("
+                                                  << io::iso_date(expiryDate) << ")");
+                QL_REQUIRE(curveData.count(expiryDate) == 0, "Duplicate quote for the date "
+                                                                 << io::iso_date(expiryDate)
+                                                                 << " provided by commodity volatility config "
+                                                                 << vc.curveID());
+                curveData[expiryDate] = q->quote()->value();
+                quotesAdded++;
+                TLOG("Added quote " << q->name() << ": (" << io::iso_date(expiryDate) << "," << fixed
+                                    << setprecision(9) << q->quote()->value() << ")");
+            } else {
+                skippedExpiredQuotes++;
+                WLOG("Skipped quote " << q->name() << ": (" << io::iso_date(expiryDate) << "," << fixed
+                                      << setprecision(9) << q->quote()->value() << ")");
             }
         }
 
         // Check that we have found all of the explicitly configured quotes
-        QL_REQUIRE(curveData.size() == vcc.quotes().size(), "Found " << curveData.size() << " quotes, but "
-                                                                     << vcc.quotes().size()
-                                                                     << " quotes were given in config.");
+        QL_REQUIRE((quotesAdded + skippedExpiredQuotes) == vcc.quotes().size(),
+                   "Found " << quotesAdded << " live quotes and " << skippedExpiredQuotes << " expired quotes"
+                            << " but " << vcc.quotes().size() << " quotes were given in config.");
     }
 
     // Create the dates and volatility vector
@@ -482,21 +515,26 @@ void CommodityVolCurve::buildVolatility(const Date& asof, CommodityVolatilityCon
     map<Date, Real> fwdCurve;
 
     // Loop over quotes and process any commodity option quote that matches a wildcard
-    for (const boost::shared_ptr<MarketDatum>& md : loader.loadQuotes(asof)) {
+    std::ostringstream ss;
+    ss << MarketDatum::InstrumentType::COMMODITY_OPTION << "/" << vssc.quoteType() << "/" << vc.curveID() << "/"
+       << vc.currency() << "/*";
+    Wildcard w(ss.str());
+    for (const auto& md : loader.get(w, asof)) {
 
-        // Go to next quote if the market data point's date does not equal our asof.
-        if (md->asofDate() != asof)
-            continue;
+        QL_REQUIRE(md->asofDate() == asof, "MarketDatum asofDate '" << md->asofDate() << "' <> asof '" << asof << "'");
 
-        // Go to next quote if not a commodity option quote.
         auto q = boost::dynamic_pointer_cast<CommodityOptionQuote>(md);
-        if (!q)
-            continue;
+        QL_REQUIRE(q, "Internal error: could not downcast MarketDatum '" << md->name() << "' to CommodityOptionQuote");
 
-        // Go to next quote if not a commodity name or currency or quote type does not match config.
-        if (vc.curveID() != q->commodityName() || vc.currency() != q->quoteCurrency() ||
-            vssc.quoteType() != q->quoteType())
-            continue;
+        QL_REQUIRE(vc.curveID() == q->commodityName(),
+            "CommodityVolatilityConfig curve ID '" << vc.curveID() <<
+            "' <> CommodityOptionQuote commodity name '" << q->commodityName() << "'");
+        QL_REQUIRE(vc.currency() == q->quoteCurrency(),
+            "CommodityVolatilityConfig currency '" << vc.currency() <<
+            "' <> CommodityOptionQuote currency '" << q->quoteCurrency() << "'");
+        QL_REQUIRE(vssc.quoteType() == q->quoteType(),
+            "VolatilityStrikeSurfaceConfig quote type '" << vssc.quoteType() <<
+            "' <> CommodityOptionQuote quote type '" << q->quoteType() << "'");
 
         // This surface is for absolute strikes only.
         auto strike = boost::dynamic_pointer_cast<AbsoluteStrike>(q->strike());
@@ -523,15 +561,20 @@ void CommodityVolCurve::buildVolatility(const Date& asof, CommodityVolatilityCon
 
         // Store in the data container.
         Date expiry = getExpiry(asof, q->expiry(), vc.futureConventionsId(), vc.optionExpiryRollDays());
-        ExpiryStrike node(expiry, strike->strike());
-        cpData.addDatum(ExpiryStrike(expiry, strike->strike()), q->optionType(), q->quote()->value());
+        if (expiry > asof) {
+            ExpiryStrike node(expiry, strike->strike());
+            cpData.addDatum(ExpiryStrike(expiry, strike->strike()), q->optionType(), q->quote()->value());
 
-        // If we have a price term structure, add forward for expiry if not there already.
-        if (vssc.quoteType() == MarketDatum::QuoteType::RATE_LNVOL && !pts_.empty() && fwdCurve.count(expiry) == 0) {
-            fwdCurve[expiry] = pts_->price(expiry);
+            // If we have a price term structure, add forward for expiry if not there already.
+            if (vssc.quoteType() == MarketDatum::QuoteType::RATE_LNVOL && !pts_.empty() &&
+                fwdCurve.count(expiry) == 0) {
+                fwdCurve[expiry] = pts_->price(expiry);
+            }
+
+            TLOG("Added quote " << q->name() << " to intermediate data.");
+        } else {
+            TLOG("Skipped quote " << q->name() << " to intermediate data, already expired at " << QuantLib::io::iso_date(expiry));
         }
-
-        TLOG("Added quote " << q->name() << " to intermediate data.");
     }
 
     // Set the strike extrapolation which only matters if extrapolation is turned on for the whole surface.
@@ -595,7 +638,7 @@ void CommodityVolCurve::buildVolatility(const Date& asof, CommodityVolatilityCon
 
             expiries.push_back(expiry);
             strikes.push_back(stk);
-            bool useCall = true;
+            bool useCall = cpd.call != Null<Real>();
 
             if ((cpd.call != Null<Real>() && cpd.put != Null<Real>()) && !fwdCurve.empty()) {
                 // We have a call and a put and a forward curve so use it to decide.
@@ -693,18 +736,18 @@ void CommodityVolCurve::buildVolatilityExplicit(const Date& asof, CommodityVolat
 
     // Count the number of quotes added. We check at the end that we have added all configured quotes.
     Size quotesAdded = 0;
-
+    Size skippedExpiredQuotes = 0;
     // Loop over quotes and process commodity option quotes that have been requested
-    for (const boost::shared_ptr<MarketDatum>& md : loader.loadQuotes(asof)) {
+    std::ostringstream ss;
+    ss << MarketDatum::InstrumentType::COMMODITY_OPTION << "/" << vssc.quoteType() << "/" << vc.curveID() << "/"
+       << vc.currency() << "/*";
+    Wildcard w(ss.str());
+    for (const auto& md : loader.get(w, asof)) {
 
-        // Go to next quote if the market data point's date does not equal our asof.
-        if (md->asofDate() != asof)
-            continue;
+        QL_REQUIRE(md->asofDate() == asof, "MarketDatum asofDate '" << md->asofDate() << "' <> asof '" << asof << "'");
 
-        // Go to next quote if not a commodity option quote.
         auto q = boost::dynamic_pointer_cast<CommodityOptionQuote>(md);
-        if (!q)
-            continue;
+        QL_REQUIRE(q, "Internal error: could not downcast MarketDatum '" << md->name() << "' to CommodityOptionQuote");
 
         // This surface is for absolute strikes only.
         auto strike = boost::dynamic_pointer_cast<AbsoluteStrike>(q->strike());
@@ -718,34 +761,42 @@ void CommodityVolCurve::buildVolatilityExplicit(const Date& asof, CommodityVolat
 
         // Process the quote
         Date eDate = getExpiry(asof, q->expiry(), vc.futureConventionsId(), vc.optionExpiryRollDays());
+        
+        if (eDate > asof) {
 
-        // Position of quote in vector of strikes
-        auto strikeIt = find_if(configuredStrikes.begin(), configuredStrikes.end(),
-                                [&strike](Real s) { return close(s, strike->strike()); });
-        Size pos = distance(configuredStrikes.begin(), strikeIt);
-        QL_REQUIRE(
-            pos < configuredStrikes.size(),
-            "The quote '" << q->name()
-                          << "' is in the list of configured quotes but does not match any of the configured strikes");
+            // Position of quote in vector of strikes
+            auto strikeIt = find_if(configuredStrikes.begin(), configuredStrikes.end(),
+                                    [&strike](Real s) { return close(s, strike->strike()); });
+            Size pos = distance(configuredStrikes.begin(), strikeIt);
+            QL_REQUIRE(pos < configuredStrikes.size(),
+                       "The quote '"
+                           << q->name()
+                           << "' is in the list of configured quotes but does not match any of the configured strikes");
 
-        // Add quote to surface
-        if (surfaceData.count(eDate) == 0)
-            surfaceData[eDate] = vector<Real>(configuredStrikes.size(), Null<Real>());
+            // Add quote to surface
+            if (surfaceData.count(eDate) == 0)
+                surfaceData[eDate] = vector<Real>(configuredStrikes.size(), Null<Real>());
 
-        QL_REQUIRE(surfaceData[eDate][pos] == Null<Real>(),
-                   "Quote " << q->name() << " provides a duplicate quote for the date " << io::iso_date(eDate)
-                            << " and the strike " << configuredStrikes[pos]);
-        surfaceData[eDate][pos] = q->quote()->value();
-        quotesAdded++;
+            QL_REQUIRE(surfaceData[eDate][pos] == Null<Real>(),
+                       "Quote " << q->name() << " provides a duplicate quote for the date " << io::iso_date(eDate)
+                                << " and the strike " << configuredStrikes[pos]);
+            surfaceData[eDate][pos] = q->quote()->value();
+            quotesAdded++;
 
-        TLOG("Added quote " << q->name() << ": (" << io::iso_date(eDate) << "," << fixed << setprecision(9)
-                            << configuredStrikes[pos] << "," << q->quote()->value() << ")");
+            TLOG("Added quote " << q->name() << ": (" << io::iso_date(eDate) << "," << fixed << setprecision(9)
+                                << configuredStrikes[pos] << "," << q->quote()->value() << ")");
+        } else {
+            skippedExpiredQuotes++;
+            TLOG("Skipped quote " << q->name() << ": (" << io::iso_date(eDate) << "," << fixed << setprecision(9)
+                                  << q->quote()->value() << ")");
+        }
     }
 
     LOG("CommodityVolCurve: added " << quotesAdded << " quotes in building explicit absolute strike surface.");
 
-    QL_REQUIRE(vc.quotes().size() == quotesAdded,
-               "Found " << quotesAdded << " quotes, but " << vc.quotes().size() << " quotes required by config.");
+    QL_REQUIRE(vc.quotes().size() == quotesAdded + skippedExpiredQuotes,
+               "Found " << quotesAdded << " live quotes and " << skippedExpiredQuotes << "expired quotes, but " << vc.quotes().size()
+                        << " quotes required by config.");
 
     // Set up the BlackVarianceSurface. Note that the rows correspond to strikes and that the columns correspond to
     // the expiry dates in the matrix that is fed to the BlackVarianceSurface ctor.
@@ -870,7 +921,7 @@ void CommodityVolCurve::buildVolatility(const Date& asof, CommodityVolatilityCon
 
     // Count the number of quotes added. We check at the end that we have added all configured quotes.
     Size quotesAdded = 0;
-
+    Size skippedExpiredQuotes = 0;
     // Configured delta and Atm types.
     DeltaVolQuote::DeltaType deltaType = parseDeltaType(vdsc.deltaType());
     DeltaVolQuote::AtmType atmType = parseAtmType(vdsc.atmType());
@@ -890,25 +941,35 @@ void CommodityVolCurve::buildVolatility(const Date& asof, CommodityVolatilityCon
     }
 
     // Read the quotes to fill the expiry dates and vols matrix.
-    for (const boost::shared_ptr<MarketDatum>& md : loader.loadQuotes(asof)) {
+    std::ostringstream ss;
+    ss << MarketDatum::InstrumentType::COMMODITY_OPTION << "/" << vdsc.quoteType() << "/" << vc.curveID() << "/"
+       << vc.currency() << "/*";
+    Wildcard w(ss.str());
+    for (const auto& md : loader.get(w, asof)) {
 
-        // Go to next quote if the market data point's date does not equal our asof.
-        if (md->asofDate() != asof)
-            continue;
+        QL_REQUIRE(md->asofDate() == asof, "MarketDatum asofDate '" << md->asofDate() << "' <> asof '" << asof << "'");
 
-        // Go to next quote if not a commodity option quote.
         auto q = boost::dynamic_pointer_cast<CommodityOptionQuote>(md);
-        if (!q)
-            continue;
+        QL_REQUIRE(q, "Internal error: could not downcast MarketDatum '" << md->name() << "' to CommodityOptionQuote");
 
-        // Go to next quote if not a commodity name or currency do not match config.
-        if (vc.curveID() != q->commodityName() || vc.currency() != q->quoteCurrency())
-            continue;
+        QL_REQUIRE(vc.curveID() == q->commodityName(),
+            "CommodityVolatilityConfig curve ID '" << vc.curveID() <<
+            "' <> CommodityOptionQuote commodity name '" << q->commodityName() << "'");
+        QL_REQUIRE(vc.currency() == q->quoteCurrency(),
+            "CommodityVolatilityConfig currency '" << vc.currency() <<
+            "' <> CommodityOptionQuote currency '" << q->quoteCurrency() << "'");
 
         // Iterator to one of the configured strikes.
         vector<boost::shared_ptr<BaseStrike>>::iterator strikeIt;
 
-        if (!expWc) {
+        if (expWc) {
+
+            // Check if quote's strike is in the configured strikes and continue if it is not.
+            strikeIt = find_if(strikes.begin(), strikes.end(),
+                               [&q](boost::shared_ptr<BaseStrike> s) { return *s == *q->strike(); });
+            if (strikeIt == strikes.end())
+                continue;
+        } else {
 
             // If we have explicitly configured expiries and the quote is not in the configured quotes continue.
             auto it = find(vc.quotes().begin(), vc.quotes().end(), q->name());
@@ -923,14 +984,6 @@ void CommodityVolCurve::buildVolatility(const Date& asof, CommodityVolatilityCon
                        "The quote '"
                            << q->name()
                            << "' is in the list of configured quotes but does not match any of the configured strikes");
-
-        } else {
-
-            // Check if quote's strike is in the configured strikes and continue if it is not.
-            strikeIt = find_if(strikes.begin(), strikes.end(),
-                               [&q](boost::shared_ptr<BaseStrike> s) { return *s == *q->strike(); });
-            if (strikeIt == strikes.end())
-                continue;
         }
 
         // Position of quote in vector of strikes
@@ -938,30 +991,31 @@ void CommodityVolCurve::buildVolatility(const Date& asof, CommodityVolatilityCon
 
         // Process the quote
         Date eDate = getExpiry(asof, q->expiry(), vc.futureConventionsId(), vc.optionExpiryRollDays());
+        if (eDate > asof) {
 
-        // Add quote to surface
-        if (surfaceData.count(eDate) == 0)
-            surfaceData[eDate] = vector<Real>(numStrikes, Null<Real>());
+            // Add quote to surface
+            if (surfaceData.count(eDate) == 0)
+                surfaceData[eDate] = vector<Real>(numStrikes, Null<Real>());
 
-        QL_REQUIRE(surfaceData[eDate][pos] == Null<Real>(),
-                   "Quote " << q->name() << " provides a duplicate quote for the date " << io::iso_date(eDate)
-                            << " and strike " << *q->strike());
-        surfaceData[eDate][pos] = q->quote()->value();
-        quotesAdded++;
+            QL_REQUIRE(surfaceData[eDate][pos] == Null<Real>(),
+                       "Quote " << q->name() << " provides a duplicate quote for the date " << io::iso_date(eDate)
+                                << " and strike " << *q->strike());
+            surfaceData[eDate][pos] = q->quote()->value();
+            quotesAdded++;
 
-        TLOG("Added quote " << q->name() << ": (" << io::iso_date(eDate) << "," << *q->strike() << "," << fixed
-                            << setprecision(9) << "," << q->quote()->value() << ")");
+            TLOG("Added quote " << q->name() << ": (" << io::iso_date(eDate) << "," << *q->strike() << "," << fixed
+                                << setprecision(9) << "," << q->quote()->value() << ")");
+        } else {
+            skippedExpiredQuotes++;
+            TLOG("Skiped quote, already expired: " << q->name() << ": (" << io::iso_date(eDate) << "," << *q->strike() << "," << fixed
+                                << setprecision(9) << "," << q->quote()->value() << ")");
+        }
     }
 
     LOG("CommodityVolCurve: added " << quotesAdded << " quotes in building delta strike surface.");
 
     // Check the data gathered.
-    if (!expWc) {
-        // If expiries were configured explicitly, the number of configured quotes should equal the
-        // number of quotes added.
-        QL_REQUIRE(vc.quotes().size() == quotesAdded,
-                   "Found " << quotesAdded << " quotes, but " << vc.quotes().size() << " quotes required by config.");
-    } else {
+    if (expWc) {
         // If the expiries were configured via a wildcard, check that no surfaceData element has a Null<Real>().
         for (const auto& kv : surfaceData) {
             for (Size j = 0; j < numStrikes; j++) {
@@ -970,6 +1024,11 @@ void CommodityVolCurve::buildVolatility(const Date& asof, CommodityVolatilityCon
                                                              << " not found. Cannot proceed with a sparse matrix.");
             }
         }
+    } else {
+        // If expiries were configured explicitly, the number of configured quotes should equal the
+        // number of quotes added.
+        QL_REQUIRE(vc.quotes().size() == quotesAdded + skippedExpiredQuotes,
+                   "Found " << quotesAdded << " quotes and "<< skippedExpiredQuotes <<" expired quotes , but " << vc.quotes().size() << " quotes required by config.");
     }
 
     // Populate the matrix of volatilities and the expiry dates.
@@ -1025,6 +1084,8 @@ void CommodityVolCurve::buildVolatility(const Date& asof, CommodityVolatilityCon
         im = InterpolatedSmileSection::InterpolationMethod::NaturalCubic;
     } else if (vdsc.strikeInterpolation() == "FinancialCubic") {
         im = InterpolatedSmileSection::InterpolationMethod::FinancialCubic;
+    } else if (vdsc.strikeInterpolation() == "CubicSpline") {
+        im = InterpolatedSmileSection::InterpolationMethod::CubicSpline;
     } else {
         im = InterpolatedSmileSection::InterpolationMethod::Linear;
         DLOG("BlackVolatilitySurfaceDelta does not support strike interpolation '" << vdsc.strikeInterpolation()
@@ -1084,6 +1145,7 @@ void CommodityVolCurve::buildVolatility(const Date& asof, CommodityVolatilityCon
 
     // Count the number of quotes added. We check at the end that we have added all configured quotes.
     Size quotesAdded = 0;
+    Size skippedExpiredQuotes = 0;
 
     // Configured moneyness type.
     MoneynessStrike::Type moneynessType = parseMoneynessType(vmsc.moneynessType());
@@ -1095,25 +1157,35 @@ void CommodityVolCurve::buildVolatility(const Date& asof, CommodityVolatilityCon
     }
 
     // Read the quotes to fill the expiry dates and vols matrix.
-    for (const boost::shared_ptr<MarketDatum>& md : loader.loadQuotes(asof)) {
+    std::ostringstream ss;
+    ss << MarketDatum::InstrumentType::COMMODITY_OPTION << "/" << vmsc.quoteType() << "/" << vc.curveID() << "/"
+       << vc.currency() << "/*";
+    Wildcard w(ss.str());
+    for (const auto& md : loader.get(w, asof)) {
 
-        // Go to next quote if the market data point's date does not equal our asof.
-        if (md->asofDate() != asof)
-            continue;
+        QL_REQUIRE(md->asofDate() == asof, "MarketDatum asofDate '" << md->asofDate() << "' <> asof '" << asof << "'");
 
-        // Go to next quote if not a commodity option quote.
         auto q = boost::dynamic_pointer_cast<CommodityOptionQuote>(md);
-        if (!q)
-            continue;
+        QL_REQUIRE(q, "Internal error: could not downcast MarketDatum '" << md->name() << "' to CommodityOptionQuote");
 
-        // Go to next quote if not a commodity name or currency do not match config.
-        if (vc.curveID() != q->commodityName() || vc.currency() != q->quoteCurrency())
-            continue;
+        QL_REQUIRE(vc.curveID() == q->commodityName(),
+            "CommodityVolatilityConfig curve ID '" << vc.curveID() <<
+            "' <> CommodityOptionQuote commodity name '" << q->commodityName() << "'");
+        QL_REQUIRE(vc.currency() == q->quoteCurrency(),
+            "CommodityVolatilityConfig currency '" << vc.currency() <<
+            "' <> CommodityOptionQuote currency '" << q->quoteCurrency() << "'");
 
         // Iterator to one of the configured strikes.
         vector<boost::shared_ptr<BaseStrike>>::iterator strikeIt;
 
-        if (!expWc) {
+        if (expWc) {
+
+            // Check if quote's strike is in the configured strikes and continue if it is not.
+            strikeIt = find_if(strikes.begin(), strikes.end(),
+                               [&q](boost::shared_ptr<BaseStrike> s) { return *s == *q->strike(); });
+            if (strikeIt == strikes.end())
+                continue;
+        } else {
 
             // If we have explicitly configured expiries and the quote is not in the configured quotes continue.
             auto it = find(vc.quotes().begin(), vc.quotes().end(), q->name());
@@ -1128,14 +1200,6 @@ void CommodityVolCurve::buildVolatility(const Date& asof, CommodityVolatilityCon
                        "The quote '"
                            << q->name()
                            << "' is in the list of configured quotes but does not match any of the configured strikes");
-
-        } else {
-
-            // Check if quote's strike is in the configured strikes and continue if it is not.
-            strikeIt = find_if(strikes.begin(), strikes.end(),
-                               [&q](boost::shared_ptr<BaseStrike> s) { return *s == *q->strike(); });
-            if (strikeIt == strikes.end())
-                continue;
         }
 
         // Position of quote in vector of strikes
@@ -1143,30 +1207,31 @@ void CommodityVolCurve::buildVolatility(const Date& asof, CommodityVolatilityCon
 
         // Process the quote
         Date eDate = getExpiry(asof, q->expiry(), vc.futureConventionsId(), vc.optionExpiryRollDays());
+        if (eDate > asof) {
+            // Add quote to surface
+            if (surfaceData.count(eDate) == 0)
+                surfaceData[eDate] = vector<Real>(moneynessLevels.size(), Null<Real>());
 
-        // Add quote to surface
-        if (surfaceData.count(eDate) == 0)
-            surfaceData[eDate] = vector<Real>(moneynessLevels.size(), Null<Real>());
+            QL_REQUIRE(surfaceData[eDate][pos] == Null<Real>(),
+                       "Quote " << q->name() << " provides a duplicate quote for the date " << io::iso_date(eDate)
+                                << " and strike " << *q->strike());
+            surfaceData[eDate][pos] = q->quote()->value();
+            quotesAdded++;
 
-        QL_REQUIRE(surfaceData[eDate][pos] == Null<Real>(),
-                   "Quote " << q->name() << " provides a duplicate quote for the date " << io::iso_date(eDate)
-                            << " and strike " << *q->strike());
-        surfaceData[eDate][pos] = q->quote()->value();
-        quotesAdded++;
-
-        TLOG("Added quote " << q->name() << ": (" << io::iso_date(eDate) << "," << *q->strike() << "," << fixed
-                            << setprecision(9) << "," << q->quote()->value() << ")");
+            TLOG("Added quote " << q->name() << ": (" << io::iso_date(eDate) << "," << *q->strike() << "," << fixed
+                                << setprecision(9) << "," << q->quote()->value() << ")");
+        }
+        else {
+            skippedExpiredQuotes++;
+            TLOG("Skip quote, already expired: " << q->name() << ": (" << io::iso_date(eDate) << "," << *q->strike() << "," << fixed
+                                << setprecision(9) << "," << q->quote()->value() << ")");
+        }
     }
 
     LOG("CommodityVolCurve: added " << quotesAdded << " quotes in building moneyness strike surface.");
 
     // Check the data gathered.
-    if (!expWc) {
-        // If expiries were configured explicitly, the number of configured quotes should equal the
-        // number of quotes added.
-        QL_REQUIRE(vc.quotes().size() == quotesAdded,
-                   "Found " << quotesAdded << " quotes, but " << vc.quotes().size() << " quotes required by config.");
-    } else {
+    if (expWc) {
         // If the expiries were configured via a wildcard, check that no surfaceData element has a Null<Real>().
         for (const auto& kv : surfaceData) {
             for (Size j = 0; j < moneynessLevels.size(); j++) {
@@ -1175,6 +1240,12 @@ void CommodityVolCurve::buildVolatility(const Date& asof, CommodityVolatilityCon
                                                              << " not found. Cannot proceed with a sparse matrix.");
             }
         }
+    } else {
+        // If expiries were configured explicitly, the number of configured quotes should equal the
+        // number of quotes added.
+        QL_REQUIRE(vc.quotes().size() == quotesAdded + skippedExpiredQuotes,
+                   "Found " << quotesAdded << " quotes and " << skippedExpiredQuotes << " expired quotes, but " << vc.quotes().size()
+                            << " quotes required by config.");
     }
 
     // Populate the volatility quotes and the expiry times.
@@ -1269,7 +1340,7 @@ void CommodityVolCurve::buildVolatility(const Date& asof, CommodityVolatilityCon
 void CommodityVolCurve::buildVolatility(const Date& asof, CommodityVolatilityConfig& vc,
                                         const VolatilityApoFutureSurfaceConfig& vapo,
                                         const Handle<BlackVolTermStructure>& baseVts,
-                                        const Handle<PriceTermStructure>& basePts, const Conventions& conventions) {
+                                        const Handle<PriceTermStructure>& basePts) {
 
     LOG("CommodityVolCurve: start building the APO surface");
 
@@ -1277,12 +1348,13 @@ void CommodityVolCurve::buildVolatility(const Date& asof, CommodityVolatilityCon
         " RATE_LNVOL is currently supported for an APO surface.");
 
     // Get the base conventions and create the associated expiry calculator.
+    boost::shared_ptr<Conventions> conventions = InstrumentConventions::instance().conventions();
     QL_REQUIRE(!vapo.baseConventionsId().empty(),
                "The APO FutureConventions must be populated to build a future APO surface");
-    QL_REQUIRE(conventions.has(vapo.baseConventionsId()),
+    QL_REQUIRE(conventions->has(vapo.baseConventionsId()),
                "Conventions, " << vapo.baseConventionsId() << " for config " << vc.curveID() << " not found.");
     auto baseConvention =
-        boost::dynamic_pointer_cast<CommodityFutureConvention>(conventions.get(vapo.baseConventionsId()));
+        boost::dynamic_pointer_cast<CommodityFutureConvention>(conventions->get(vapo.baseConventionsId()));
     QL_REQUIRE(baseConvention,
                "Convention with ID '" << vapo.baseConventionsId() << "' should be of type CommodityFutureConvention");
 
@@ -1300,7 +1372,7 @@ void CommodityVolCurve::buildVolatility(const Date& asof, CommodityVolatilityCon
     Real beta = vapo.beta();
 
     // Construct the commodity index.
-    auto index = parseCommodityIndex(baseConvention->id(), conventions, false, basePts);
+    auto index = parseCommodityIndex(baseConvention->id(), false, basePts);
 
     // Set the strike extrapolation which only matters if extrapolation is turned on for the whole surface.
     // BlackVarianceSurfaceMoneyness, which underlies the ApoFutureSurface, has time extrapolation hard-coded to
@@ -1347,6 +1419,90 @@ void CommodityVolCurve::buildVolatility(const Date& asof, CommodityVolatilityCon
     volatility_->enableExtrapolation(vapo.extrapolation());
 
     LOG("CommodityVolCurve: finished building the APO surface");
+}
+
+void CommodityVolCurve::buildVolatility(
+    const QuantLib::Date& asof, const CommodityVolatilityCurveSpec& spec, const CurveConfigurations& curveConfigs,
+    const ProxyVolatilityConfig& pvc, const map<string, boost::shared_ptr<CommodityCurve>>& comCurves,
+    const map<string, boost::shared_ptr<CommodityVolCurve>>& volCurves,
+    const map<string, boost::shared_ptr<FXVolCurve>>& fxVolCurves,
+    const map<string, boost::shared_ptr<CorrelationCurve>>& requiredCorrelationCurves, const Market* fxIndices) {
+
+    DLOG("Build Proxy Vol surface");
+    // get all the configurations and the curve needed for proxying
+    auto config = *curveConfigs.commodityVolatilityConfig(spec.curveConfigID());
+
+    auto proxy = pvc.proxyVolatilityCurve();
+    auto comConfig = *curveConfigs.commodityCurveConfig(spec.curveConfigID());
+    auto proxyConfig = *curveConfigs.commodityCurveConfig(proxy);
+    auto proxyVolConfig = *curveConfigs.commodityVolatilityConfig(proxy);
+
+    // create dummy specs to look up the required curves
+    CommodityCurveSpec comSpec(comConfig.currency(), spec.curveConfigID());
+    CommodityCurveSpec proxySpec(proxyConfig.currency(), proxy);
+    CommodityVolatilityCurveSpec proxyVolSpec(proxyVolConfig.currency(), proxy);
+
+    // Get all necessary curves
+    auto curve = comCurves.find(comSpec.name());
+    QL_REQUIRE(curve != comCurves.end(),
+               "CommodityVolCurve: Failed to find commodity curve, when building commodity vol curve " << spec.name());
+    auto proxyCurve = comCurves.find(proxySpec.name());
+    QL_REQUIRE(proxyCurve != comCurves.end(), "currency: Failed to find commodity curve for proxy "
+                                                 << proxySpec.name() << ", when building commodity vol curve "
+                                                 << spec.name());
+    auto proxyVolCurve = volCurves.find(proxyVolSpec.name());
+    QL_REQUIRE(proxyVolCurve != volCurves.end(), "CommodityVolCurve: Failed to find commodity vol curve for proxy "
+                                                       << proxyVolSpec.name() << ", when building currency vol curve "
+                                                       << spec.name());
+
+    // check the currency against the proxy surface currrency
+
+    boost::shared_ptr<BlackVolTermStructure> fxSurface;
+    boost::shared_ptr<FxIndex> fxIndex;
+    boost::shared_ptr<QuantExt::CorrelationTermStructure> correlation;
+    if (config.currency() != proxyVolConfig.currency() && fxIndices != nullptr) {
+        QL_REQUIRE(!pvc.fxVolatilityCurve().empty(),
+                   "CommodityVolCurve: FXVolatilityCurve must be provided for commodity vol config "
+                       << spec.curveConfigID() << " as proxy currencies if different from commodity currency.");
+        QL_REQUIRE(!pvc.correlationCurve().empty(),
+                   "CommodityVolCurve: CorrelationCurve must be provided for commodity vol config "
+                       << spec.curveConfigID() << " as proxy currencies if different from commodity currency.");
+
+        // get the fx vol surface
+        QL_REQUIRE(pvc.fxVolatilityCurve().size() == 6, "CommodityVolCurve: FXVolatilityCurve provided "
+                                                             << pvc.fxVolatilityCurve() << " for commodity vol config "
+                                                             << spec.curveConfigID()
+                                                             << " must be of length 6, and of form CC1CCY2 e.g EURUSD");
+        string proxyVolForCcy = pvc.fxVolatilityCurve().substr(0, 3);
+        string proxyVolDomCcy = pvc.fxVolatilityCurve().substr(3, 3);
+        FXVolatilityCurveSpec fxSpec(proxyVolForCcy, proxyVolDomCcy, pvc.fxVolatilityCurve());
+        auto volIt = fxVolCurves.find(fxSpec.name());
+        if (volIt == fxVolCurves.end())
+            QL_FAIL("CommodityVolCurve: cannot find required Fx volatility surface "
+                    << fxSpec.name() << " to build proxy vol surface for " << comSpec.name());
+        fxSurface = volIt->second->volTermStructure();
+
+        // check if the fx vol surface needs to be inverted
+        if (proxyVolForCcy != proxyVolConfig.currency()) {
+            Handle<BlackVolTermStructure> hFx(fxSurface);
+            fxSurface = boost::make_shared<QuantExt::BlackInvertedVolTermStructure>(hFx);
+            fxSurface->enableExtrapolation();
+        }
+
+        fxIndex = fxIndices->fxIndex(proxyVolConfig.currency() + config.currency()).currentLink();
+        FXSpotSpec spotSpec(proxyVolConfig.currency(), config.currency());
+        
+        CorrelationCurveSpec corrSpec(pvc.correlationCurve());
+        auto corrIt = requiredCorrelationCurves.find(corrSpec.name());
+        if (corrIt == requiredCorrelationCurves.end())
+            QL_FAIL("CommodityVolCurve: cannot find required correlation curve "
+                    << pvc.correlationCurve() << " to build proxy vol surface for " << comSpec.name());
+        correlation = corrIt->second->corrTermStructure();
+    }
+
+    volatility_ = boost::make_shared<BlackVolatilitySurfaceProxy>(
+        proxyVolCurve->second->volatility(), curve->second->commodityIndex(), proxyCurve->second->commodityIndex(),
+        fxSurface, fxIndex, correlation);
 }
 
 Handle<PriceTermStructure> CommodityVolCurve::correctFuturePriceCurve(const Date& asof, const string& contractName,

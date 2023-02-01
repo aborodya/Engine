@@ -41,6 +41,7 @@
 #include <orea/scenario/simplescenariofactory.hpp>
 #include <ored/model/crossassetmodelbuilder.hpp>
 #include <ored/model/lgmdata.hpp>
+#include <ored/model/irlgmdata.hpp>
 #include <ored/portfolio/builders/swap.hpp>
 #include <ored/portfolio/portfolio.hpp>
 #include <ored/portfolio/swap.hpp>
@@ -66,7 +67,7 @@ using boost::timer::default_places;
 
 using testsuite::TestMarket;
 
-boost::shared_ptr<data::Conventions> conventions() {
+void setConventions() {
     boost::shared_ptr<data::Conventions> conventions(new data::Conventions());
 
     boost::shared_ptr<data::Convention> swapIndexConv(
@@ -77,7 +78,7 @@ boost::shared_ptr<data::Conventions> conventions() {
         new data::IRSwapConvention("EUR-6M-SWAP-CONVENTIONS", "TARGET", "Annual", "MF", "30/360", "EUR-EURIBOR-6M"));
     conventions->add(swapConv);
 
-    return conventions;
+    InstrumentConventions::instance().setConventions(conventions);
 }
 
 boost::shared_ptr<Portfolio> buildPortfolio(boost::shared_ptr<EngineFactory>& factory) {
@@ -181,11 +182,11 @@ void simulation(string dateGridString, bool checkFixings) {
 
     parameters->setSwapVolTerms("", {6 * Months, 1 * Years});
     parameters->setSwapVolExpiries("", {1 * Years, 2 * Years});
-    parameters->setSwapVolCcys(ccys);
+    parameters->setSwapVolKeys(ccys);
     parameters->swapVolDecayMode() = "ForwardVariance";
     parameters->setSimulateSwapVols(false);
 
-    parameters->setFxVolExpiries(
+    parameters->setFxVolExpiries("",
         vector<Period>{1 * Months, 3 * Months, 6 * Months, 2 * Years, 3 * Years, 4 * Years, 5 * Years});
     parameters->setFxVolDecayMode(string("ConstantVariance"));
     parameters->setSimulateFXVols(false);
@@ -210,7 +211,7 @@ void simulation(string dateGridString, bool checkFixings) {
     vector<Time> hTimes = {};
     vector<Time> aTimes = {};
 
-    std::vector<boost::shared_ptr<IrLgmData>> irConfigs;
+    std::vector<boost::shared_ptr<IrModelData>> irConfigs;
 
     vector<Real> hValues = {0.02};
     vector<Real> aValues = {0.008};
@@ -265,8 +266,8 @@ void simulation(string dateGridString, bool checkFixings) {
                                                      sigmaTimes, sigmaValues, optionExpiries, optionStrikes));
 
     map<CorrelationKey, Handle<Quote>> corr;
-    CorrelationFactor f_1{ CrossAssetModelTypes::IR, "EUR", 0 };
-    CorrelationFactor f_2{ CrossAssetModelTypes::IR, "USD", 0 };
+    CorrelationFactor f_1{CrossAssetModel::AssetType::IR, "EUR", 0};
+    CorrelationFactor f_2{CrossAssetModel::AssetType::IR, "USD", 0};
     corr[make_pair(f_1, f_2)] = Handle<Quote>(boost::make_shared<SimpleQuote>(0.6));
 
     boost::shared_ptr<CrossAssetModelData> config(boost::make_shared<CrossAssetModelData>(irConfigs, fxConfigs, corr));
@@ -284,9 +285,8 @@ void simulation(string dateGridString, bool checkFixings) {
         boost::make_shared<MultiPathGeneratorMersenneTwister>(model->stateProcess(), dg->timeGrid(), seed, antithetic);
 
     // build scenario sim market
-    Conventions conv = *conventions();
     boost::shared_ptr<analytics::ScenarioSimMarket> simMarket =
-        boost::make_shared<analytics::ScenarioSimMarket>(initMarket, parameters, conv);
+        boost::make_shared<analytics::ScenarioSimMarket>(initMarket, parameters);
 
     // build scenario generator
     boost::shared_ptr<ScenarioFactory> scenarioFactory(new SimpleScenarioFactory);
@@ -294,7 +294,7 @@ void simulation(string dateGridString, bool checkFixings) {
         model, pathGen, scenarioFactory, parameters, today, dg, initMarket);
     simMarket->scenarioGenerator() = scenarioGenerator;
 
-    // Build Porfolio
+    // Build Portfolio
     boost::shared_ptr<EngineData> data = boost::make_shared<EngineData>();
     data->model("Swap") = "DiscountedCashflows";
     data->engine("Swap") = "DiscountingSwapEngine";
@@ -358,6 +358,7 @@ BOOST_AUTO_TEST_SUITE(ObservationModeTest)
 
 BOOST_AUTO_TEST_CASE(testDisableShort) {
     ObservationMode::instance().setMode(ObservationMode::Mode::Disable);
+    setConventions();
 
     BOOST_TEST_MESSAGE("Testing Observation Mode Disable, Short Grid, No Fixing Checks");
     simulation("10,1Y", false);
@@ -368,6 +369,7 @@ BOOST_AUTO_TEST_CASE(testDisableShort) {
 
 BOOST_AUTO_TEST_CASE(testDisableLong) {
     ObservationMode::instance().setMode(ObservationMode::Mode::Disable);
+    setConventions();
 
     BOOST_TEST_MESSAGE("Testing Observation Mode Disable, Long Grid, No Fixing Checks");
     simulation("11,1Y", false);
@@ -378,6 +380,7 @@ BOOST_AUTO_TEST_CASE(testDisableLong) {
 
 BOOST_AUTO_TEST_CASE(testNone) {
     ObservationMode::instance().setMode(ObservationMode::Mode::None);
+    setConventions();
 
     BOOST_TEST_MESSAGE("Testing Observation Mode None, Short Grid, No Fixing Checks");
     simulation("10,1Y", false);
@@ -394,6 +397,7 @@ BOOST_AUTO_TEST_CASE(testNone) {
 
 BOOST_AUTO_TEST_CASE(testUnregister) {
     ObservationMode::instance().setMode(ObservationMode::Mode::Unregister);
+    setConventions();
 
     BOOST_TEST_MESSAGE("Testing Observation Mode Unregister, Long Grid, No Fixing Checks");
     simulation("11,1Y", false);
@@ -410,6 +414,7 @@ BOOST_AUTO_TEST_CASE(testUnregister) {
 
 BOOST_AUTO_TEST_CASE(testDefer) {
     ObservationMode::instance().setMode(ObservationMode::Mode::Defer);
+    setConventions();
 
     BOOST_TEST_MESSAGE("Testing Observation Mode Defer, Long Grid, No Fixing Checks");
     simulation("11,1Y", false);

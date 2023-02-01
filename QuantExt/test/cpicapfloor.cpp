@@ -76,7 +76,7 @@ std::vector<boost::shared_ptr<BootstrapHelper<T> > > makeHelpers(Datum iiData[],
         Date maturity = iiData[i].date;
         Handle<Quote> quote(boost::shared_ptr<Quote>(new SimpleQuote(iiData[i].rate / 100.0)));
         boost::shared_ptr<BootstrapHelper<T> > anInstrument(
-            new U(quote, observationLag, maturity, calendar, bdc, dc, ii, yts));
+            new U(quote, observationLag, maturity, calendar, bdc, dc, ii, CPI::AsIndex, yts));
         instruments.push_back(anInstrument);
     }
 
@@ -142,8 +142,8 @@ struct CommonVars {
         fixingDays = 0;
         settlement = calendar.advance(today, settlementDays, Days);
         startDate = settlement;
-        dcZCIIS = ActualActual();
-        dcNominal = ActualActual();
+        dcZCIIS = ActualActual(ActualActual::ISDA);
+        dcNominal = ActualActual(ActualActual::ISDA);
 
         // uk rpi index
         //      fixing data
@@ -244,7 +244,7 @@ struct CommonVars {
         baseZeroRate = zciisData[0].rate / 100.0;
         boost::shared_ptr<PiecewiseZeroInflationCurve<Linear>> pCPIts(
             new PiecewiseZeroInflationCurve<Linear>(evaluationDate, calendar, dcZCIIS, observationLag, ii->frequency(),
-                                                    ii->interpolated(), baseZeroRate, helpers));
+                                                    baseZeroRate, helpers));
         pCPIts->recalculate();
         cpiUK.linkTo(pCPIts);
         hii.linkTo(ii);
@@ -293,7 +293,7 @@ struct CommonVars {
         Real nominal = 1.0;
         boost::shared_ptr<InterpolatedCPICapFloorTermPriceSurface<Bilinear> > intplCpiCFsurfUK(
             new InterpolatedCPICapFloorTermPriceSurface<Bilinear>(
-                nominal, baseZeroRate, observationLag, calendar, convention, dcZCIIS, hii, nominalUK, cStrikesUK,
+                nominal, baseZeroRate, observationLag, calendar, convention, dcZCIIS, ii, CPI::AsIndex, nominalUK, cStrikesUK,
                 fStrikesUK, cfMaturitiesUK, *(cPriceUK), *(fPriceUK)));
 
         cpiCFsurfUK = intplCpiCFsurfUK;
@@ -305,15 +305,14 @@ public:
     FlatZeroInflationTermStructure(const Date& referenceDate, const Calendar& calendar, const DayCounter& dayCounter,
                                    Rate zeroRate, const Period& observationLag, Frequency frequency, bool indexIsInterp,
                                    const Handle<YieldTermStructure>& ts)
-        : ZeroInflationTermStructure(referenceDate, calendar, dayCounter, zeroRate, observationLag, frequency,
-                                     indexIsInterp),
-          zeroRate_(zeroRate) {}
+        : ZeroInflationTermStructure(referenceDate, calendar, dayCounter, zeroRate, observationLag, frequency),
+          zeroRate_(zeroRate), indexIsInterp_(indexIsInterp) {}
 
-    Date maxDate() const { return Date::maxDate(); }
+    Date maxDate() const override { return Date::maxDate(); }
     // Base date consistent with observation lag, interpolation and frequency
-    Date baseDate() const {
+    Date baseDate() const override {
         Date base = referenceDate() - observationLag();
-        if (!indexIsInterpolated()) {
+        if (!indexIsInterp_) {
             std::pair<Date, Date> ips = inflationPeriod(base, frequency());
             base = ips.first;
         }
@@ -321,8 +320,9 @@ public:
     }
 
 private:
-    Rate zeroRateImpl(Time t) const { return zeroRate_; }
+    Rate zeroRateImpl(Time t) const override { return zeroRate_; }
     Real zeroRate_;
+    bool indexIsInterp_;
 };
 
 } // namespace
@@ -371,7 +371,7 @@ BOOST_AUTO_TEST_CASE(testVolatilitySurface) {
             Date maturityDate = startDate + maturity;
 
             CPICapFloor aCap(Option::Call, nominal, startDate, baseCPI, maturityDate, fixCalendar, fixConvention,
-                             payCalendar, payConvention, strike, common.hii, common.observationLag,
+                             payCalendar, payConvention, strike, common.hii.currentLink(), common.observationLag,
                              observationInterpolation);
 
             aCap.setPricingEngine(engine);
@@ -403,7 +403,7 @@ BOOST_AUTO_TEST_CASE(testVolatilitySurface) {
             Date maturityDate = startDate + maturity;
 
             CPICapFloor aFloor(Option::Put, nominal, startDate, baseCPI, maturityDate, fixCalendar, fixConvention,
-                               payCalendar, payConvention, strike, common.hii, common.observationLag,
+                               payCalendar, payConvention, strike, common.hii.currentLink(), common.observationLag,
                                observationInterpolation);
 
             aFloor.setPricingEngine(engine);
@@ -478,12 +478,12 @@ BOOST_AUTO_TEST_CASE(testPutCallParity) {
             Date maturityDate = startDate + mat[j];
 
             CPICapFloor aCap(Option::Call, nominal, startDate, baseCPI, maturityDate, fixCalendar, fixConvention,
-                             payCalendar, payConvention, strike[i], common.hii, common.observationLag,
+                             payCalendar, payConvention, strike[i], common.hii.currentLink(), common.observationLag,
                              observationInterpolation);
             aCap.setPricingEngine(blackEngine);
 
             CPICapFloor aFloor(Option::Put, nominal, startDate, baseCPI, maturityDate, fixCalendar, fixConvention,
-                               payCalendar, payConvention, strike[i], common.hii, common.observationLag,
+                               payCalendar, payConvention, strike[i], common.hii.currentLink(), common.observationLag,
                                observationInterpolation);
             aFloor.setPricingEngine(blackEngine);
 
@@ -568,7 +568,7 @@ BOOST_AUTO_TEST_CASE(testSimpleCapFloor) {
     Real inflationRate = 0.02;
     Real inflationBlackVol = 0.05;
     BusinessDayConvention bdc = Unadjusted;
-    DayCounter dc = ActualActual();
+    DayCounter dc = ActualActual(ActualActual::ISDA);
     Period observationLag = 3 * Months; // EUHICPXT Caps/Swaps
     Handle<YieldTermStructure> discountCurve(boost::make_shared<FlatForward>(common.evaluationDate, rate, dc));
     RelinkableHandle<ZeroInflationTermStructure> inflationCurve;
@@ -586,7 +586,7 @@ BOOST_AUTO_TEST_CASE(testSimpleCapFloor) {
     // the instrument's lag.
     Handle<CPIVolatilitySurface> inflationVol(boost::make_shared<ConstantCPIVolatility>(
         inflationBlackVol, 0, inflationCurve->calendar(), bdc, dc, inflationCurve->observationLag(),
-        inflationCurve->frequency(), inflationCurve->indexIsInterpolated()));
+        inflationCurve->frequency(), index->interpolated()));
 
     boost::shared_ptr<PricingEngine> engine =
         boost::make_shared<QuantExt::CPIBlackCapFloorEngine>(discountCurve, inflationVol);
@@ -600,18 +600,18 @@ BOOST_AUTO_TEST_CASE(testSimpleCapFloor) {
 
     Rate capStrike = 0.03;
     CPICapFloor atmCap(Option::Call, nominal, start, baseCPI, end, fixCalendar, bdc, payCalendar, bdc, inflationRate,
-                       index, observationLag);
+                       index.currentLink(), observationLag);
     atmCap.setPricingEngine(engine);
-    CPICapFloor cap(Option::Call, nominal, start, baseCPI, end, fixCalendar, bdc, payCalendar, bdc, capStrike, index,
-                    observationLag);
+    CPICapFloor cap(Option::Call, nominal, start, baseCPI, end, fixCalendar, bdc, payCalendar, bdc, capStrike,
+                    index.currentLink(), observationLag);
     cap.setPricingEngine(engine);
 
     Rate floorStrike = 0.01;
     CPICapFloor atmFloor(Option::Put, nominal, start, baseCPI, end, fixCalendar, bdc, fixCalendar, bdc, inflationRate,
-                         index, observationLag);
+                         index.currentLink(), observationLag);
     atmFloor.setPricingEngine(engine);
-    CPICapFloor floor(Option::Put, nominal, start, baseCPI, end, fixCalendar, bdc, fixCalendar, bdc, floorStrike, index,
-                      observationLag);
+    CPICapFloor floor(Option::Put, nominal, start, baseCPI, end, fixCalendar, bdc, fixCalendar, bdc, floorStrike,
+                      index.currentLink(), observationLag);
     floor.setPricingEngine(engine);
 
     DayCounter cpiDayCounter = QuantExt::YearCounter();

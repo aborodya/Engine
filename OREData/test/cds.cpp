@@ -55,7 +55,7 @@ namespace {
 
 class TestMarket : public MarketImpl {
 public:
-    TestMarket(Real hazardRate, Real recoveryRate, Real liborRate) {
+    TestMarket(Real hazardRate, Real recoveryRate, Real liborRate) : MarketImpl(false) {
         asof_ = Date(3, Feb, 2016);
         // build discount
         yieldCurves_[make_tuple(Market::defaultConfiguration, YieldCurveType::Discount, "EUR")] =
@@ -71,13 +71,15 @@ public:
 
 private:
     Handle<YieldTermStructure> flatRateYts(Real forward) {
-        boost::shared_ptr<YieldTermStructure> yts(new FlatForward(0, NullCalendar(), forward, ActualActual()));
+        boost::shared_ptr<YieldTermStructure> yts(new FlatForward(0, NullCalendar(), forward, ActualActual(ActualActual::ISDA)));
         yts->enableExtrapolation();
         return Handle<YieldTermStructure>(yts);
     }
-    Handle<DefaultProbabilityTermStructure> flatRateDcs(Real forward) {
-        boost::shared_ptr<DefaultProbabilityTermStructure> dcs(new FlatHazardRate(asof_, forward, SimpleDayCounter()));
-        return Handle<DefaultProbabilityTermStructure>(dcs);
+    Handle<QuantExt::CreditCurve> flatRateDcs(Volatility forward) {
+        boost::shared_ptr<DefaultProbabilityTermStructure> dcs(
+            new FlatHazardRate(asof_, forward, ActualActual(ActualActual::ISDA)));
+        return Handle<QuantExt::CreditCurve>(
+            boost::make_shared<QuantExt::CreditCurve>(Handle<DefaultProbabilityTermStructure>(dcs)));
     }
 };
 
@@ -206,6 +208,7 @@ boost::shared_ptr<TodaysMarket> createTodaysMarket(const Date& asof, const strin
 
     auto conventions = boost::make_shared<Conventions>();
     conventions->fromFile(TEST_INPUT_FILE(string(inputDir + "/" + tmf.conventions)));
+    InstrumentConventions::instance().setConventions(conventions);
 
     auto curveConfigs = boost::make_shared<CurveConfigurations>();
     curveConfigs->fromFile(TEST_INPUT_FILE(string(inputDir + "/" + tmf.curveConfig)));
@@ -216,7 +219,7 @@ boost::shared_ptr<TodaysMarket> createTodaysMarket(const Date& asof, const strin
     auto loader = boost::make_shared<CSVLoader>(TEST_INPUT_FILE(string(inputDir + "/" + tmf.market)),
                                                 TEST_INPUT_FILE(string(inputDir + "/" + tmf.fixings)), false);
 
-    return boost::make_shared<TodaysMarket>(asof, todaysMarketParameters, loader, curveConfigs, conventions);
+    return boost::make_shared<TodaysMarket>(asof, todaysMarketParameters, loader, curveConfigs);
 }
 
 } // namespace
@@ -343,7 +346,7 @@ BOOST_AUTO_TEST_CASE(testSimultaneousUsageCdsQuoteTypes) {
     for (const string& curveName : curveNames) {
         BOOST_TEST_CONTEXT("Checking default curve " << curveName) {
             Handle<DefaultProbabilityTermStructure> dpts;
-            BOOST_CHECK_NO_THROW(dpts = tm->defaultCurve(curveName));
+            BOOST_CHECK_NO_THROW(dpts = tm->defaultCurve(curveName)->curve());
             BOOST_CHECK_NO_THROW(dpts->survivalProbability(1.0));
         }
     }

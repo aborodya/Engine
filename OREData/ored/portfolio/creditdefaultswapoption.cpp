@@ -212,9 +212,9 @@ void CreditDefaultSwapOption::buildNoDefault(const boost::shared_ptr<EngineFacto
         "Upfront fee on the CDS underlying a CDS option is not supported.");
 
     // The underlying CDS trade
-    auto cds = boost::make_shared<QuantExt::CreditDefaultSwap>(side, notional_, runningCoupon, schedule,
+    auto cds = boost::make_shared<QuantLib::CreditDefaultSwap>(side, notional_, runningCoupon, schedule,
         payConvention, dc, swap_.settlesAccrual(), swap_.protectionPaymentTime(), swap_.protectionStart(),
-        boost::shared_ptr<Claim>(), lastPeriodDayCounter, swap_.tradeDate(), swap_.cashSettlementDays());
+        boost::shared_ptr<Claim>(), lastPeriodDayCounter, true, swap_.tradeDate(), swap_.cashSettlementDays());
 
     // Set engine on the underlying CDS.
     auto cdsBuilder = boost::dynamic_pointer_cast<CreditDefaultSwapEngineBuilder>(
@@ -268,12 +268,17 @@ void CreditDefaultSwapOption::buildNoDefault(const boost::shared_ptr<EngineFacto
     vector<boost::shared_ptr<Instrument>> additionalInstruments;
     vector<Real> additionalMultipliers;
     string marketConfig = cdsOptionEngineBuilder->configuration(MarketContext::pricing);
-    addPremium(engineFactory, ccy, marketConfig, additionalInstruments, additionalMultipliers);
+    maturity_ =
+        std::max(maturity_, addPremium(engineFactory, ccy, marketConfig, additionalInstruments, additionalMultipliers));
 
     // Instrument wrapper depends on the settlement type.
     Position::Type positionType = parsePositionType(option_.longShort());
     Settlement::Type settleType = parseSettlementType(option_.settlement());
-    if (settleType == Settlement::Cash) {
+    // The instrument build should be indpednent of the evaluation date. However, the general behavior
+    // in ORE (e.g. IR swaptions) for normal pricing runs is that the option is considered expired on
+    // the expiry date with no assumptions on an (automatic) exercise. Therefore we build a vanilla
+    // instrument if the exercise date is <= the eval date at build time.
+    if (settleType == Settlement::Cash || exerciseDate <= Settings::instance().evaluationDate()) {
         Real indicatorLongShort = positionType == Position::Long ? 1.0 : -1.0;
         instrument_ = boost::make_shared<VanillaInstrument>(cdsOption, indicatorLongShort,
             additionalInstruments, additionalMultipliers);
@@ -283,12 +288,11 @@ void CreditDefaultSwapOption::buildNoDefault(const boost::shared_ptr<EngineFacto
         instrument_ = boost::make_shared<EuropeanOptionWrapper>(cdsOption, isLong, exerciseDate,
             isPhysical, cds, 1.0, 1.0, additionalInstruments, additionalMultipliers);
     }
-
 }
 
 void CreditDefaultSwapOption::buildDefaulted(const boost::shared_ptr<EngineFactory>& engineFactory) {
 
-    DLOG("CreditDefaultSwapOption: building CDS option trade " << id() << " given default occured.");
+    DLOG("CreditDefaultSwapOption: building CDS option trade " << id() << " given default occurred.");
 
     // We add a simple payment for CDS options where the reference entity has already defaulted.
     // If it is a knock-out CDS option, we add a dummy payment of 0.0 with date today instead of throwing.
@@ -308,14 +312,15 @@ void CreditDefaultSwapOption::buildDefaulted(const boost::shared_ptr<EngineFacto
     auto ccy = parseCurrency(notionalCurrency_);
     vector<boost::shared_ptr<Instrument>> additionalInstruments;
     vector<Real> additionalMultipliers;
-    addPremiums(additionalInstruments, additionalMultipliers, 1.0, PremiumData(amount, notionalCurrency_, paymentDate),
-                1.0, ccy, engineFactory, marketConfig);
+    Date premiumPayDate =
+        addPremiums(additionalInstruments, additionalMultipliers, 1.0,
+                    PremiumData(amount, notionalCurrency_, paymentDate), 1.0, ccy, engineFactory, marketConfig);
     DLOG("FEP payment (date = " << paymentDate << ", amount = " << amount << ") added for CDS option " << id() << ".");
 
     // Use the instrument added as the main instrument and clear the vectors
     auto qlInst = additionalInstruments.back();
     QL_REQUIRE(qlInst, "Expected a FEP payment to have been added for CDS option " << id() << ".");
-    maturity_ = paymentDate;
+    maturity_ = std::max(paymentDate, premiumPayDate);
     additionalInstruments.clear();
     additionalMultipliers.clear();
 
@@ -329,17 +334,17 @@ void CreditDefaultSwapOption::buildDefaulted(const boost::shared_ptr<EngineFacto
         additionalInstruments, additionalMultipliers);
 }
 
-void CreditDefaultSwapOption::addPremium(const boost::shared_ptr<EngineFactory>& ef,
+Date CreditDefaultSwapOption::addPremium(const boost::shared_ptr<EngineFactory>& ef,
     const Currency& tradeCurrency,
     const string& marketConfig,
     vector<boost::shared_ptr<Instrument>>& additionalInstruments,
     vector<Real>& additionalMultipliers) {
         // The premium amount is always provided as a non-negative amount. Assign the correct sign here i.e.
-        // pay the premium if long the option and recieve the premium if short the option.
+        // pay the premium if long the option and receive the premium if short the option.
         Position::Type positionType = parsePositionType(option_.longShort());
         Real indicatorLongShort = positionType == Position::Long ? 1.0 : -1.0;
-        addPremiums(additionalInstruments, additionalMultipliers, 1.0, option_.premiumData(), indicatorLongShort,
-                    tradeCurrency, ef, marketConfig);
+        return addPremiums(additionalInstruments, additionalMultipliers, 1.0, option_.premiumData(), indicatorLongShort,
+                           tradeCurrency, ef, marketConfig);
 }
 
 }

@@ -44,26 +44,26 @@ static const vector<MarketObjectMetaInfo> marketObjectData = {
      "ZeroInflationCurve",
      "ZeroInflationIndexCurves",
      {"ZeroInflationIndexCurve", "name"}},
-    {MarketObject::ZeroInflationCapFloorVol,
-     "ZeroInflationCapFloorVol",
-     "ZeroInflationCapFloorVolatilities",
-     {"ZeroInflationCapFloorVolatility", "name"}},
     {MarketObject::YoYInflationCurve, "YoYInflationCurve", "YYInflationIndexCurves", {"YYInflationIndexCurve", "name"}},
     {MarketObject::FXSpot, "FXSpot", "FxSpots", {"FxSpot", "pair"}},
-    {MarketObject::BaseCorrelation, "BaseCorrelation", "BaseCorrelations", {"BaseCorrelation", "name"}},
     {MarketObject::FXVol, "FXVol", "FxVolatilities", {"FxVolatility", "pair"}},
-    {MarketObject::SwaptionVol, "SwaptionVol", "SwaptionVolatilities", {"SwaptionVolatility", "currency"}},
+    {MarketObject::SwaptionVol, "SwaptionVol", "SwaptionVolatilities", {"SwaptionVolatility", "key"}},
     {MarketObject::YieldVol, "YieldVol", "YieldVolatilities", {"YieldVolatility", "name"}},
-    {MarketObject::CapFloorVol, "CapFloorVol", "CapFloorVolatilities", {"CapFloorVolatility", "currency"}},
+    {MarketObject::CapFloorVol, "CapFloorVol", "CapFloorVolatilities", {"CapFloorVolatility", "key"}},
     {MarketObject::CDSVol, "CDSVol", "CDSVolatilities", {"CDSVolatility", "name"}},
     {MarketObject::DefaultCurve, "DefaultCurve", "DefaultCurves", {"DefaultCurve", "name"}},
     {MarketObject::YoYInflationCapFloorVol,
      "YoYInflationCapFloorVol",
      "YYInflationCapFloorVolatilities",
      {"YYInflationCapFloorVolatility", "name"}},
+    {MarketObject::ZeroInflationCapFloorVol,
+     "ZeroInflationCapFloorVol",
+     "ZeroInflationCapFloorVolatilities",
+     {"ZeroInflationCapFloorVolatility", "name"}},
     {MarketObject::EquityCurve, "EquityCurves", "EquityCurves", {"EquityCurve", "name"}},
     {MarketObject::EquityVol, "EquityVols", "EquityVolatilities", {"EquityVolatility", "name"}},
     {MarketObject::Security, "Securities", "Securities", {"Security", "name"}},
+    {MarketObject::BaseCorrelation, "BaseCorrelation", "BaseCorrelations", {"BaseCorrelation", "name"}},
     {MarketObject::CommodityCurve, "CommodityCurves", "CommodityCurves", {"CommodityCurve", "name"}},
     {MarketObject::CommodityVolatility,
      "CommodityVolatilities",
@@ -82,7 +82,7 @@ std::ostream& operator<<(std::ostream& out, const MarketObject& o) {
 }
 
 std::set<MarketObject> getMarketObjectTypes() {
-    static std::set<MarketObject> result;
+    thread_local static std::set<MarketObject> result;
     if (result.empty()) {
         for (auto const& o : marketObjectData) {
             result.insert(o.obj);
@@ -91,10 +91,13 @@ std::set<MarketObject> getMarketObjectTypes() {
     return result;
 }
 
-MarketConfiguration::MarketConfiguration() {
+MarketConfiguration::MarketConfiguration(map<MarketObject, string> marketObjectIds) {
     for (Size i = 0; i < marketObjectData.size(); ++i) {
         marketObjectIds_[marketObjectData[i].obj] = Market::defaultConfiguration;
     }
+    
+    for (const auto& moi : marketObjectIds)
+        setId(moi.first, moi.second);
 }
 
 string MarketConfiguration::operator()(const MarketObject o) const {
@@ -115,13 +118,23 @@ void MarketConfiguration::add(const MarketConfiguration& o) {
 }
 
 void TodaysMarketParameters::addConfiguration(const string& id, const MarketConfiguration& configuration) {
-    configurations_[id].add(configuration);
+    if (hasConfiguration(id)) {
+        auto it =
+            find_if(configurations_.begin(), configurations_.end(),
+                    [&id](const pair<string, MarketConfiguration>& s) { return s.first == id; });
+        it->second.add(configuration);
+    } else 
+        configurations_.push_back(make_pair(id, configuration));
 }
 
 void TodaysMarketParameters::clear() {
     // clear data members
     configurations_.clear();
     marketObjects_.clear();
+}
+
+bool TodaysMarketParameters::empty() { 
+    return marketObjects_.size() == 0;
 }
 
 void TodaysMarketParameters::fromXML(XMLNode* node) {
@@ -166,9 +179,20 @@ void TodaysMarketParameters::fromXML(XMLNode* node) {
                         auto mp =
                             XMLUtils::getChildrenAttributesAndValues(n, marketObjectData[i].xmlSingleName.first,
                                                                      marketObjectData[i].xmlSingleName.second, false);
+			// deprecated attribute currency for capfloor vols and swaption vols
+                        if (marketObjectData[i].obj == MarketObject::CapFloorVol ||
+                            marketObjectData[i].obj == MarketObject::SwaptionVol) {
+                            auto mp2 = XMLUtils::getChildrenAttributesAndValues(
+                                n, marketObjectData[i].xmlSingleName.first, "currency", false);
+                            if (!mp2.empty()) {
+                                mp.insert(mp2.begin(), mp2.end());
+                                WLOG("TodaysMarketParameters: the attribute 'currency' is deprecated for '" +
+                                     marketObjectData[i].xmlName + "', use 'key' instead.");
+                            }
+                        }
                         Size nc = XMLUtils::getChildrenNodes(n, "").size();
-                        QL_REQUIRE(mp.size() == nc, "could not recognise " << (nc - mp.size()) << " sub nodes under "
-                                                                           << marketObjectData[i].xmlName);
+                        QL_REQUIRE(mp.size() == nc, "TodaysMarketParameters::fromXML(): possible duplicate entry in node " 
+                            << marketObjectData[i].xmlName << ", check for XMLUtils warnings.");
                         addMarketObject(marketObjectData[i].obj, id, mp);
                     }
                     break;
@@ -244,7 +268,7 @@ vector<string> TodaysMarketParameters::curveSpecs(const string& configuration) c
     vector<string> specs;
     for (Size i = 0; i < marketObjectData.size(); ++i) {
         MarketObject mo = marketObjectData[i].obj;
-        // swap indices have to be exlcuded here...
+        // swap indices have to be excluded here...
         if (mo != MarketObject::SwapIndexCurve && marketObjects_.find(mo) != marketObjects_.end()) {
             curveSpecs(marketObjects_.at(mo), marketObjectId(mo, configuration), specs);
         }
@@ -255,7 +279,7 @@ vector<string> TodaysMarketParameters::curveSpecs(const string& configuration) c
 void TodaysMarketParameters::addMarketObject(const MarketObject o, const string& id,
                                              const map<string, string>& assignments) {
 
-    // check that we do not have an inconcsistent mapping within one market object
+    // check that we do not have an inconsistent mapping within one market object
     auto mo = marketObjects_.find(o);
     if (mo != marketObjects_.end()) {
         auto mp = mo->second.find(id);
@@ -285,7 +309,7 @@ void TodaysMarketParameters::addMarketObject(const MarketObject o, const string&
                                "TodaysMarketParameters, overlap between YieldCurve and IndexCurve names, try to add "
                                "mapping for market object type "
                                    << o << ", id " << id << ": " << a->first << " " << a->second << ", but have "
-                                   << m.first << " " << m.second << " already in other market object's mappnig");
+                                   << m.first << " " << m.second << " already in other market object's mapping");
                 }
             }
         }
@@ -296,6 +320,34 @@ void TodaysMarketParameters::addMarketObject(const MarketObject o, const string&
     for (auto s : assignments)
         DLOG("TodaysMarketParameters, add market objects of type " << o << ": " << id << " " << s.first << " "
                                                                    << s.second);
+}
+
+const map<string, string>& TodaysMarketParameters::mapping(const MarketObject o, const string& configuration) const {
+    static map<string, string> empty;
+    QL_REQUIRE(hasConfiguration(configuration), "configuration " << configuration << " not found");
+    auto it = marketObjects_.find(o);
+    if (it != marketObjects_.end()) {
+        auto it2 = it->second.find(marketObjectId(o, configuration));
+        if (it2 != it->second.end()) {
+            return it2->second;
+        }
+    }
+    return empty;
+}
+
+map<string, string>& TodaysMarketParameters::mappingReference(const MarketObject o, const string& configuration) {
+    QL_REQUIRE(hasConfiguration(configuration), "configuration " << configuration << " not found");
+    auto it = marketObjects_.find(o);
+    if (it != marketObjects_.end()) {
+        auto it2 = it->second.find(marketObjectId(o, configuration));
+        if (it2 != it->second.end()) {
+            return it2->second;
+        } else {
+	    return it->second[marketObjectId(o, configuration)];
+        }
+    } else {
+        return marketObjects_[o][marketObjectId(o, configuration)];
+    }
 }
 
 } // namespace data

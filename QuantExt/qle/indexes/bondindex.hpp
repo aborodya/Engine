@@ -25,11 +25,15 @@
 
 #include <ql/handle.hpp>
 #include <ql/index.hpp>
+#include <ql/indexes/interestrateindex.hpp>
 #include <ql/instruments/bond.hpp>
 #include <ql/termstructures/defaulttermstructure.hpp>
 #include <ql/termstructures/yieldtermstructure.hpp>
 #include <ql/time/calendar.hpp>
 #include <ql/time/calendars/nullcalendar.hpp>
+#include <ql/time/daycounters/simpledaycounter.hpp>
+#include <ql/cashflows/floatingratecoupon.hpp>
+#include <ql/cashflows/couponpricer.hpp>
 
 namespace QuantExt {
 
@@ -41,6 +45,8 @@ class DiscountingRiskyBondEngine;
 /*! \ingroup indexes */
 class BondIndex : public Index, public Observer {
 public:
+    enum class PriceQuoteMethod { PercentageOfPar, CurrencyPerUnit };
+
     /*! The values that this index return are of the form
 
         - 1.02 meaning 102% price clean or dirty (depending on the flag dirty in the ctor) i.e.
@@ -58,7 +64,7 @@ public:
         with Bond::cashflows().
 
         If the bond has a pricing engine attached and today's fixing is projected, the
-        pricing engine's result will be used. Otherwise today's fixing will be calcuated
+        pricing engine's result will be used. Otherwise today's fixing will be calculated
         as projected fixings for dates > today, i.e. by simply discounting the bond's
         cashflows.
 
@@ -77,6 +83,8 @@ public:
         on survival until the associated bond settlement date, otherwise it will include
         the default probability between today and the settlement date.
 
+	If priceQuoteMethod = CurrencyPerUnit, a fixing in the fixing history will be divided
+	by priceQuoteBaseValue before returning it.
     */
     BondIndex(const std::string& securityName, const bool dirty = false, const bool relative = true,
               const Calendar& fixingCalendar = NullCalendar(), const boost::shared_ptr<QuantLib::Bond>& bond = nullptr,
@@ -85,7 +93,10 @@ public:
               const Handle<Quote>& recoveryRate = Handle<Quote>(),
               const Handle<Quote>& securitySpread = Handle<Quote>(),
               const Handle<YieldTermStructure>& incomeCurve = Handle<YieldTermStructure>(),
-              const bool conditionalOnSurvival = true);
+              const bool conditionalOnSurvival = true,
+              const PriceQuoteMethod priceQuoteMethod = PriceQuoteMethod::PercentageOfPar,
+              const double priceQuoteBaseValue = 1.0, const bool isInflationLinked = false,
+              const double bidAskAdjustment = 0.0);
 
     //! \name Index interface
     //@{
@@ -118,8 +129,9 @@ public:
     Handle<Quote> securitySpread() const { return securitySpread_; }
     Handle<YieldTermStructure> incomeCurve() const { return incomeCurve_; }
     bool conditionalOnSurvival() const { return conditionalOnSurvival_; }
+    PriceQuoteMethod priceQuoteMethod() const { return priceQuoteMethod_; }
+    double priceQuoteBaseValue() const { return priceQuoteBaseValue_; }
     //@}
-
 
 protected:
     std::string securityName_;
@@ -132,7 +144,10 @@ protected:
     Handle<Quote> securitySpread_;
     Handle<YieldTermStructure> incomeCurve_;
     bool conditionalOnSurvival_;
-
+    PriceQuoteMethod priceQuoteMethod_;
+    double priceQuoteBaseValue_;
+    bool isInflationLinked_;
+    double bidAskAdjustment_;
     boost::shared_ptr<DiscountingRiskyBondEngine> vanillaBondEngine_;
 };
 
@@ -140,15 +155,17 @@ protected:
 /*! \ingroup indexes */
 class BondFuturesIndex : public BondIndex {
 public:
-    
-    BondFuturesIndex(const QuantLib::Date& expiryDate, const std::string& securityName, const bool dirty = false, const bool relative = true,
-              const Calendar& fixingCalendar = NullCalendar(), const boost::shared_ptr<QuantLib::Bond>& bond = nullptr,
-              const Handle<YieldTermStructure>& discountCurve = Handle<YieldTermStructure>(),
-              const Handle<DefaultProbabilityTermStructure>& defaultCurve = Handle<DefaultProbabilityTermStructure>(),
-              const Handle<Quote>& recoveryRate = Handle<Quote>(),
-              const Handle<Quote>& securitySpread = Handle<Quote>(),
-              const Handle<YieldTermStructure>& incomeCurve = Handle<YieldTermStructure>(),
-              const bool conditionalOnSurvival = true);
+    BondFuturesIndex(
+        const QuantLib::Date& expiryDate, const std::string& securityName, const bool dirty = false,
+        const bool relative = true, const Calendar& fixingCalendar = NullCalendar(),
+        const boost::shared_ptr<QuantLib::Bond>& bond = nullptr,
+        const Handle<YieldTermStructure>& discountCurve = Handle<YieldTermStructure>(),
+        const Handle<DefaultProbabilityTermStructure>& defaultCurve = Handle<DefaultProbabilityTermStructure>(),
+        const Handle<Quote>& recoveryRate = Handle<Quote>(), const Handle<Quote>& securitySpread = Handle<Quote>(),
+        const Handle<YieldTermStructure>& incomeCurve = Handle<YieldTermStructure>(),
+        const bool conditionalOnSurvival = true,
+        const PriceQuoteMethod priceQuoteMethod = PriceQuoteMethod::PercentageOfPar,
+        const double priceQuoteBaseValue = 1.0);
 
     //! \name Index interface
     //@{
@@ -170,4 +187,77 @@ private:
     mutable std::string name_;
 };
 
+//! Constant Maturity Bond Index
+/*! 
+  The purpose of this object is converting generic bond prices into yields 
+  and to use the yields as fixings in the context of floating rate coupons
+  \ingroup indexes 
+*/
+class ConstantMaturityBondIndex : public InterestRateIndex {
+public:
+    ConstantMaturityBondIndex(// index interface
+			      const std::string& familyName,
+			      const Period& tenor,
+			      Natural settlementDays = 0,
+			      Currency currency = Currency(),
+			      Calendar fixingCalendar = NullCalendar(),
+			      DayCounter dayCounter = SimpleDayCounter(),
+			      // maturity data calculation
+			      BusinessDayConvention convention = Following,
+			      bool endOfMonth = false,
+			      // underlying
+			      ext::shared_ptr<Bond> bond = nullptr,
+			      // price to yield conversion
+			      Compounding compounding = Compounded,
+			      Frequency frequency = Annual,
+			      Real accuracy = 1.0e-8,
+			      Size maxEvaluations = 100,
+			      Real guess = 0.05,
+			      QuantLib::Bond::Price::Type priceType = QuantLib::Bond::Price::Clean)
+      : InterestRateIndex(familyName, tenor, settlementDays, currency, fixingCalendar, dayCounter),
+	convention_(convention), endOfMonth_(endOfMonth),
+	bond_(bond), compounding_(compounding), frequency_(frequency),
+	accuracy_(accuracy), maxEvaluations_(maxEvaluations), guess_(guess), priceType_(priceType) {
+        std::ostringstream o;
+	o << familyName_ << "-" << tenor_;
+	name_ = o.str();
+        if (bond_) {
+	    registerWith(bond_);
+	    bondStartDate_ = bond->startDate();
+	}
+    }
+
+    //! \name InterestRateIndex interface
+    //@{
+    Date maturityDate(const Date& valueDate) const override;
+    //@}
+  
+    //! \name Fixing calculations
+    //@{
+    Rate forecastFixing(const Date& fixingDate) const override;
+    //@}
+
+    //! \name Inspectors
+    //@{
+    BusinessDayConvention convention() const { return convention_; }
+    bool endOfMonth() const { return endOfMonth_; }
+    const ext::shared_ptr<Bond>& bond() const { return bond_; }
+    //@}
+
+private:
+    BusinessDayConvention convention_;
+    bool endOfMonth_;
+    ext::shared_ptr<Bond> bond_;
+    Compounding compounding_;
+    Frequency frequency_;
+    Real accuracy_;
+    Size maxEvaluations_;
+    Real guess_;
+    Bond::Price::Type priceType_;
+    Date bondStartDate_;
+    std::string securityId_;
+    std::string creditCurveId_;
+};
+
+  
 } // namespace QuantExt

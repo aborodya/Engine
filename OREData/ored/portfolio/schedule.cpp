@@ -19,6 +19,7 @@
 #include <ored/portfolio/schedule.hpp>
 #include <ored/utilities/log.hpp>
 #include <ored/utilities/parsers.hpp>
+#include <ored/utilities/to_string.hpp>
 #include <set>
 
 using namespace QuantLib;
@@ -30,10 +31,19 @@ void ScheduleRules::fromXML(XMLNode* node) {
     XMLUtils::checkNode(node, "Rules");
     startDate_ = XMLUtils::getChildValue(node, "StartDate");
     endDate_ = XMLUtils::getChildValue(node, "EndDate", false);
+    adjustEndDateToPreviousMonthEnd_ = XMLUtils::getChildValueAsBool(node, "AdjustEndDateToPreviousMonthEnd", false, false);
+    if (adjustEndDateToPreviousMonthEnd_ && !endDate_.empty()){
+        auto ed = parseDate(endDate_);
+        while(!Date::isEndOfMonth(ed))ed--;
+        endDate_ = to_string(ed);
+    }
     tenor_ = XMLUtils::getChildValue(node, "Tenor");
     calendar_ = XMLUtils::getChildValue(node, "Calendar");
     convention_ = XMLUtils::getChildValue(node, "Convention");
-    termConvention_ = XMLUtils::getChildValue(node, "TermConvention");
+    termConvention_ = XMLUtils::getChildValue(node, "TermConvention", false);
+    if (termConvention_.empty()) {
+        termConvention_ = convention_;
+    }
     rule_ = XMLUtils::getChildValue(node, "Rule");
     endOfMonth_ = XMLUtils::getChildValue(node, "EndOfMonth");
     firstDate_ = XMLUtils::getChildValue(node, "FirstDate");
@@ -77,8 +87,38 @@ XMLNode* ScheduleDates::toXML(XMLDocument& doc) {
     return node;
 }
 
+void ScheduleDerived::fromXML(XMLNode* node) {
+    XMLUtils::checkNode(node, "Derived");
+    baseSchedule_ = XMLUtils::getChildValue(node, "BaseSchedule");
+    shift_ = XMLUtils::getChildValue(node, "Shift", false);
+    calendar_ = XMLUtils::getChildValue(node, "Calendar", false);
+    convention_ = XMLUtils::getChildValue(node, "Convention", false);
+}
+
+XMLNode* ScheduleDerived::toXML(XMLDocument& doc) {
+    XMLNode* node = doc.allocNode("Derived");
+    XMLUtils::addChild(doc, node, "BaseSchedule", baseSchedule_);
+
+    if (!shift_.empty())
+        XMLUtils::addChild(doc, node, "Shift", shift_);
+    if (!calendar_.empty())
+        XMLUtils::addChild(doc, node, "Calendar", calendar_);
+    if (!convention_.empty())
+        XMLUtils::addChild(doc, node, "Convention", convention_);
+
+    return node;
+}
+
+vector<string> ScheduleData::baseScheduleNames() {
+    vector<string> baseScheduleNames;
+    for (auto& dv : derived_)
+        baseScheduleNames.push_back(dv.baseSchedule());
+    return baseScheduleNames;
+}
+
 void ScheduleData::fromXML(XMLNode* node) {
     QL_REQUIRE(node, "ScheduleData::fromXML(): no node given");
+    name_ = XMLUtils::getNodeName(node);
     for (auto& r : XMLUtils::getChildrenNodes(node, "Rules")) {
         rules_.emplace_back();
         rules_.back().fromXML(r);
@@ -86,6 +126,12 @@ void ScheduleData::fromXML(XMLNode* node) {
     for (auto& d : XMLUtils::getChildrenNodes(node, "Dates")) {
         dates_.emplace_back();
         dates_.back().fromXML(d);
+    }
+    for (auto& dv : XMLUtils::getChildrenNodes(node, "Derived")) {
+        derived_.emplace_back();
+        derived_.back().fromXML(dv);
+        if (!hasDerived_)
+            hasDerived_ = true;
     }
 }
 
@@ -95,13 +141,69 @@ XMLNode* ScheduleData::toXML(XMLDocument& doc) {
         XMLUtils::appendNode(node, r.toXML(doc));
     for (auto& d : dates_)
         XMLUtils::appendNode(node, d.toXML(doc));
+    for (auto& dv : derived_)
+        XMLUtils::appendNode(node, dv.toXML(doc));
     return node;
+}
+
+void ScheduleBuilder::add(Schedule& schedule, const ScheduleData& data) {
+    string name = data.name();
+    schedules_.insert(pair<string, pair<ScheduleData, Schedule&>>({name, {data, schedule}}));
+}
+
+void ScheduleBuilder::makeSchedules(const Date& openEndDateReplacement) {
+    map<string, Schedule> builtSchedules;
+    map<string, ScheduleData> derivedSchedules;
+
+    // First, we build all the rules-based and dates-based schedules
+    for (auto& s : schedules_) {
+        string schName = s.first;
+        ScheduleData& schData = s.second.first;
+        Schedule& sch = s.second.second;
+
+        if (!schData.hasDerived()) {
+            sch = makeSchedule(schData, openEndDateReplacement);
+            builtSchedules[schName] = sch;
+        } else {
+            derivedSchedules[schName] = schData;
+        }
+    }
+
+    // We then keep looping through the list of derived schedules and building these from the list of built schedules.
+    bool calculated;
+    while (derivedSchedules.size() > 0) {
+        calculated = false;
+        for (auto& ds : derivedSchedules) {
+            string dsName = ds.first;
+            ScheduleData& dsSchedData = ds.second;
+            vector<string> baseNames = dsSchedData.baseScheduleNames();
+            for (string& bn : baseNames) {
+                QL_REQUIRE(builtSchedules.find(bn) != builtSchedules.end(), "Could not find base schedule \" " << bn << "\" for derived schedule \" " << dsName << "\"");
+            }
+            Schedule schedule;
+            schedule = makeSchedule(dsSchedData, openEndDateReplacement, builtSchedules);
+            schedules_.find(dsName)->second.second = schedule;
+            builtSchedules[dsName] = schedule;
+            derivedSchedules.erase(dsName);
+            calculated = true;
+            break;
+        }
+
+        // If we go through the whole list without having built a schedule, then assume that we cannot build them
+        // anymore.
+        if (!calculated) {
+            for (auto& ds : derivedSchedules)
+                ALOG("makeSchedules(): could not find base schedule \"" << ds.first << "\"");
+            QL_FAIL("makeSchedules(): failed to build at least one derived schedule");
+            break;
+        }
+    }
 }
 
 Schedule makeSchedule(const ScheduleDates& data) {
     QL_REQUIRE(data.dates().size() > 0, "Must provide at least 1 date for Schedule");
     Calendar calendar = parseCalendar(data.calendar());
-    BusinessDayConvention convention = Unadjusted;
+    BusinessDayConvention convention = ModifiedFollowing;
     if (data.convention() != "")
         convention = parseBusinessDayConvention(data.convention());
     // Avoid compiler warning on gcc
@@ -123,6 +225,42 @@ Schedule makeSchedule(const ScheduleDates& data) {
                     boost::none, endOfMonth);
 }
 
+Schedule makeSchedule(const ScheduleDerived& data, const Schedule& baseSchedule) {
+
+    string strCalendar = data.calendar();
+    Calendar calendar;
+    if (strCalendar.empty()) {
+        calendar = NullCalendar();
+        WLOG("No calendar provided in Schedule, attempting to use a null calendar.");
+    }
+    else
+        calendar = parseCalendar(strCalendar);
+
+    BusinessDayConvention convention;
+    string strConvention = data.convention();
+    if (strConvention.empty())
+        convention = BusinessDayConvention::Unadjusted;
+    else
+        convention = parseBusinessDayConvention(strConvention);
+
+    string strShift = data.shift();
+    Period shift;
+    if (strShift.empty())
+        shift = 0 * Days;
+    else
+        shift = parsePeriod(data.shift());
+
+    const std::vector<QuantLib::Date>& baseDates = baseSchedule.dates();
+    std::vector<QuantLib::Date> derivedDates;
+    QuantLib::Date derivedDate;
+    for (const Date& d : baseDates) {
+        derivedDate = calendar.advance(d, shift, convention);
+        derivedDates.push_back(derivedDate);
+    }
+    return Schedule(vector<Date>(derivedDates.begin(), derivedDates.end()), calendar, convention, boost::none,
+                    baseSchedule.tenor(), boost::none, baseSchedule.endOfMonth());
+}
+
 Schedule makeSchedule(const ScheduleRules& data, const Date& openEndDateReplacement) {
     QL_REQUIRE(!data.endDate().empty() || openEndDateReplacement != Null<Date>(),
                "makeSchedule(): Schedule does not have an end date, this is not supported in this context / for this "
@@ -131,6 +269,8 @@ Schedule makeSchedule(const ScheduleRules& data, const Date& openEndDateReplacem
                "makeSchedule(): If no end date is given, a last date is not allowed either. Please remove the last "
                "date from the schedule.");
     Calendar calendar = parseCalendar(data.calendar());
+    if (calendar == NullCalendar())
+        WLOG("No calendar provided in Schedule, attempting to use a null calendar.");
     Date startDate = parseDate(data.startDate());
     Date endDate = data.endDate().empty() ? openEndDateReplacement : parseDate(data.endDate());
     // Handle trivial case here
@@ -199,11 +339,11 @@ void updateData(const std::string& s, T& t, bool& hasT, bool& hasConsistentT, co
 Calendar parseCalendarTemp(const string& s) { return parseCalendar(s); }
 } // namespace
 
-Schedule makeSchedule(const ScheduleData& data, const Date& openEndDateReplacement) {
+Schedule makeSchedule(const ScheduleData& data, const Date& openEndDateReplacement, const map<string, QuantLib::Schedule>& baseSchedules) {
     // only the last rule-based schedule is allowed to have an open end date, check this
     for (Size i = 1; i < data.rules().size(); ++i) {
         QL_REQUIRE(!data.rules()[i - 1].endDate().empty(),
-                   "makeSchedule: only last schedule is allowed to have an open end date");
+                   "makeSchedule(): only last schedule is allowed to have an open end date");
     }
     // build all the date and rule based sub-schedules we have
     vector<Schedule> schedules;
@@ -211,6 +351,12 @@ Schedule makeSchedule(const ScheduleData& data, const Date& openEndDateReplaceme
         schedules.push_back(makeSchedule(d));
     for (auto& r : data.rules())
         schedules.push_back(makeSchedule(r, openEndDateReplacement));
+    if (!baseSchedules.empty())
+        for (auto& dv : data.derived()) {
+            auto baseSchedule = baseSchedules.find(dv.baseSchedule());
+            QL_REQUIRE(baseSchedule != baseSchedules.end(), "makeSchedule(): could not find base schedule \"" << dv.baseSchedule() << "\"");
+            schedules.push_back(makeSchedule(dv, baseSchedule->second));
+    }
     QL_REQUIRE(!schedules.empty(), "No dates or rules to build Schedule from");
     if (schedules.size() == 1)
         // if we have just one, use that (most common case)

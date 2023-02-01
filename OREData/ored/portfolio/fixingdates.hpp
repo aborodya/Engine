@@ -51,13 +51,21 @@ class StrippedCappedFlooredCoupon;
 namespace QuantExt {
 class AverageONIndexedCoupon;
 class OvernightIndexedCoupon;
+class CappedFlooredAverageONIndexedCoupon;
 class CappedFlooredOvernightIndexedCoupon;
 class EquityCoupon;
 class FloatingRateFXLinkedNotionalCoupon;
 class FXLinkedCashFlow;
+class AverageFXLinkedCashFlow;
 class SubPeriodsCoupon1;
 class IndexedCoupon;
+class IndexWrappedCashFlow;
 class NonStandardYoYInflationCoupon;
+class CmbCoupon;
+class CommodityIndex;
+class CommodityIndexedAverageCashFlow;
+class CommodityIndexedCashFlow;
+class EquityMarginCoupon;
 } // namespace QuantExt
 
 namespace ore {
@@ -72,7 +80,7 @@ public:
         If the \p settlementDate is not provided or is set equal to \c QuantLib::Date(), the settlement date in the
         implementation is assumed to be the \c Settings::instance().evaluationDate().
 
-        If a cashflow payment is deemed to have already occured relative to the settlement date, then no fixing is
+        If a cashflow payment is deemed to have already occurred relative to the settlement date, then no fixing is
         needed. The determination of whether a cashflow has or has not occurred will in general rely on a call to \c
         CashFlow::hasOccurred which is important in cases where the cash flow payment date falls on the settlement date.
 
@@ -167,51 +175,63 @@ class FixingDateGetter : public QuantLib::AcyclicVisitor,
                          public QuantLib::Visitor<QuantLib::DigitalCoupon>,
                          public QuantLib::Visitor<QuantLib::StrippedCappedFlooredCoupon>,
                          public QuantLib::Visitor<QuantExt::AverageONIndexedCoupon>,
+                         public QuantLib::Visitor<QuantExt::CappedFlooredAverageONIndexedCoupon>,
                          public QuantLib::Visitor<QuantExt::EquityCoupon>,
                          public QuantLib::Visitor<QuantExt::FloatingRateFXLinkedNotionalCoupon>,
                          public QuantLib::Visitor<QuantExt::FXLinkedCashFlow>,
+                         public QuantLib::Visitor<QuantExt::AverageFXLinkedCashFlow>,
                          public QuantLib::Visitor<QuantExt::SubPeriodsCoupon1>,
                          public QuantLib::Visitor<QuantExt::IndexedCoupon>,
-                         public QuantLib::Visitor<QuantExt::NonStandardYoYInflationCoupon> {
+                         public QuantLib::Visitor<QuantExt::IndexWrappedCashFlow>,
+                         public QuantLib::Visitor<QuantExt::NonStandardYoYInflationCoupon>,
+                         public QuantLib::Visitor<QuantExt::CmbCoupon>,
+                         public QuantLib::Visitor<QuantExt::EquityMarginCoupon>,
+                         public QuantLib::Visitor<QuantExt::CommodityIndexedCashFlow>,
+                         public QuantLib::Visitor<QuantExt::CommodityIndexedAverageCashFlow> {
 
 public:
     //! Constructor
-    FixingDateGetter(RequiredFixings& requiredFixings, const std::map<std::string, std::string>& qlToOREIndexNames)
-        : requiredFixings_(requiredFixings), qlToOREIndexNames_(qlToOREIndexNames) {}
+    FixingDateGetter(RequiredFixings& requiredFixings) : requiredFixings_(requiredFixings) {}
 
     //! \name Visitor interface
     //@{
-    void visit(QuantLib::CashFlow& c);
-    void visit(QuantLib::FloatingRateCoupon& c);
-    void visit(QuantLib::IborCoupon& c);
-    void visit(QuantLib::CappedFlooredCoupon& c);
-    void visit(QuantLib::IndexedCashFlow& c);
+    void visit(QuantLib::CashFlow& c) override;
+    void visit(QuantLib::FloatingRateCoupon& c) override;
+    void visit(QuantLib::IborCoupon& c) override;
+    void visit(QuantLib::CappedFlooredCoupon& c) override;
+    void visit(QuantLib::IndexedCashFlow& c) override;
     /*! Not added in QuantLib so will never be hit automatically!
         Managed by passing off from IndexedCashFlow.
     */
-    void visit(QuantLib::CPICashFlow& c);
-    void visit(QuantLib::CPICoupon& c);
-    void visit(QuantLib::YoYInflationCoupon& c);
-    void visit(QuantExt::NonStandardYoYInflationCoupon& c);
-    void visit(QuantLib::OvernightIndexedCoupon& c);
-    void visit(QuantExt::OvernightIndexedCoupon& c);
-    void visit(QuantExt::CappedFlooredOvernightIndexedCoupon& c);
-    void visit(QuantLib::AverageBMACoupon& c);
-    void visit(QuantLib::CmsSpreadCoupon& c);
-    void visit(QuantLib::DigitalCoupon& c);
-    void visit(QuantLib::StrippedCappedFlooredCoupon& c);
-    void visit(QuantExt::AverageONIndexedCoupon& c);
-    void visit(QuantExt::EquityCoupon& c);
-    void visit(QuantExt::FloatingRateFXLinkedNotionalCoupon& c);
-    void visit(QuantExt::FXLinkedCashFlow& c);
-    void visit(QuantExt::SubPeriodsCoupon1& c);
-    void visit(QuantExt::IndexedCoupon& c);
+    void visit(QuantLib::CPICashFlow& c) override;
+    void visit(QuantLib::CPICoupon& c) override;
+    void visit(QuantLib::YoYInflationCoupon& c) override;
+    void visit(QuantExt::NonStandardYoYInflationCoupon& c) override;
+    void visit(QuantLib::OvernightIndexedCoupon& c) override;
+    void visit(QuantExt::OvernightIndexedCoupon& c) override;
+    void visit(QuantExt::CappedFlooredOvernightIndexedCoupon& c) override;
+    void visit(QuantLib::AverageBMACoupon& c) override;
+    void visit(QuantLib::CmsSpreadCoupon& c) override;
+    void visit(QuantLib::DigitalCoupon& c) override;
+    void visit(QuantLib::StrippedCappedFlooredCoupon& c) override;
+    void visit(QuantExt::AverageONIndexedCoupon& c) override;
+    void visit(QuantExt::CappedFlooredAverageONIndexedCoupon& c) override;
+    void visit(QuantExt::EquityCoupon& c) override;
+    void visit(QuantExt::FloatingRateFXLinkedNotionalCoupon& c) override;
+    void visit(QuantExt::FXLinkedCashFlow& c) override;
+    void visit(QuantExt::AverageFXLinkedCashFlow& c) override;
+    void visit(QuantExt::SubPeriodsCoupon1& c) override;
+    void visit(QuantExt::IndexedCoupon& c) override;
+    void visit(QuantExt::IndexWrappedCashFlow& c) override;
+    void visit(QuantExt::CmbCoupon& c) override;
+    void visit(QuantExt::EquityMarginCoupon& c) override;
+    void visit(QuantExt::CommodityIndexedCashFlow& c) override;
+    void visit(QuantExt::CommodityIndexedAverageCashFlow& c) override;
     //@}
 
 protected:
     std::string oreIndexName(const std::string& qlIndexName) const;
     RequiredFixings& requiredFixings_;
-    std::map<std::string, std::string> qlToOREIndexNames_;
 };
 
 /*! Populates a RequiredFixings instance based on a given QuantLib::Leg */
@@ -227,8 +247,7 @@ void addToRequiredFixings(const QuantLib::Leg& leg, const boost::shared_ptr<Fixi
     If inflation indices have been set up via ZeroInflationIndex entries in the Conventions, the \p conventions 
     should be passed here. If not, the default \c nullptr parameter will be sufficient.
 */
-void amendInflationFixingDates(std::map<std::string, std::set<QuantLib::Date>>& fixings,
-    const boost::shared_ptr<Conventions>& conventions = nullptr);
+void amendInflationFixingDates(std::map<std::string, std::set<QuantLib::Date>>& fixings);
 
 /*! Add index and fixing date pairs to \p fixings that will be potentially needed to build a TodaysMarket.
 
@@ -251,7 +270,7 @@ void amendInflationFixingDates(std::map<std::string, std::set<QuantLib::Date>>& 
     The original \p fixings map may be empty.
 */
 void addMarketFixingDates(std::map<std::string, std::set<QuantLib::Date>>& fixings,
-                          const TodaysMarketParameters& mktParams, const Conventions& conventions,
+                          const TodaysMarketParameters& mktParams,
                           const QuantLib::Period& iborLookback = 5 * QuantLib::Days,
                           const QuantLib::Period& oisLookback = 4 * QuantLib::Months,
                           const QuantLib::Period& bmaLookback = 2 * QuantLib::Weeks,

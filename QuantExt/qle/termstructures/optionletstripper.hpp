@@ -42,46 +42,49 @@ class OptionletStripper : public StrippedOptionletBase {
 public:
     //! \name StrippedOptionletBase interface
     //@{
-    const std::vector<Rate>& optionletStrikes(Size i) const;
-    const std::vector<Volatility>& optionletVolatilities(Size i) const;
+    const std::vector<Rate>& optionletStrikes(Size i) const override;
+    const std::vector<Volatility>& optionletVolatilities(Size i) const override;
 
-    const std::vector<Date>& optionletFixingDates() const;
-    const std::vector<Time>& optionletFixingTimes() const;
-    Size optionletMaturities() const;
+    const std::vector<Date>& optionletFixingDates() const override;
+    const std::vector<Time>& optionletFixingTimes() const override;
+    Size optionletMaturities() const override;
 
-    const std::vector<Rate>& atmOptionletRates() const;
+    const std::vector<Rate>& atmOptionletRates() const override;
 
-    DayCounter dayCounter() const;
-    Calendar calendar() const;
-    Natural settlementDays() const;
-    BusinessDayConvention businessDayConvention() const;
+    DayCounter dayCounter() const override;
+    Calendar calendar() const override;
+    Natural settlementDays() const override;
+    BusinessDayConvention businessDayConvention() const override;
     //@}
 
     const std::vector<Period>& optionletFixingTenors() const;
     const std::vector<Date>& optionletPaymentDates() const;
     const std::vector<Time>& optionletAccrualPeriods() const;
     ext::shared_ptr<CapFloorTermVolSurface> termVolSurface() const;
-    ext::shared_ptr<IborIndex> iborIndex() const;
-    Real displacement() const;
-    VolatilityType volatilityType() const;
+    ext::shared_ptr<IborIndex> index() const;
+    Real displacement() const override;
+    VolatilityType volatilityType() const override;
+
+    const Period& rateComputationPeriod() const;
 
 protected:
-    OptionletStripper(const ext::shared_ptr<QuantExt::CapFloorTermVolSurface>&,
-                      const ext::shared_ptr<IborIndex>& iborIndex_,
+    // if index is OIS, rateComputationPeriod must be provided, for Ibor it is derived from the index tenor
+    OptionletStripper(const ext::shared_ptr<QuantExt::CapFloorTermVolSurface>&, const ext::shared_ptr<IborIndex>& index,
                       const Handle<YieldTermStructure>& discount = Handle<YieldTermStructure>(),
-                      const VolatilityType type = ShiftedLognormal, const Real displacement = 0.0);
+                      const VolatilityType type = ShiftedLognormal, const Real displacement = 0.0,
+                      const Period& rateComputationPeriod = 0 * Days, const Size onCapSettlementDays = 0);
 
     //! Method to populate the dates, times and accruals that can be overridden in derived classes
     virtual void populateDates() const;
 
     ext::shared_ptr<CapFloorTermVolSurface> termVolSurface_;
-    ext::shared_ptr<IborIndex> iborIndex_;
+    ext::shared_ptr<IborIndex> index_;
     Handle<YieldTermStructure> discount_;
     Size nStrikes_;
     Size nOptionletTenors_;
 
     mutable std::vector<std::vector<Rate> > optionletStrikes_;
-    mutable std::vector<std::vector<Volatility> > optionletVolatilities_;
+    mutable std::vector<std::vector<Volatility>> optionletVolatilities_;
 
     mutable std::vector<Time> optionletTimes_;
     mutable std::vector<Date> optionletDates_;
@@ -93,6 +96,8 @@ protected:
     std::vector<Period> capFloorLengths_;
     const VolatilityType volatilityType_;
     const Real displacement_;
+    const Period rateComputationPeriod_;
+    const Size onCapSettlementDays_;
 };
 
 } // namespace QuantExt

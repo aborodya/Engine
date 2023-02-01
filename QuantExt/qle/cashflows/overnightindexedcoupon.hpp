@@ -101,17 +101,24 @@ public:
     const Period& lookback() const { return lookback_; }
     //! rate cutoff
     Natural rateCutoff() const { return rateCutoff_; }
+    //! rate computation start date
+    const Date& rateComputationStartDate() const { return rateComputationStartDate_; }
+    //! rate computation end date
+    const Date& rateComputationEndDate() const { return rateComputationEndDate_; }
+    //! the underlying index
+    const ext::shared_ptr<OvernightIndex>& overnightIndex() const { return overnightIndex_; }
     //@}
     //! \name FloatingRateCoupon interface
     //@{
     //! the date when the coupon is fully determined
-    Date fixingDate() const { return fixingDates_[fixingDates_.size() - 1 - rateCutoff_]; }
+    Date fixingDate() const override { return fixingDates_[fixingDates_.size() - 1 - rateCutoff_]; }
     //@}
     //! \name Visitability
     //@{
-    void accept(AcyclicVisitor&);
+    void accept(AcyclicVisitor&) override;
     //@}
 private:
+    boost::shared_ptr<OvernightIndex> overnightIndex_;
     std::vector<Date> valueDates_, fixingDates_;
     mutable std::vector<Rate> fixings_;
     Size n_;
@@ -120,6 +127,25 @@ private:
     Period lookback_;
     Natural rateCutoff_;
     Date rateComputationStartDate_, rateComputationEndDate_;
+};
+
+//! OvernightIndexedCoupon pricer
+class OvernightIndexedCouponPricer : public FloatingRateCouponPricer {
+public:
+    void initialize(const FloatingRateCoupon& coupon) override;
+    void compute() const;
+    Rate swapletRate() const override;
+    Rate effectiveSpread() const;
+    Rate effectiveIndexFixing() const;
+    Real swapletPrice() const override { QL_FAIL("swapletPrice not available"); }
+    Real capletPrice(Rate) const override { QL_FAIL("capletPrice not available"); }
+    Rate capletRate(Rate) const override { QL_FAIL("capletRate not available"); }
+    Real floorletPrice(Rate) const override { QL_FAIL("floorletPrice not available"); }
+    Rate floorletRate(Rate) const override { QL_FAIL("floorletRate not available"); }
+
+protected:
+    const OvernightIndexedCoupon* coupon_;
+    mutable Real swapletRate_, effectiveSpread_, effectiveIndexFixing_;
 };
 
 //! capped floored overnight indexed coupon
@@ -131,6 +157,15 @@ public:
                                         Real cap = Null<Real>(), Real floor = Null<Real>(), bool nakedOption = false,
                                         bool localCapFloor = false);
 
+    //! \name Observer interface
+    //@{
+    void deepUpdate() override;
+    //@}
+    //! \name LazyObject interface
+    //@{
+    void performCalculations() const override;
+    void alwaysForwardNotifications() override;
+    //@}
     //! \name Coupon interface
     //@{
     Rate rate() const override;
@@ -148,10 +183,6 @@ public:
     Rate effectiveCap() const;
     //! effective floor of fixing
     Rate effectiveFloor() const;
-    //@}
-    //! \name Observer interface
-    //@{
-    void update() override;
     //@}
     //! \name Visitability
     //@{

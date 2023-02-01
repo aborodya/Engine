@@ -1,5 +1,6 @@
 /*
  Copyright (C) 2019 Quaternion Risk Management Ltd
+ Copyright (C) 2022 Skandinaviska Enskilda Banken AB (publ)
  All rights reserved.
 
  This file is part of ORE, a free-software/open-source library
@@ -40,7 +41,7 @@ using namespace QuantLib;
 class InterpolatedSmileSection : public FxSmileSection {
 public:
     //! Supported interpolation methods
-    enum class InterpolationMethod { Linear, NaturalCubic, FinancialCubic };
+    enum class InterpolationMethod { Linear, NaturalCubic, FinancialCubic, CubicSpline };
 
     //! ctor
     InterpolatedSmileSection(Real spot, Real rd, Real rf, Time t, const std::vector<Real>& strikes,
@@ -100,16 +101,16 @@ public:
 
     //! \name TermStructure interface
     //@{
-    Date maxDate() const { return Date::maxDate(); }
+    Date maxDate() const override { return Date::maxDate(); }
     //@}
     //! \name VolatilityTermStructure interface
     //@{
-    Real minStrike() const { return 0; }
-    Real maxStrike() const { return QL_MAX_REAL; }
+    Real minStrike() const override { return 0; }
+    Real maxStrike() const override { return QL_MAX_REAL; }
     //@}
     //! \name Visitability
     //@{
-    virtual void accept(AcyclicVisitor&);
+    virtual void accept(AcyclicVisitor&) override;
     //@}
 
     //! \name Inspectors
@@ -128,7 +129,7 @@ public:
     boost::shared_ptr<FxSmileSection> blackVolSmile(const QuantLib::Date& d) const;
 
 protected:
-    virtual Volatility blackVolImpl(Time t, Real strike) const;
+    virtual Volatility blackVolImpl(Time t, Real strike) const override;
 
 private:
     std::vector<Date> dates_;

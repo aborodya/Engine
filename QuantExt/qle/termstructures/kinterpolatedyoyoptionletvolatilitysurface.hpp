@@ -54,16 +54,16 @@ namespace QuantExt {
            const DayCounter& dc,
            const Period& lag,
            const ext::shared_ptr<YoYCapFloorTermPriceSurface>& capFloorPrices,
-           const ext::shared_ptr<YoYInflationCapFloorEngine>& pricer,
+           const ext::shared_ptr<QuantLib::YoYInflationCapFloorEngine>& pricer,
            const ext::shared_ptr<YoYOptionletStripper>& yoyOptionletStripper,
            const Real slope,
            const Interpolator1D& interpolator = Interpolator1D(),
            VolatilityType volType = ShiftedLognormal,
            Real displacement = 0.0);
 
-        virtual Real minStrike() const;
-        virtual Real maxStrike() const;
-        virtual Date maxDate() const;
+        virtual Real minStrike() const override;
+        virtual Real maxStrike() const override;
+        virtual Date maxDate() const override;
         std::pair<std::vector<Rate>, std::vector<Volatility> > Dslice(
                                                          const Date &d) const;
 
@@ -71,11 +71,11 @@ namespace QuantExt {
         virtual Volatility volatilityImpl(const Date &d,
                                           Rate strike) const;
         virtual Volatility volatilityImpl(Time length,
-                                          Rate strike) const;
+                                          Rate strike) const override;
         virtual void performCalculations() const;
 
         ext::shared_ptr<YoYCapFloorTermPriceSurface> capFloorPrices_;
-        ext::shared_ptr<YoYInflationCapFloorEngine> yoyInflationCouponPricer_;
+        ext::shared_ptr<QuantLib::YoYInflationCapFloorEngine> yoyInflationCouponPricer_;
         ext::shared_ptr<YoYOptionletStripper> yoyOptionletStripper_;
 
         mutable Interpolator1D factory1D_;
@@ -100,7 +100,7 @@ namespace QuantExt {
          const DayCounter& dc,
          const Period &lag,
          const ext::shared_ptr<YoYCapFloorTermPriceSurface> &capFloorPrices,
-         const ext::shared_ptr<YoYInflationCapFloorEngine> &pricer,
+         const ext::shared_ptr<QuantLib::YoYInflationCapFloorEngine> &pricer,
          const ext::shared_ptr<YoYOptionletStripper> &yoyOptionletStripper,
          const Real slope,
          const Interpolator1D &interpolator,

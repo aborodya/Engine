@@ -44,7 +44,6 @@ public:
               const boost::shared_ptr<ore::data::NettingSetManager>& netting,
               const boost::shared_ptr<ore::data::EngineData>& engineData,
               const boost::shared_ptr<ore::data::CurveConfigurations>& curveConfigs,
-              const boost::shared_ptr<ore::data::Conventions>& conventions,
               const boost::shared_ptr<ore::data::TodaysMarketParameters>& todaysMarketParams,
               const boost::shared_ptr<ScenarioSimMarketParameters>& simMarketData,
               const boost::shared_ptr<ScenarioGeneratorData>& scenarioGeneratorData,
@@ -76,7 +75,7 @@ public:
                         const boost::optional<std::set<std::string>>& currencyFilter = boost::none,
                         const bool continueOnErr = true);
 
-    // step 5: build npv, netting cube (opionally filtered on trades) and generate scenario data
+    // step 5: build npv, netting cube (optionally filtered on trades) and generate scenario data
     void buildCube(const boost::optional<std::set<std::string>>& tradeIds, bool continueOnErr = true);
 
     // get generated trade cube from step 5
@@ -132,7 +131,6 @@ protected:
     boost::shared_ptr<ore::data::NettingSetManager> netting_;
     boost::shared_ptr<ore::data::EngineData> engineData_;
     boost::shared_ptr<ore::data::CurveConfigurations> curveConfigs_;
-    boost::shared_ptr<ore::data::Conventions> conventions_;
     boost::shared_ptr<ore::data::TodaysMarketParameters> todaysMarketParams_;
     boost::shared_ptr<ScenarioSimMarketParameters> simMarketData_;
     boost::shared_ptr<ScenarioGeneratorData> scenarioGeneratorData_;

@@ -51,32 +51,23 @@ namespace {
 class MarketDataLoader : public Loader {
 public:
     MarketDataLoader();
-    const std::vector<boost::shared_ptr<MarketDatum>>& loadQuotes(const QuantLib::Date&) const;
-    const boost::shared_ptr<MarketDatum>& get(const std::string& name, const QuantLib::Date&) const;
-    const std::vector<Fixing>& loadFixings() const { return fixings_; }
-    const std::vector<Fixing>& loadDividends() const { return dividends_; }
+    std::vector<boost::shared_ptr<MarketDatum>> loadQuotes(const QuantLib::Date&) const override;
+    std::set<Fixing> loadFixings() const override { return fixings_; }
+    std::set<Fixing> loadDividends() const override { return dividends_; }
     void add(QuantLib::Date date, const string& name, QuantLib::Real value) {}
     void addFixing(QuantLib::Date date, const string& name, QuantLib::Real value) {}
     void addDividend(QuantLib::Date date, const string& name, QuantLib::Real value) {}
 
 private:
     std::map<QuantLib::Date, std::vector<boost::shared_ptr<MarketDatum>>> data_;
-    std::vector<Fixing> fixings_;
-    std::vector<Fixing> dividends_;
+    std::set<Fixing> fixings_;
+    std::set<Fixing> dividends_;
 };
 
-const vector<boost::shared_ptr<MarketDatum>>& MarketDataLoader::loadQuotes(const Date& d) const {
+vector<boost::shared_ptr<MarketDatum>> MarketDataLoader::loadQuotes(const Date& d) const {
     auto it = data_.find(d);
     QL_REQUIRE(it != data_.end(), "Loader has no data for date " << d);
     return it->second;
-}
-
-const boost::shared_ptr<MarketDatum>& MarketDataLoader::get(const string& name, const Date& d) const {
-    for (auto& md : loadQuotes(d)) {
-        if (md->name() == name)
-            return md;
-    }
-    QL_FAIL("No MarketDatum for name " << name << " and date " << d);
 }
 
 MarketDataLoader::MarketDataLoader() {
@@ -711,7 +702,7 @@ boost::shared_ptr<CurveConfigurations> curveConfigurations() {
     configs->swaptionVolCurveConfig("USD_SW_LN") = boost::make_shared<SwaptionVolatilityCurveConfig>(
         "USD_SW_LN", "USD Lognormal swaption volatilities", SwaptionVolatilityCurveConfig::Dimension::ATM,
         SwaptionVolatilityCurveConfig::VolatilityType::Lognormal, extrapolate, flatExtrapolate, optionTenors,
-        swapTenors, dayCounter, UnitedStates(), bdc, "USD-CMS-1Y", "USD-CMS-30Y");
+        swapTenors, dayCounter, UnitedStates(UnitedStates::Settlement), bdc, "USD-CMS-1Y", "USD-CMS-30Y");
 
     // Capfloor volatility structure tenors and strikes
     vector<string> capTenors{"1Y", "2Y", "5Y", "7Y", "10Y"};
@@ -720,8 +711,8 @@ boost::shared_ptr<CurveConfigurations> curveConfigurations() {
     // USD Lognormal capfloor volatility "curve" configuration
     configs->capFloorVolCurveConfig("USD_CF_LN") = boost::make_shared<CapFloorVolatilityCurveConfig>(
         "USD_CF_LN", "USD Lognormal capfloor volatilities", CapFloorVolatilityCurveConfig::VolatilityType::Lognormal,
-        extrapolate, false, false, capTenors, strikes, dayCounter, 0, UnitedStates(), bdc, "USD-LIBOR-3M",
-        "Yield/USD/USD1D");
+        extrapolate, false, false, capTenors, strikes, dayCounter, 0, UnitedStates(UnitedStates::Settlement), bdc,
+        "USD-LIBOR-3M", 3 * Months, 0, "Yield/USD/USD1D");
 
     vector<string> optionTenors2{"1Y"};
 
@@ -730,7 +721,7 @@ boost::shared_ptr<CurveConfigurations> curveConfigurations() {
     configs->correlationCurveConfig("EUR-CORR") = boost::make_shared<CorrelationCurveConfig>(
         "EUR-CORR", "EUR CMS Correlations", CorrelationCurveConfig::Dimension::Constant,
         CorrelationCurveConfig::CorrelationType::CMSSpread, "EUR-CMS-1Y-10Y-CONVENTION",
-        MarketDatum::QuoteType::RATE, extrapolate, optionTenors2, dayCounter, UnitedStates(), bdc,
+        MarketDatum::QuoteType::RATE, extrapolate, optionTenors2, dayCounter, UnitedStates(UnitedStates::Settlement), bdc,
         "EUR-CMS-10Y", "EUR-CMS-2Y", "EUR");
     configs->correlationCurveConfig("USD-CORR") = boost::make_shared<CorrelationCurveConfig>(
         "USD-CORR", "USD CMS Correlations", CorrelationCurveConfig::Dimension::ATM,
@@ -754,10 +745,10 @@ boost::shared_ptr<CurveConfigurations> curveConfigurations() {
 
     vector<string> eqVolQuotes = {"EQUITY_OPTION/RATE_LNVOL/SP5/USD/1Y/ATMF",
                                   "EQUITY_OPTION/RATE_LNVOL/SP5/USD/2018-02-26/ATMF"};
-    boost::shared_ptr<VolatilityCurveConfig> vcc =
-        boost::make_shared<VolatilityCurveConfig>(eqVolQuotes, "Flat", "Flat");
+    vector<boost::shared_ptr<VolatilityConfig>> vcc;
+    vcc.push_back(boost::make_shared<VolatilityCurveConfig>(eqVolQuotes, "Flat", "Flat"));
 
-    configs->equityVolCurveConfig("SP5") = boost::make_shared<EquityVolatilityCurveConfig>("SP5", "", "USD", vcc);
+    configs->equityVolCurveConfig("SP5") = boost::make_shared<EquityVolatilityCurveConfig>("SP5", "", "USD", vcc, "A365", "USD");
 
     // clang-format off
     vector<string> commodityQuotes{
@@ -790,8 +781,10 @@ public:
         auto configs = curveConfigurations();
         auto convs = conventions();
 
+        ore::data::InstrumentConventions::instance().setConventions(convs);
+
         BOOST_TEST_MESSAGE("Creating TodaysMarket Instance");
-        market = boost::make_shared<TodaysMarket>(asof, params, loader, configs, convs);
+        market = boost::make_shared<TodaysMarket>(asof, params, loader, configs);
     }
 
     ~F() {
@@ -939,7 +932,7 @@ BOOST_AUTO_TEST_CASE(testCommodityCurve) {
 
     BOOST_TEST_MESSAGE("Testing commodity price curve");
 
-    // Just test that the building suceeded - the curve itself has been tested elsewhere
+    // Just test that the building succeeded - the curve itself has been tested elsewhere
     Handle<PriceTermStructure> commodityCurve = market->commodityPriceCurve("COMDTY_GOLD_USD");
     BOOST_CHECK(*commodityCurve);
 }
@@ -948,7 +941,7 @@ BOOST_AUTO_TEST_CASE(testCorrelationCurve) {
 
     BOOST_TEST_MESSAGE("Testing correlation curve");
 
-    // Just test that the building suceeded - the curve itself has been tested elsewhere
+    // Just test that the building succeeded - the curve itself has been tested elsewhere
     Handle<QuantExt::CorrelationTermStructure> correlationCurve1 =
         market->correlationCurve("EUR-CMS-10Y", "EUR-CMS-2Y");
     Handle<QuantExt::CorrelationTermStructure> correlationCurve2 =

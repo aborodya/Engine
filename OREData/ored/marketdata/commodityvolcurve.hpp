@@ -27,6 +27,7 @@
 #include <ored/configuration/curveconfigurations.hpp>
 #include <ored/marketdata/commoditycurve.hpp>
 #include <ored/marketdata/curvespec.hpp>
+#include <ored/marketdata/fxvolcurve.hpp>
 #include <ored/marketdata/loader.hpp>
 #include <ored/marketdata/yieldcurve.hpp>
 #include <ql/termstructures/volatility/equityfx/blackvoltermstructure.hpp>
@@ -47,10 +48,13 @@ public:
 
     //! Detailed constructor
     CommodityVolCurve(const QuantLib::Date& asof, const CommodityVolatilityCurveSpec& spec, const Loader& loader,
-                      const CurveConfigurations& curveConfigs, const Conventions& conventions,
+                      const CurveConfigurations& curveConfigs,
                       const std::map<std::string, boost::shared_ptr<YieldCurve>>& yieldCurves = {},
                       const std::map<std::string, boost::shared_ptr<CommodityCurve>>& commodityCurves = {},
-                      const std::map<std::string, boost::shared_ptr<CommodityVolCurve>>& commodityVolCurves = {});
+                      const std::map<std::string, boost::shared_ptr<CommodityVolCurve>>& commodityVolCurves = {},
+                      const map<string, boost::shared_ptr<FXVolCurve>>& fxVolCurves = {},
+                      const map<string, boost::shared_ptr<CorrelationCurve>>& correlationCurves = {},
+                      const Market* fxIndices = nullptr);
     //@}
 
     //! \name Inspectors
@@ -71,11 +75,11 @@ private:
     QuantLib::Handle<QuantExt::PriceTermStructure> pts_;
     QuantLib::Handle<QuantLib::YieldTermStructure> yts_;
 
-    //! Build a volatility structure from a single constant volatlity quote
+    //! Build a volatility structure from a single constant volatility quote
     void buildVolatility(const QuantLib::Date& asof, const CommodityVolatilityConfig& vc,
                          const ConstantVolatilityConfig& cvc, const Loader& loader);
 
-    //! Build a volatility curve from a 1-D curve of volatlity quotes
+    //! Build a volatility curve from a 1-D curve of volatility quotes
     void buildVolatility(const QuantLib::Date& asof, const CommodityVolatilityConfig& vc,
                          const VolatilityCurveConfig& vcc, const Loader& loader);
 
@@ -109,7 +113,16 @@ private:
     void buildVolatility(const QuantLib::Date& asof, CommodityVolatilityConfig& vc,
                          const VolatilityApoFutureSurfaceConfig& vapo,
                          const QuantLib::Handle<QuantLib::BlackVolTermStructure>& baseVts,
-                         const QuantLib::Handle<QuantExt::PriceTermStructure>& basePts, const Conventions& conventions);
+                         const QuantLib::Handle<QuantExt::PriceTermStructure>& basePts);
+
+    //! Build a volatility surface as a proxy from another volatility surface
+    void buildVolatility(const QuantLib::Date& asof, const CommodityVolatilityCurveSpec& spec,
+                         const CurveConfigurations& curveConfigs, const ProxyVolatilityConfig& pvc,
+                         const map<string, boost::shared_ptr<CommodityCurve>>& comCurves,
+                         const map<string, boost::shared_ptr<CommodityVolCurve>>& volCurves,
+                         const map<string, boost::shared_ptr<FXVolCurve>>& fxVolCurves,
+                         const map<string, boost::shared_ptr<CorrelationCurve>>& correlationCurves,
+                         const Market* fxIndices = nullptr);
 
     /*! Assume that the input price curve \p pts is a future price curve giving the price of a sequence of future
         contracts at the contract expiry. Create a copy of this input curve with additional pillar points at

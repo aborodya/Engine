@@ -27,7 +27,6 @@
 #include <ored/configuration/curveconfigurations.hpp>
 #include <ored/marketdata/correlationcurve.hpp>
 #include <ored/marketdata/curvespec.hpp>
-#include <ored/marketdata/fxspot.hpp>
 #include <ored/marketdata/fxtriangulation.hpp>
 #include <ored/marketdata/loader.hpp>
 #include <ored/marketdata/yieldcurve.hpp>
@@ -39,13 +38,6 @@ namespace data {
 using ore::data::CurveConfigurations;
 using QuantLib::BlackVolTermStructure;
 using QuantLib::Date;
-
-// to get FX quote from container (map or FXTriangulation)
-class FXLookup {
-public:
-    virtual ~FXLookup() {}
-    virtual Handle<Quote> fxPairLookup(const string& fxPair) const = 0;
-};
 
 //! Wrapper class for building FX volatility structures
 /*!
@@ -59,18 +51,11 @@ public:
     FXVolCurve() {}
     //! Detailed constructor
     FXVolCurve(Date asof, FXVolatilityCurveSpec spec, const Loader& loader, const CurveConfigurations& curveConfigs,
-               const std::map<string, boost::shared_ptr<FXSpot>>& fxSpots,
-               const std::map<string, boost::shared_ptr<YieldCurve>>& yieldCurves,
-               const std::map<string, boost::shared_ptr<FXVolCurve>>& fxVols,
-               const map<string, boost::shared_ptr<CorrelationCurve>>& correlationCurves,
-               const Conventions& conventions);
-    //! Detailed constructor
-    FXVolCurve(Date asof, FXVolatilityCurveSpec spec, const Loader& loader, const CurveConfigurations& curveConfigs,
                const ore::data::FXTriangulation& fxSpots,
                const std::map<string, boost::shared_ptr<YieldCurve>>& yieldCurves,
                const std::map<string, boost::shared_ptr<FXVolCurve>>& fxVols,
                const map<string, boost::shared_ptr<CorrelationCurve>>& correlationCurves,
-               const Conventions& conventions);
+               const bool buildCalibrationInfo);
     //@}
 
     //! \name Inspectors
@@ -101,32 +86,29 @@ private:
     boost::shared_ptr<FxEqVolCalibrationInfo> calibrationInfo_;
 
     void init(Date asof, FXVolatilityCurveSpec spec, const Loader& loader, const CurveConfigurations& curveConfigs,
-              const FXLookup& fxSpots, const map<string, boost::shared_ptr<YieldCurve>>& yieldCurves,
+              const FXTriangulation& fxSpots, const map<string, boost::shared_ptr<YieldCurve>>& yieldCurves,
               const std::map<string, boost::shared_ptr<FXVolCurve>>& fxVols,
               const map<string, boost::shared_ptr<CorrelationCurve>>& correlationCurves,
-              const Conventions& conventions);
+              const bool buildCalibrationInfo);
 
     void buildATMTriangulated(Date asof, FXVolatilityCurveSpec spec, const Loader& loader,
-                              boost::shared_ptr<FXVolatilityCurveConfig> config, const FXLookup& fxSpots,
+                              boost::shared_ptr<FXVolatilityCurveConfig> config, const FXTriangulation& fxSpots,
                               const map<string, boost::shared_ptr<YieldCurve>>& yieldCurves,
                               const std::map<std::string, boost::shared_ptr<FXVolCurve>>& fxVols,
-                              const map<string, boost::shared_ptr<CorrelationCurve>>& correlationCurves,
-                              const Conventions& conventions);
+                              const map<string, boost::shared_ptr<CorrelationCurve>>& correlationCurves);
 
     void buildSmileDeltaCurve(Date asof, FXVolatilityCurveSpec spec, const Loader& loader,
-                              boost::shared_ptr<FXVolatilityCurveConfig> config, const FXLookup& fxSpots,
-                              const map<string, boost::shared_ptr<YieldCurve>>& yieldCurves,
-                              const Conventions& conventions);
+                              boost::shared_ptr<FXVolatilityCurveConfig> config, const FXTriangulation& fxSpots,
+                              const map<string, boost::shared_ptr<YieldCurve>>& yieldCurves);
 
     void buildSmileBfRrCurve(Date asof, FXVolatilityCurveSpec spec, const Loader& loader,
-                             boost::shared_ptr<FXVolatilityCurveConfig> config, const FXLookup& fxSpots,
-                             const map<string, boost::shared_ptr<YieldCurve>>& yieldCurves,
-                             const Conventions& conventions);
+                             boost::shared_ptr<FXVolatilityCurveConfig> config, const FXTriangulation& fxSpots,
+                             const map<string, boost::shared_ptr<YieldCurve>>& yieldCurves);
 
     void buildVannaVolgaOrATMCurve(Date asof, FXVolatilityCurveSpec spec, const Loader& loader,
-                                   boost::shared_ptr<FXVolatilityCurveConfig> config, const FXLookup& fxSpots,
-                                   const map<string, boost::shared_ptr<YieldCurve>>& yieldCurves,
-                                   const Conventions& conventions);
+                                   boost::shared_ptr<FXVolatilityCurveConfig> config, const FXTriangulation& fxSpots,
+                                   const map<string, boost::shared_ptr<YieldCurve>>& yieldCurves);
+
 };
 } // namespace data
 } // namespace ore

@@ -75,7 +75,7 @@ protected:
                 vol->enableExtrapolation();
             }
             return boost::make_shared<QuantLib::GeneralizedBlackScholesProcess>(
-                this->market_->fxSpot(ccyPairCode, config), this->market_->discountCurve(assetName, config),
+                this->market_->fxRate(ccyPairCode, config), this->market_->discountCurve(assetName, config),
                 this->market_->discountCurve(ccy.code(), config), vol);
 
         } else if (assetClassUnderlying == AssetClass::COM) {
@@ -227,16 +227,15 @@ protected:
         // We follow the way FdBlackScholesBarrierEngine determines maturity for time grid generation
         Handle<YieldTermStructure> riskFreeRate =
             market_->discountCurve(ccy.code(), configuration(ore::data::MarketContext::pricing));
-        Time expiry = riskFreeRate->dayCounter().yearFraction(riskFreeRate->referenceDate(), expiryDate);
-        QL_REQUIRE(expiry > 0.0, "FdBlackScholesVanillaEngine expects a positive time to expiry but got "
-                                     << expiry << " for an expiry date " << io::iso_date(expiryDate) << ".");
+        Time expiry = riskFreeRate->dayCounter().yearFraction(riskFreeRate->referenceDate(),
+                                                              std::max(riskFreeRate->referenceDate(), expiryDate));
 
         FdmSchemeDesc scheme = parseFdmSchemeDesc(engineParameter("Scheme"));
         Size tGrid = (Size)(parseInteger(engineParameter("TimeGridPerYear")) * expiry);
         Size xGrid = parseInteger(engineParameter("XGrid"));
         Size dampingSteps = parseInteger(engineParameter("DampingSteps"));
-        bool monotoneVar = parseBool(engineParameter("EnforceMonotoneVariance", "", false, "true"));
-        Size tGridMin = parseInteger(engineParameter("TimeGridMinimumSize", "", false, "1"));
+        bool monotoneVar = parseBool(engineParameter("EnforceMonotoneVariance", {}, false, "true"));
+        Size tGridMin = parseInteger(engineParameter("TimeGridMinimumSize", {}, false, "1"));
         tGrid = std::max(tGridMin, tGrid);
         
         boost::shared_ptr<QuantLib::GeneralizedBlackScholesProcess> gbsp;

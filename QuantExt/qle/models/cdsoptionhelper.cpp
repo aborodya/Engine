@@ -18,8 +18,8 @@
 
 #include <qle/models/cdsoptionhelper.hpp>
 #include <qle/pricingengines/blackcdsoptionengine.hpp>
-#include <qle/pricingengines/midpointcdsengine.hpp>
 
+#include <ql/pricingengines/credit/midpointcdsengine.hpp>
 #include <ql/exercise.hpp>
 #include <ql/quotes/simplequote.hpp>
 #include <ql/termstructures/volatility/equityfx/blackconstantvol.hpp>
@@ -56,7 +56,7 @@ CdsOptionHelper::CdsOptionHelper(const Date& exerciseDate, const Handle<Quote>& 
                                   protectionPaymentTime, protectionStart, upfrontDate, claim));
     tmp->setPricingEngine(cdsEngine);
 
-    Real strike = spread == Null<Real>() ? tmp->fairSpread() : spread;
+    Real strike = spread == Null<Real>() ? tmp->fairSpreadClean() : spread;
     if (upfront == Null<Real>())
         cds_ = boost::shared_ptr<CreditDefaultSwap>(
             new CreditDefaultSwap(side, 1.0, strike, schedule, paymentConvention, dayCounter, settlesAccrual,
@@ -74,7 +74,8 @@ CdsOptionHelper::CdsOptionHelper(const Date& exerciseDate, const Handle<Quote>& 
     Handle<BlackVolTermStructure> h(
         boost::make_shared<BlackConstantVol>(0, NullCalendar(), Handle<Quote>(blackVol_), Actual365Fixed()));
 
-    blackEngine_ = boost::make_shared<BlackCdsOptionEngine>(probability, recoveryRate, termStructure, h);
+    blackEngine_ = boost::make_shared<BlackCdsOptionEngine>(
+        probability, recoveryRate, termStructure, Handle<CreditVolCurve>(boost::make_shared<CreditVolCurveWrapper>(h)));
 }
 
 Real CdsOptionHelper::modelValue() const {

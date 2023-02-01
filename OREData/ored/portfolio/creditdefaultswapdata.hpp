@@ -27,7 +27,7 @@
 #include <ored/portfolio/legdata.hpp>
 #include <ored/portfolio/trade.hpp>
 
-#include <qle/instruments/creditdefaultswap.hpp>
+#include <ql/instruments/creditdefaultswap.hpp>
 
 namespace ore {
 namespace data {
@@ -41,6 +41,34 @@ std::ostream& operator<<(std::ostream& out, const CdsTier& cdsTier);
 enum class CdsDocClause { CR, MM, MR, XR, CR14, MM14, MR14, XR14 };
 CdsDocClause parseCdsDocClause(const std::string& s);
 std::ostream& operator<<(std::ostream& out, const CdsDocClause& cdsDocClause);
+
+// TODO refactor to creditevents.hpp
+//! ISDA CDS documentation rules set enumeration
+enum class IsdaRulesDefinitions { y2003 = 2003, y2014 = 2014 };
+IsdaRulesDefinitions parseIsdaRulesDefinitions(const std::string& s);
+std::ostream& operator<<(std::ostream& out, const CdsDocClause& cdsDocClause);
+IsdaRulesDefinitions isdaRulesDefinitionsFromDocClause(const CdsDocClause& cdsDocClause);
+
+//! ISDA credit event types enumeration
+enum class CreditEventType {
+    BANKRUPTCY,
+    FAILURE_TO_PAY,
+    RESTRUCTURING,
+    OBLIGATION_ACCELERATION,
+    OBLIGATION_DEFAULT,
+    REPUDIATION_MORATORIUM,
+    GOVERNMENTAL_INTERVENTION
+};
+CreditEventType parseCreditEventType(const std::string& s);
+std::ostream& operator<<(std::ostream& out, const CreditEventType& creditEventType);
+bool isTriggeredDocClause(CdsDocClause contractDocClause, CreditEventType creditEventType);
+
+//! ISDA credit event seniority sets enumeration
+enum class CreditEventTiers { SNR, SUB, SNRLAC, SNR_SUB, SNR_SNRLAC, SUB_SNRLAC, SNR_SUB_SNRLAC };
+CreditEventTiers parseCreditEventTiers(const std::string& s);
+std::ostream& operator<<(std::ostream& out, const CreditEventTiers& creditEventTiers);
+bool isAuctionedSeniority(CdsTier contractTier, CreditEventTiers creditEventTiers);
+// end TODO refactor to creditevents.hpp
 
 /*! Serializable reference information
     \ingroup tradedata
@@ -106,7 +134,7 @@ public:
     //! Default constructor
     CreditDefaultSwapData();
 
-    using PPT = QuantExt::CreditDefaultSwap::ProtectionPaymentTime;
+    using PPT = QuantLib::CreditDefaultSwap::ProtectionPaymentTime;
 
     //! Constructor that takes an explicit \p creditCurveId
     CreditDefaultSwapData(const string& issuerId, const string& creditCurveId, const LegData& leg,
@@ -117,7 +145,8 @@ public:
                           QuantLib::Real recoveryRate = QuantLib::Null<QuantLib::Real>(),
                           const std::string& referenceObligation = "",
                           const Date& tradeDate = Date(),
-                          const std::string& cashSettlementDays = "");
+                          const std::string& cashSettlementDays = "",
+			  const bool rebatesAccrual = true);
 
     //! Constructor that takes a \p referenceInformation object
     CreditDefaultSwapData(const std::string& issuerId, const CdsReferenceInformation& referenceInformation,
@@ -129,7 +158,8 @@ public:
                           QuantLib::Real recoveryRate = QuantLib::Null<QuantLib::Real>(),
                           const std::string& referenceObligation = "",
                           const Date& tradeDate = Date(),
-                          const std::string& cashSettlementDays = "");
+                          const std::string& cashSettlementDays = "",
+			  const bool rebatesAccrual = true);
 
     void fromXML(XMLNode* node) override;
     XMLNode* toXML(XMLDocument& doc) override;
@@ -142,6 +172,7 @@ public:
     const Date& protectionStart() const { return protectionStart_; }
     const Date& upfrontDate() const { return upfrontDate_; }
     Real upfrontFee() const { return upfrontFee_; }
+    bool rebatesAccrual() const { return rebatesAccrual_; }
 
     /*! If the CDS is a fixed recovery CDS, this returns the recovery rate.
         For a standard CDS, it returns Null<Real>().
@@ -171,6 +202,7 @@ private:
     QuantLib::Date protectionStart_;
     QuantLib::Date upfrontDate_;
     QuantLib::Real upfrontFee_;
+    bool rebatesAccrual_;
 
     //! Populated if the CDS is a fixed recovery rate CDS, otherwise \c Null<Real>()
     QuantLib::Real recoveryRate_;

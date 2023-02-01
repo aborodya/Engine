@@ -20,10 +20,15 @@
 #include <ored/portfolio/legdata.hpp>
 #include <ored/portfolio/referencedata.hpp>
 #include <ored/utilities/log.hpp>
+#include <ored/utilities/marketdata.hpp>
 #include <ored/utilities/parsers.hpp>
 
 #include <ql/math/comparison.hpp>
 #include <ql/math/matrix.hpp>
+
+#include <qle/utilities/interpolation.hpp>
+#include <qle/utilities/time.hpp>
+#include <qle/math/flatextrapolation2d.hpp>
 
 using namespace QuantLib;
 using namespace std;
@@ -59,8 +64,8 @@ BaseCorrelationCurve::BaseCorrelationCurve(
 
         const auto& config = *curveConfigs.baseCorrelationCurveConfig(spec_.curveConfigID());
 
-        // The base correlation surface is of the form term x detachment point. We need at least two detachment points 
-        // and at least one term. The list of terms may be explicit or contain a single wildcard character '*'. 
+        // The base correlation surface is of the form term x detachment point. We need at least two detachment points
+        // and at least one term. The list of terms may be explicit or contain a single wildcard character '*'.
         // Similarly, the list of detachment points may be explicit or contain a single wildcard character '*'.
 
         // Terms
@@ -87,8 +92,8 @@ BaseCorrelationCurve::BaseCorrelationCurve(
         const vector<string>& dpStrs = config.detachmentPoints();
         bool dpsWc = find(dpStrs.begin(), dpStrs.end(), "*") != dpStrs.end();
         if (dpsWc) {
-            QL_REQUIRE(dpStrs.size() == 1, "BaseCorrelationCurve: only one wild card " <<
-                "detachment point can be specified.");
+            QL_REQUIRE(dpStrs.size() == 1, "BaseCorrelationCurve: only one wild card "
+                                               << "detachment point can be specified.");
             DLOG("Have detachment point wildcard pattern " << dpStrs[0]);
         } else {
             for (const string& dpStr : dpStrs) {
@@ -98,7 +103,7 @@ BaseCorrelationCurve::BaseCorrelationCurve(
             QL_REQUIRE(dps.size() > 1, "BaseCorrelationCurve: need at least 2 unique detachment points.");
         }
 
-        // Read in quotes relevant for the base correlation surface. The points that will be used are stored in data 
+        // Read in quotes relevant for the base correlation surface. The points that will be used are stored in data
         // where the key is the term, detachment point pair and value is the base correlation quote.
         auto mpCmp = [](pair<Period, Real> k_1, pair<Period, Real> k_2) {
             if (k_1.first != k_2.first)
@@ -108,23 +113,22 @@ BaseCorrelationCurve::BaseCorrelationCurve(
         };
         map<pair<Period, Real>, Handle<Quote>, decltype(mpCmp)> data(mpCmp);
 
-        for (const boost::shared_ptr<MarketDatum>& md : loader.loadQuotes(asof)) {
+        std::ostringstream ss;
+        ss << MarketDatum::InstrumentType::CDS_INDEX << "/" << MarketDatum::QuoteType::BASE_CORRELATION << "/*";
+        Wildcard w(ss.str());
+        for (const auto& md : loader.get(w, asof)) {
 
-            // Go to next quote if the market data point's date does not equal to asof.
-            if (md->asofDate() != asof)
-                continue;
+            QL_REQUIRE(md->asofDate() == asof, "MarketDatum asofDate '" << md->asofDate() << "' <> asof '" << asof << "'");
 
-            // Go to next quote if not a base correlation quote.
             auto q = boost::dynamic_pointer_cast<BaseCorrelationQuote>(md);
-            if (!q)
-                continue;
+            QL_REQUIRE(q, "Internal error: could not downcast MarketDatum '" << md->name() << "' to BaseCorrelationQuote");
 
             // Go to next quote if index name in the quote does not match the cds vol configuration name.
             if (config.quoteName() != q->cdsIndexName())
                 continue;
 
             TLOG("Processing quote " << q->name() << ": (" << q->term() << "," << fixed << setprecision(9)
-                << q->detachmentPoint() << "," << q->quote()->value() << ")");
+                                     << q->detachmentPoint() << "," << q->quote()->value() << ")");
 
             // If we have been given a list of explicit terms, check that the quote matches one of them.
             // Move to the next quote if it does not.
@@ -145,8 +149,9 @@ BaseCorrelationCurve::BaseCorrelationCurve(
             // Skip if we have already added a quote for the given term and detachment point.
             auto key = make_pair(q->term(), q->detachmentPoint());
             if (data.find(key) != data.end()) {
-                DLOG("Already added base correlation with term " << q->term() << " and detachment point " <<
-                    fixed << setprecision(9) << q->detachmentPoint() << " so skipping quote " << q->name());
+                DLOG("Already added base correlation with term " << q->term() << " and detachment point " << fixed
+                                                                 << setprecision(9) << q->detachmentPoint()
+                                                                 << " so skipping quote " << q->name());
                 continue;
             }
 
@@ -160,32 +165,65 @@ BaseCorrelationCurve::BaseCorrelationCurve(
             data[key] = q->quote();
 
             TLOG("Added quote " << q->name() << ": (" << q->term() << "," << fixed << setprecision(9)
-                << q->detachmentPoint() << "," << q->quote()->value() << ")");
+                                << q->detachmentPoint() << "," << q->quote()->value() << ")");
         }
 
-        DLOG("After processing the quotes, we have " << terms.size() << " unique term(s), " <<
-            dps.size() << " unique detachment points and " << data.size() << " quotes.");
+        DLOG("After processing the quotes, we have " << terms.size() << " unique term(s), " << dps.size()
+                                                     << " unique detachment points and " << data.size() << " quotes.");
         QL_REQUIRE(dps.size() > 1, "BaseCorrelationCurve: need at least 2 unique detachment points.");
-        QL_REQUIRE(dps.size() * terms.size() == data.size(), "BaseCorrelationCurve: number of quotes (" <<
-            data.size() << ") should equal number of detachment points (" << dps.size() <<
-            ") times the number of terms (" << terms.size() << ").");
+        QL_REQUIRE(dps.size() * terms.size() == data.size(),
+                   "BaseCorrelationCurve: number of quotes ("
+                       << data.size() << ") should equal number of detachment points (" << dps.size()
+                       << ") times the number of terms (" << terms.size() << ").");
 
-        // Need to now fill _completely_ the (number of dps) x (number of terms) quotes surface.
+
         vector<vector<Handle<Quote>>> quotes;
-        for (const auto& dp : dps) {
-            quotes.push_back({});
-            for (const auto& term : terms) {
-                auto key = make_pair(term, dp);
-                auto it = data.find(key);
-                QL_REQUIRE(it != data.end(), "BaseCorrelationCurve: do not have a quote for term " << term <<
-                    " and detachment point " << fixed << setprecision(9) << dp << ".");
-                quotes.back().push_back(it->second);
-            }
-        }
 
         // Need a vector of terms and detachment points for ctor below
         vector<Period> tmpTerms(terms.begin(), terms.end());
         vector<Real> tmpDps(dps.begin(), dps.end());
+
+        if (config.indexTerm() != 0 * Days) {
+            vector<Time> termTimes;
+            for (auto const& h : tmpTerms) {
+                termTimes.push_back(QuantExt::periodToTime(h));
+            }
+
+            Real t = QuantExt::periodToTime(config.indexTerm());
+            Size termIndex_m, termIndex_p;
+            Real alpha;
+            std::tie(termIndex_m, termIndex_p, alpha) = QuantExt::interpolationIndices(termTimes, t);
+
+            for (const auto& dp : dps) {
+                quotes.push_back({});
+                for (const auto& term : terms) {
+                    auto key_m = make_pair(tmpTerms[termIndex_m], dp);
+                    auto it_m = data.find(key_m);
+                    auto key_p = make_pair(tmpTerms[termIndex_p], dp);
+                    auto it_p = data.find(key_p);
+                    QL_REQUIRE(it_m != data.end() && it_p != data.end(),
+                               "BaseCorrelationCurve: do not have a quote for term "
+                                   << term << " and detachment point " << fixed << setprecision(9) << dp << ".");
+                    quotes.back().push_back(Handle<Quote>(boost::make_shared<SimpleQuote>(
+                        alpha * it_m->second->value() + (1 - alpha) * it_p->second->value())));
+                }
+            }
+        } else {
+
+            // Need to now fill _completely_ the (number of dps) x (number of terms) quotes surface.
+
+            for (const auto& dp : dps) {
+                quotes.push_back({});
+                for (const auto& term : terms) {
+                    auto key = make_pair(term, dp);
+                    auto it = data.find(key);
+                    QL_REQUIRE(it != data.end(), "BaseCorrelationCurve: do not have a quote for term "
+                                                     << term << " and detachment point " << fixed << setprecision(9)
+                                                     << dp << ".");
+                    quotes.back().push_back(it->second);
+                }
+            }
+        }
 
         if (config.adjustForLosses()) {
             DLOG("Adjust for losses is true for base correlation " << spec_.curveConfigID());
@@ -194,18 +232,18 @@ BaseCorrelationCurve::BaseCorrelationCurve(
             DLOG("Detachment points after: " << Array(tmpDps.begin(), tmpDps.end()));
         }
 
-        // The QuantLib interpolator expects at least two terms, so add a second column, copying the first
-        if (tmpTerms.size() == 1) {
-            tmpTerms.push_back(tmpTerms[0] + 1 * tmpTerms[0].units());
-            for (Size i = 0; i < tmpDps.size(); ++i)
-                quotes[i].push_back(quotes[i][0]);
-        }
+        // The QuantLib interpolator expects at least two terms, so add a column, copying the last
+        QL_REQUIRE(!tmpTerms.empty(), "No terms found");
+        tmpTerms.push_back(tmpTerms.back() + 1 * tmpTerms.back().units());
+        for (Size i = 0; i < tmpDps.size(); ++i)
+            quotes[i].push_back(quotes[i][tmpTerms.size() - 2]);
 
-        baseCorrelation_ = boost::make_shared<BilinearBaseCorrelationTermStructure>(
-            config.settlementDays(), config.calendar(), config.businessDayConvention(), tmpTerms,
-            tmpDps, quotes, config.dayCounter(), config.startDate(), config.rule());
+        baseCorrelation_ = boost::make_shared<QuantExt::InterpolatedBaseCorrelationTermStructure<QuantExt::BilinearFlat>>(
+            config.settlementDays(), config.calendar(), config.businessDayConvention(), tmpTerms, tmpDps, quotes,
+            config.dayCounter(), config.startDate(), config.rule());
 
         baseCorrelation_->enableExtrapolation(config.extrapolate());
+        
 
     } catch (std::exception& e) {
         QL_FAIL("BaseCorrelationCurve: curve building failed :" << e.what());
@@ -219,22 +257,26 @@ BaseCorrelationCurve::BaseCorrelationCurve(
 vector<Real> BaseCorrelationCurve::adjustForLosses(const vector<Real>& detachPoints) const {
 
     const auto& cId = spec_.curveConfigID();
-    DLOG("BaseCorrelationCurve::adjustForLosses: start adjusting for losses for base correlation " << cId);
+
+    const auto& [qualifier, period] = splitCurveIdWithTenor(cId);
+
+    DLOG("BaseCorrelationCurve::adjustForLosses: start adjusting for losses for base correlation " << qualifier);
 
     if (!referenceData_) {
         DLOG("Reference data manager is null so cannot adjust for losses.");
         return detachPoints;
     }
 
-    if (!referenceData_->hasData(CreditIndexReferenceDatum::TYPE, cId)) {
-        DLOG("Reference data manager does not have index credit data for " << cId << " so cannot adjust for losses.");
+    if (!referenceData_->hasData(CreditIndexReferenceDatum::TYPE, qualifier)) {
+        DLOG("Reference data manager does not have index credit data for " << qualifier
+                                                                           << " so cannot adjust for losses.");
         return detachPoints;
     }
 
     auto crd = boost::dynamic_pointer_cast<CreditIndexReferenceDatum>(
-        referenceData_->getData(CreditIndexReferenceDatum::TYPE, cId));
+        referenceData_->getData(CreditIndexReferenceDatum::TYPE, qualifier));
     if (!crd) {
-        DLOG("Index credit data for " << cId << " is not of correct type so cannot adjust for losses.");
+        DLOG("Index credit data for " << qualifier << " is not of correct type so cannot adjust for losses.");
         return detachPoints;
     }
 
@@ -271,12 +313,13 @@ vector<Real> BaseCorrelationCurve::adjustForLosses(const vector<Real>& detachPoi
     TLOG("Total weight = " << totalWeight);
 
     if (!close(totalRemainingWeight, 1.0) && totalRemainingWeight > 1.0) {
-        ALOG("Total remaining weight is greater than 1, possible error in CreditIndexReferenceDatum for " << cId);
+        ALOG("Total remaining weight is greater than 1, possible error in CreditIndexReferenceDatum for " << qualifier);
     }
 
     if (!close(totalWeight, 1.0)) {
-        ALOG("Expected the total weight (" << totalWeight << " = " << totalRemainingWeight << " + " <<
-            totalPriorWeight << ") to equal 1, possible error in CreditIndexReferenceDatum for " << cId);
+        ALOG("Expected the total weight (" << totalWeight << " = " << totalRemainingWeight << " + " << totalPriorWeight
+                                           << ") to equal 1, possible error in CreditIndexReferenceDatum for "
+                                           << qualifier);
     }
 
     if (close(totalRemainingWeight, 0.0)) {
@@ -285,7 +328,7 @@ vector<Real> BaseCorrelationCurve::adjustForLosses(const vector<Real>& detachPoi
     }
 
     if (close(totalRemainingWeight, 1.0)) {
-        DLOG("Index factor for " << cId << " is 1 so adjustment for losses not required.");
+        DLOG("Index factor for " << qualifier << " is 1 so adjustment for losses not required.");
         return detachPoints;
     }
 
@@ -312,7 +355,7 @@ vector<Real> BaseCorrelationCurve::adjustForLosses(const vector<Real>& detachPoi
         result.push_back(newDetach);
     }
 
-    DLOG("BaseCorrelationCurve::adjustForLosses: finished adjusting for losses for base correlation " << cId);
+    DLOG("BaseCorrelationCurve::adjustForLosses: finished adjusting for losses for base correlation " << qualifier);
 
     return result;
 }

@@ -87,25 +87,32 @@ void DiscountingFxForwardEngine::calculate() const {
         Real disc2far = currency2Discountcurve_->discount(arguments_.payDate);
         Real fxfwd = disc1near / disc1far * disc2far / disc2near * spotFX_->value();
 
+        // settle ccy is ccy1 if no pay ccy provided
+        Currency settleCcy = arguments_.payCcy.empty() ? ccy1_ : arguments_.payCcy;
+        bool settleCcy1 = ccy1_ == settleCcy;
+
+        Real discNear = settleCcy1 ? disc1near : disc2near;
+        Real discFar = settleCcy1 ? disc1far : disc2far;
+        Real fx1 = settleCcy1 ? 1.0 : fxfwd;
+        Real fx2 = settleCcy1 ? 1 / fxfwd : 1.0;
+
         if (!arguments_.isPhysicallySettled && arguments_.payDate > arguments_.fixingDate) {
-            Real ccy1Fixing = ccy1_ == arguments_.payCcy ? 1.0 : arguments_.fxIndex->fixing(arguments_.fixingDate);
-            Real ccy2Fixing = ccy2_ == arguments_.payCcy ? 1.0 : arguments_.fxIndex->fixing(arguments_.fixingDate);
-
-            results_.value = (tmpPayCurrency1 ? -1.0 : 1.0) * disc1far / disc1near *
-                             ((tmpNominal1 * ccy1Fixing) - (tmpNominal2 * ccy2Fixing));
-
-            results_.npv = Money(arguments_.payCcy, results_.value);
-        } else {
-            results_.value =
-                (tmpPayCurrency1 ? -1.0 : 1.0) * disc1far / disc1near * (tmpNominal1 - tmpNominal2 * fxfwd);
-            results_.npv = Money(ccy1_, results_.value);
+            fx1 = settleCcy1 ? 1.0 : arguments_.fxIndex->fixing(arguments_.fixingDate);
+            fx2 = settleCcy1 ? arguments_.fxIndex->fixing(arguments_.fixingDate) : 1.0;
+            fxfwd = arguments_.fxIndex->fixing(arguments_.fixingDate);
         }
+
+        results_.value = (tmpPayCurrency1 ? -1.0 : 1.0) * discFar / discNear * (tmpNominal1 / fx1 - tmpNominal2 / fx2);
+
+        results_.npv = Money(arguments_.payCcy, results_.value);
 
         results_.fairForwardRate = ExchangeRate(ccy2_, ccy1_, fxfwd);
         results_.additionalResults["fairForwardRate"] = fxfwd;
         results_.additionalResults["fxSpot"] = spotFX_->value();
         results_.additionalResults["discountFactor[1]"] = disc1far;
         results_.additionalResults["discountFactor[2]"] = disc2far;
+        results_.additionalResults["legNPV[1]"] = (tmpPayCurrency1 ? -1.0 : 1.0) * discFar / discNear * tmpNominal1 / fx1;
+        results_.additionalResults["legNPV[2]"] = (tmpPayCurrency1 ? -1.0 : 1.0) * discFar / discNear * (-tmpNominal2 / fx2);
 
         // set notional
         if (arguments_.isPhysicallySettled) {

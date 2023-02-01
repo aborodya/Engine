@@ -43,9 +43,9 @@ public:
     virtual Real bpsFactor() const { return 0.0; }
     void setCallAmount(bool flag) { callAmount_ = flag; }
 
-    void visit(CashFlow& c);
-    void visit(Coupon& c);
-    void visit(IborCoupon& c);
+    void visit(CashFlow& c) override;
+    void visit(Coupon& c) override;
+    void visit(IborCoupon& c) override;
 
 private:
     Real amount_;
@@ -84,11 +84,11 @@ class AdditionalAmountGetter : public AmountGetter {
 
 public:
     AdditionalAmountGetter() {}
-    Real bpsFactor() const { return bpsFactor_; }
+    Real bpsFactor() const override { return bpsFactor_; }
 
-    void visit(CashFlow& c);
-    void visit(Coupon& c);
-    void visit(IborCoupon& c);
+    void visit(CashFlow& c) override;
+    void visit(Coupon& c) override;
+    void visit(IborCoupon& c) override;
 
 private:
     Real bpsFactor_;
@@ -185,7 +185,7 @@ void DiscountingSwapEngineMultiCurve::calculate() const {
 
         for (Size j = 0; j < leg.size(); j++) {
 
-            /* Exclude cashflows that have occured taking into account the
+            /* Exclude cashflows that have occurred taking into account the
             settlement date and includeSettlementDateFlows flag */
             if (leg[j]->hasOccurred(settlementDate, includeRefDateFlows)) {
                 continue;

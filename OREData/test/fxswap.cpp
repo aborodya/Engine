@@ -40,8 +40,23 @@ namespace {
 
 class TestMarket : public MarketImpl {
 public:
-    TestMarket() {
+    TestMarket() : MarketImpl(false) {
         asof_ = Date(3, Feb, 2015);
+
+        boost::shared_ptr<Conventions> conventions = InstrumentConventions::instance().conventions();
+
+        // add conventions
+        boost::shared_ptr<ore::data::Convention> usdChfConv(
+            new ore::data::FXConvention("USD-CHF-FX", "0", "USD", "CHF", "10000", "USD,CHF"));
+        boost::shared_ptr<ore::data::Convention> usdGbpConv(
+            new ore::data::FXConvention("USD-GBP-FX", "0", "USD", "GBP", "10000", "USD,GBP"));
+        boost::shared_ptr<ore::data::Convention> usdEurConv(
+            new ore::data::FXConvention("USD-EUR-FX", "0", "USD", "EUR", "10000", "USD,EUR"));
+
+        conventions->add(usdChfConv);
+        conventions->add(usdGbpConv);
+        conventions->add(usdEurConv);
+        InstrumentConventions::instance().setConventions(conventions);
 
         // build discount
         yieldCurves_[make_tuple(Market::defaultConfiguration, YieldCurveType::Discount, "EUR")] = flatRateYts(0.02);
@@ -50,9 +65,11 @@ public:
         yieldCurves_[make_tuple(Market::defaultConfiguration, YieldCurveType::Discount, "GBP")] = flatRateYts(0.05);
 
         // add fx rates
-        fxSpots_[Market::defaultConfiguration].addQuote("EURUSD", Handle<Quote>(boost::make_shared<SimpleQuote>(1.2)));
-        fxSpots_[Market::defaultConfiguration].addQuote("EURCHF", Handle<Quote>(boost::make_shared<SimpleQuote>(1.3)));
-        fxSpots_[Market::defaultConfiguration].addQuote("EURGBP", Handle<Quote>(boost::make_shared<SimpleQuote>(1.4)));
+	std::map<std::string, Handle<Quote>> quotes;
+	quotes["EURUSD"] = Handle<Quote>(boost::make_shared<SimpleQuote>(1.2));
+	quotes["EURGBP"] = Handle<Quote>(boost::make_shared<SimpleQuote>(1.4));
+	quotes["EURCHF"] = Handle<Quote>(boost::make_shared<SimpleQuote>(1.3));
+	fx_ = boost::make_shared<FXTriangulation>(quotes);
 
         // build fx vols
         fxVols_[make_pair(Market::defaultConfiguration, "EURUSD")] = flatRateFxv(0.10);
@@ -62,11 +79,11 @@ public:
 
 private:
     Handle<YieldTermStructure> flatRateYts(Real forward) {
-        boost::shared_ptr<YieldTermStructure> yts(new FlatForward(4, NullCalendar(), forward, ActualActual()));
+        boost::shared_ptr<YieldTermStructure> yts(new FlatForward(0, NullCalendar(), forward, ActualActual(ActualActual::ISDA)));
         return Handle<YieldTermStructure>(yts);
     }
     Handle<BlackVolTermStructure> flatRateFxv(Volatility forward) {
-        boost::shared_ptr<BlackVolTermStructure> fxv(new BlackConstantVol(0, NullCalendar(), forward, ActualActual()));
+        boost::shared_ptr<BlackVolTermStructure> fxv(new BlackConstantVol(0, NullCalendar(), forward, ActualActual(ActualActual::ISDA)));
         return Handle<BlackVolTermStructure>(fxv);
     }
 };
@@ -75,10 +92,9 @@ private:
 namespace {
 
 void test(string nearDate, string farDate, string nearBoughtCurrency, double nearBoughtAmount, string nearSoldCurrency,
-          double nearSoldAmount, double farBoughtAmount, double farSoldAmount) {
+          double nearSoldAmount, double farBoughtAmount, double farSoldAmount, const boost::shared_ptr<Market>& market) {
 
     // build market
-    boost::shared_ptr<Market> market = boost::make_shared<TestMarket>();
     Settings::instance().evaluationDate() = market->asofDate();
     // fxswap's npv should equal that of two separate fxforwards
     // build first fxforward
@@ -124,6 +140,8 @@ BOOST_AUTO_TEST_CASE(testFXSwap) {
 
     BOOST_TEST_MESSAGE("Testing FXSwap...");
 
+    boost::shared_ptr<Market> market = boost::make_shared<TestMarket>();
+
     string nearDate = "2015-10-27";
     string farDate = "2015-11-03";
     string nearBoughtCurrency = "EUR";
@@ -134,7 +152,7 @@ BOOST_AUTO_TEST_CASE(testFXSwap) {
     Real farSoldAmount = 224552207.77;
 
     test(nearDate, farDate, nearBoughtCurrency, nearBoughtAmount, nearSoldCurrency, nearSoldAmount, farBoughtAmount,
-         farSoldAmount);
+         farSoldAmount, market);
 
     nearDate = "2015-07-14";
     farDate = "2015-11-16";
@@ -146,7 +164,7 @@ BOOST_AUTO_TEST_CASE(testFXSwap) {
     farSoldAmount = 96737000.000000;
 
     test(nearDate, farDate, nearBoughtCurrency, nearBoughtAmount, nearSoldCurrency, nearSoldAmount, farBoughtAmount,
-         farSoldAmount);
+         farSoldAmount, market);
 
     nearDate = "2015-08-04";
     farDate = "2015-11-30";
@@ -158,7 +176,7 @@ BOOST_AUTO_TEST_CASE(testFXSwap) {
     farSoldAmount = 100400372.110000;
 
     test(nearDate, farDate, nearBoughtCurrency, nearBoughtAmount, nearSoldCurrency, nearSoldAmount, farBoughtAmount,
-         farSoldAmount);
+         farSoldAmount, market);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

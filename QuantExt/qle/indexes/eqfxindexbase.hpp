@@ -38,14 +38,16 @@ using namespace QuantLib;
 /*! \ingroup indexes */
 class EqFxIndexBase : public Index, public Observer {
 public:
-    /*! spot quote is interpreted as of today */
     virtual ~EqFxIndexBase() {}
 
-    //! returns the fixing at the given date
+    //! returns the fixing at the given time
+    virtual Real forecastFixing(const Time& fixingTime) const = 0;
+
+    //! returns a past fixing at the given date
     /*! the date passed as arguments must be the actual calendar
         date of the fixing; no settlement days must be used.
     */
-    virtual Real forecastFixing(const Time& fixingTime) const = 0;
+    virtual Real pastFixing(const Date& fixingDate) const = 0;
 };
 
 } // namespace QuantExt

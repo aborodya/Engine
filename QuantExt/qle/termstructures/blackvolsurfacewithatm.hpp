@@ -51,22 +51,23 @@ class BlackVolatilityWithATM : public BlackVolatilityTermStructure {
 public:
     //! Constructor. This is a floating term structure (settlement days is zero)
     BlackVolatilityWithATM(const boost::shared_ptr<BlackVolTermStructure>& surface, const Handle<Quote>& spot,
-                           const Handle<YieldTermStructure>& yield1, const Handle<YieldTermStructure>& yield2);
+                           const Handle<YieldTermStructure>& yield1 = Handle<YieldTermStructure>(),
+                           const Handle<YieldTermStructure>& yield2 = Handle<YieldTermStructure>());
 
     //! \name TermStructure interface
     //@{
-    DayCounter dayCounter() const { return surface_->dayCounter(); }
-    Date maxDate() const { return surface_->maxDate(); }
-    Time maxTime() const { return surface_->maxTime(); }
-    const Date& referenceDate() const { return surface_->referenceDate(); }
-    Calendar calendar() const { return surface_->calendar(); }
-    Natural settlementDays() const { return surface_->settlementDays(); }
+    DayCounter dayCounter() const override { return surface_->dayCounter(); }
+    Date maxDate() const override { return surface_->maxDate(); }
+    Time maxTime() const override { return surface_->maxTime(); }
+    const Date& referenceDate() const override { return surface_->referenceDate(); }
+    Calendar calendar() const override { return surface_->calendar(); }
+    Natural settlementDays() const override { return surface_->settlementDays(); }
     //@}
 
     //! \name VolatilityTermStructure interface
     //@{
-    Rate minStrike() const { return surface_->minStrike(); }
-    Rate maxStrike() const { return surface_->maxStrike(); }
+    Rate minStrike() const override { return surface_->minStrike(); }
+    Rate maxStrike() const override { return surface_->maxStrike(); }
     //@}
 
     //! \name Inspectors
@@ -79,7 +80,7 @@ public:
 
 protected:
     // Here we check if strike is Null<Real>() or 0 and calculate ATMF if so.
-    Volatility blackVolImpl(Time t, Real strike) const;
+    Volatility blackVolImpl(Time t, Real strike) const override;
 
 private:
     boost::shared_ptr<BlackVolTermStructure> surface_;

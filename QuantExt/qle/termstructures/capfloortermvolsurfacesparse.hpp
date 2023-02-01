@@ -59,20 +59,20 @@ public:
 
     //! \name TermStructure interface
     //@{
-    QuantLib::Date maxDate() const;
+    QuantLib::Date maxDate() const override;
     //@}
     //! \name VolatilityTermStructure interface
     //@{
-    QuantLib::Real minStrike() const;
-    QuantLib::Real maxStrike() const;
+    QuantLib::Real minStrike() const override;
+    QuantLib::Real maxStrike() const override;
     //@}
     //! \name LazyObject interface
     //@{
-    void performCalculations() const;
+    void performCalculations() const override;
     //@}
 
 protected:
-    QuantLib::Volatility volatilityImpl(Time t, Rate strike) const;
+    QuantLib::Volatility volatilityImpl(Time t, Rate strike) const override;
 
 private:
     void initialiseStrikesTenors();
@@ -131,7 +131,7 @@ void CapFloorTermVolSurfaceSparse<IS, IE>::initialiseStrikesTenors() {
     // sort the strikes
     std::sort(strikes_.begin(), strikes_.end());
 
-    // create the option intrpolator
+    // create the option interpolator
     performCalculations();
 }
 

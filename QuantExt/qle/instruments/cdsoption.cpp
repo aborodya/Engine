@@ -48,6 +48,7 @@
 #include <boost/make_shared.hpp>
 
 namespace QuantExt {
+using namespace QuantLib;
 
 namespace {
 
@@ -61,7 +62,8 @@ public:
         Handle<BlackVolTermStructure> h(
             boost::make_shared<BlackConstantVol>(0, NullCalendar(), Handle<Quote>(vol_), Actual365Fixed()));
         engine_ = boost::shared_ptr<PricingEngine>(
-            new QuantExt::BlackCdsOptionEngine(probability, recoveryRate, termStructure, h));
+            new QuantExt::BlackCdsOptionEngine(probability, recoveryRate, termStructure,
+                                               Handle<CreditVolCurve>(boost::make_shared<CreditVolCurveWrapper>(h))));
         cdsoption.setupArguments(engine_->getArguments());
 
         results_ = dynamic_cast<const Instrument::results*>(engine_->getResults());
@@ -115,7 +117,7 @@ void CdsOption::fetchResults(const PricingEngine::results* r) const {
     riskyAnnuity_ = results->riskyAnnuity;
 }
 
-Rate CdsOption::atmRate() const { return swap_->fairSpread(); }
+Rate CdsOption::atmRate() const { return swap_->fairSpreadClean(); }
 
 Real CdsOption::riskyAnnuity() const {
     calculate();

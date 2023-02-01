@@ -30,6 +30,7 @@
 #include <ored/marketdata/fxtriangulation.hpp>
 #include <ored/marketdata/loader.hpp>
 #include <ored/marketdata/yieldcurve.hpp>
+#include <ored/marketdata/todaysmarketcalibrationinfo.hpp>
 #include <ql/math/interpolations/backwardflatinterpolation.hpp>
 #include <ql/math/interpolations/linearinterpolation.hpp>
 #include <ql/math/interpolations/loginterpolation.hpp>
@@ -48,21 +49,26 @@ public:
 
     //! Detailed constructor
     CommodityCurve(const QuantLib::Date& asof, const CommodityCurveSpec& spec, const Loader& loader,
-                   const CurveConfigurations& curveConfigs, const Conventions& conventions,
+                   const CurveConfigurations& curveConfigs,
                    const FXTriangulation& fxSpots = FXTriangulation(),
                    const std::map<std::string, boost::shared_ptr<YieldCurve>>& yieldCurves = {},
-                   const std::map<std::string, boost::shared_ptr<CommodityCurve>>& commodityCurves = {});
+                   const std::map<std::string, boost::shared_ptr<CommodityCurve>>& commodityCurves = {},
+                   bool const buildCalibrationInfo = false);
     //@}
 
     //! \name Inspectors
     //@{
     const CommodityCurveSpec& spec() const { return spec_; }
     boost::shared_ptr<QuantExt::PriceTermStructure> commodityPriceCurve() const { return commodityPriceCurve_; }
+    boost::shared_ptr<QuantExt::CommodityIndex> commodityIndex() const { return commodityIndex_; }
+    boost::shared_ptr<CommodityCurveCalibrationInfo> calibrationInfo() const { return calibrationInfo_; }
     //@}
 
 private:
     CommodityCurveSpec spec_;
     boost::shared_ptr<QuantExt::PriceTermStructure> commodityPriceCurve_;
+    boost::shared_ptr<QuantExt::CommodityIndex> commodityIndex_;
+    boost::shared_ptr<CommodityCurveCalibrationInfo> calibrationInfo_;
 
     //! Store the commodity spot value with \c Null<Real>() indicating that none has been provided.
     QuantLib::Real commoditySpot_;
@@ -84,8 +90,7 @@ private:
 
     //! Populate \p data with dates and prices from the loader
     void populateData(std::map<QuantLib::Date, QuantLib::Handle<QuantLib::Quote>>& data, const QuantLib::Date& asof,
-                      const boost::shared_ptr<CommodityCurveConfig>& config, const Loader& loader,
-                      const Conventions& conventions);
+                      const boost::shared_ptr<CommodityCurveConfig>& config, const Loader& loader);
 
     //! Add node to price curve \p data with check for duplicate expiry dates
     void add(const QuantLib::Date& asof, const QuantLib::Date& expiry, QuantLib::Real value,
@@ -104,17 +109,16 @@ private:
 
     //! Build commodity basis price curve
     void buildBasisPriceCurve(const QuantLib::Date& asof, const CommodityCurveConfig& config,
-                              const Conventions& conventions,
                               const QuantLib::Handle<QuantExt::PriceTermStructure>& basePts, const Loader& loader);
 
     //! Build commodity piecewise price curve
     void buildPiecewiseCurve(const QuantLib::Date& asof, const CommodityCurveConfig& config,
-        const Conventions& conventions, const Loader& loader,
+        const Loader& loader,
         const std::map<std::string, boost::shared_ptr<CommodityCurve>>& commodityCurves);
 
     //! Get the configured quotes. If filter is \c true, remove tenor based quotes and quotes with expiry before asof.
     std::vector<boost::shared_ptr<CommodityForwardQuote>>
-    getQuotes(const QuantLib::Date& asof, const std::string& configId, const std::vector<std::string>& quotes,
+    getQuotes(const QuantLib::Date& asof, const std::string& /*configId*/, const std::vector<std::string>& quotes,
         const Loader& loader, bool filter = false);
 
     //! Method for populating the price curve
@@ -123,13 +127,13 @@ private:
     //! Add the instruments relating to a \p priceSegment to \p instruments.
     using Helper = QuantLib::BootstrapHelper<QuantExt::PriceTermStructure>;
     void addInstruments(const QuantLib::Date& asof, const Loader& loader, const std::string& configId,
-        const std::string& currency, const PriceSegment& priceSegment, const Conventions& conventions,
+        const std::string& currency, const PriceSegment& priceSegment,
         const std::map<std::string, boost::shared_ptr<CommodityCurve>>& commodityCurves,
         std::map<QuantLib::Date, boost::shared_ptr<Helper>>& instruments);
 
     //! Special method to add instruments when the \p priceSegment is \c OffPeakPowerDaily
     void addOffPeakPowerInstruments(const QuantLib::Date& asof, const Loader& loader, const std::string& configId,
-        const PriceSegment& priceSegment, const Conventions& conventions,
+        const PriceSegment& priceSegment,
         std::map<QuantLib::Date, boost::shared_ptr<Helper>>& instruments);
 };
 

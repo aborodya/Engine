@@ -29,6 +29,13 @@ using boost::lexical_cast;
 namespace ore {
 namespace data {
 
+bool operator<(const MarketDatum& a, const MarketDatum& b) {
+    if (a.asofDate() != b.asofDate())
+        return a.asofDate() < b.asofDate();
+    // the name determines the instrument and quote type uniquely by construction
+    return a.name() < b.name();
+}
+
 std::ostream& operator<<(std::ostream& out, const MarketDatum::QuoteType& type) {
     switch (type) {
     case MarketDatum::QuoteType::BASIS_SPREAD:
@@ -62,6 +69,91 @@ std::ostream& operator<<(std::ostream& out, const MarketDatum::QuoteType& type) 
     }
 }
 
+std::ostream& operator<<(std::ostream& out, const MarketDatum::InstrumentType& type) {
+    switch (type) {
+    case MarketDatum::InstrumentType::ZERO:
+        return out << "ZERO";
+    case MarketDatum::InstrumentType::DISCOUNT:
+        return out << "DISCOUNT";
+    case MarketDatum::InstrumentType::MM:
+        return out << "MM";
+    case MarketDatum::InstrumentType::MM_FUTURE:
+        return out << "MM_FUTURE";
+    case MarketDatum::InstrumentType::OI_FUTURE:
+        return out << "OI_FUTURE";
+    case MarketDatum::InstrumentType::FRA:
+        return out << "FRA";
+    case MarketDatum::InstrumentType::IMM_FRA:
+        return out << "IMM_FRA";
+    case MarketDatum::InstrumentType::IR_SWAP:
+        return out << "IR_SWAP";
+    case MarketDatum::InstrumentType::BASIS_SWAP:
+        return out << "BASIS_SWAP";
+    case MarketDatum::InstrumentType::BMA_SWAP:
+        return out << "BMA_SWAP";
+    case MarketDatum::InstrumentType::CC_BASIS_SWAP:
+        return out << "CC_BASIS_SWAP";
+    case MarketDatum::InstrumentType::CC_FIX_FLOAT_SWAP:
+        return out << "CC_FIX_FLOAT_SWAP";
+    case MarketDatum::InstrumentType::CDS:
+        return out << "CDS";
+    case MarketDatum::InstrumentType::CDS_INDEX:
+        return out << "CDS_INDEX";
+    case MarketDatum::InstrumentType::FX_SPOT:
+        return out << "FX_SPOT";
+    case MarketDatum::InstrumentType::FX_FWD:
+        return out << "FX_FWD";
+    case MarketDatum::InstrumentType::HAZARD_RATE:
+        return out << "HAZARD_RATE";
+    case MarketDatum::InstrumentType::RECOVERY_RATE:
+        return out << "RECOVERY_RATE";
+    case MarketDatum::InstrumentType::SWAPTION:
+        return out << "SWAPTION";
+    case MarketDatum::InstrumentType::CAPFLOOR:
+        return out << "CAPFLOOR";
+    case MarketDatum::InstrumentType::FX_OPTION:
+        return out << "FX_OPTION";
+    case MarketDatum::InstrumentType::ZC_INFLATIONSWAP:
+        return out << "ZC_INFLATIONSWAP";
+    case MarketDatum::InstrumentType::ZC_INFLATIONCAPFLOOR:
+        return out << "ZC_INFLATIONCAPFLOOR";
+    case MarketDatum::InstrumentType::YY_INFLATIONSWAP:
+        return out << "YY_INFLATIONSWAP";
+    case MarketDatum::InstrumentType::YY_INFLATIONCAPFLOOR:
+        return out << "YY_INFLATIONCAPFLOOR";
+    case MarketDatum::InstrumentType::SEASONALITY:
+        return out << "SEASONALITY";
+    case MarketDatum::InstrumentType::EQUITY_SPOT:
+        return out << "EQUITY_SPOT";
+    case MarketDatum::InstrumentType::EQUITY_FWD:
+        return out << "EQUITY_FWD";
+    case MarketDatum::InstrumentType::EQUITY_DIVIDEND:
+        return out << "EQUITY_DIVIDEND";
+    case MarketDatum::InstrumentType::EQUITY_OPTION:
+        return out << "EQUITY_OPTION";
+    case MarketDatum::InstrumentType::BOND:
+        return out << "BOND";
+    case MarketDatum::InstrumentType::BOND_OPTION:
+        return out << "BOND_OPTION";
+    case MarketDatum::InstrumentType::INDEX_CDS_OPTION:
+        return out << "INDEX_CDS_OPTION";
+    case MarketDatum::InstrumentType::COMMODITY_SPOT:
+        return out << "COMMODITY_SPOT";
+    case MarketDatum::InstrumentType::COMMODITY_FWD:
+        return out << "COMMODITY_FWD";
+    case MarketDatum::InstrumentType::CORRELATION:
+        return out << "CORRELATION";
+    case MarketDatum::InstrumentType::COMMODITY_OPTION:
+        return out << "COMMODITY_OPTION";
+    case MarketDatum::InstrumentType::CPR:
+        return out << "CPR";
+    case MarketDatum::InstrumentType::NONE:
+        return out << "NONE";
+    default:
+        return out << "?";
+    }
+}
+
 EquityOptionQuote::EquityOptionQuote(Real value, Date asofDate, const string& name, QuoteType quoteType,
                                      string equityName, string ccy, string expiry,
                                      const boost::shared_ptr<BaseStrike>& strike, bool isCall)
@@ -71,15 +163,61 @@ EquityOptionQuote::EquityOptionQuote(Real value, Date asofDate, const string& na
     // we will call a parser on the expiry string, to ensure it is a correctly-formatted date or tenor
     Date tmpDate;
     Period tmpPeriod;
-    bool tmpBool;
-    parseDateOrPeriod(expiry, tmpDate, tmpPeriod, tmpBool);
+    bool isDate;
+    parseDateOrPeriod(expiry, tmpDate, tmpPeriod, isDate);
+
+    if (isDate)
+        QL_REQUIRE(asofDate <= tmpDate, "EquityOptionQuote: Invalid EquityOptionQuote, expiry date "
+            << tmpDate << " must be after asof date " << asofDate);
+}
+
+EquityForwardQuote::EquityForwardQuote(Real value, Date asofDate, const string& name, QuoteType quoteType,
+    string equityName, string ccy, const Date& expiryDate)
+    : MarketDatum(value, asofDate, name, quoteType, InstrumentType::EQUITY_FWD), eqName_(equityName), ccy_(ccy),
+      expiry_(expiryDate) {
+    if (expiry_ != Date())
+        QL_REQUIRE(asofDate <= expiry_, "EquityForwardQuote: Invalid EquityForwardQuote, expiry date "
+                                            << expiry_ << " must be after asof date " << asofDate);
+}
+
+EquityDividendYieldQuote::EquityDividendYieldQuote(Real value, Date asofDate, const string& name, QuoteType quoteType,
+    string equityName, string ccy, const Date& tenorDate)
+    : MarketDatum(value, asofDate, name, quoteType, InstrumentType::EQUITY_DIVIDEND), eqName_(equityName), ccy_(ccy),
+      tenor_(tenorDate) {
+    if (tenor_ != Date())
+        QL_REQUIRE(asofDate <= tenor_, "EquityDividendYieldQuote: Invalid EquityForwardQuote, expiry date "
+                                           << tenor_ << " must be after asof date " << asofDate);
 }
 
 IndexCDSOptionQuote::IndexCDSOptionQuote(QuantLib::Real value, const Date& asof, const string& name,
                                          const string& indexName, const boost::shared_ptr<Expiry>& expiry,
                                          const string& indexTerm, const boost::shared_ptr<BaseStrike>& strike)
     : MarketDatum(value, asof, name, QuoteType::RATE_LNVOL, InstrumentType::INDEX_CDS_OPTION), indexName_(indexName),
-      expiry_(expiry), indexTerm_(indexTerm), strike_(strike) {}
+      expiry_(expiry), indexTerm_(indexTerm), strike_(strike) {
+
+    if (auto date = boost::dynamic_pointer_cast<ExpiryDate>(expiry))
+        QL_REQUIRE(asof <= date->expiryDate(), "IndexCDSOptionQuote: Invalid INDEX_CDS_OPTION quote, expiry date "
+            << date->expiryDate() << " must be after asof date " << asof);
+}
+
+CommodityForwardQuote::CommodityForwardQuote(QuantLib::Real value, const QuantLib::Date& asofDate, const std::string& name,
+                      QuoteType quoteType, const std::string& commodityName, const std::string& quoteCurrency,
+                      const QuantLib::Date& expiryDate)
+    : MarketDatum(value, asofDate, name, quoteType, InstrumentType::COMMODITY_FWD), commodityName_(commodityName),
+      quoteCurrency_(quoteCurrency), expiryDate_(expiryDate), tenorBased_(false) {
+    QL_REQUIRE(quoteType == QuoteType::PRICE, "Commodity forward quote must be of type 'PRICE'");
+    QL_REQUIRE(asofDate <= expiryDate, "MarketDatumParser: Invalid COMMODITY_FWD quote, expiry date "
+                                           << expiryDate << " must be after asof date " << asofDate);
+}
+
+//! Tenor based commodity forward constructor
+CommodityForwardQuote::CommodityForwardQuote(QuantLib::Real value, const QuantLib::Date& asofDate, const std::string& name,
+                      QuoteType quoteType, const std::string& commodityName, const std::string& quoteCurrency,
+                      const QuantLib::Period& tenor, boost::optional<QuantLib::Period> startTenor)
+    : MarketDatum(value, asofDate, name, quoteType, InstrumentType::COMMODITY_FWD), commodityName_(commodityName),
+      quoteCurrency_(quoteCurrency), tenor_(tenor), startTenor_(startTenor), tenorBased_(true) {
+    QL_REQUIRE(quoteType == QuoteType::PRICE, "Commodity forward quote must be of type 'PRICE'");
+}
 
 namespace {
 Natural yearFromExpiryString(const std::string& expiry) {
@@ -138,7 +276,12 @@ CommodityOptionQuote::CommodityOptionQuote(Real value, const Date& asof, const s
                                            const boost::shared_ptr<BaseStrike>& strike,
                                            Option::Type optionType)
     : MarketDatum(value, asof, name, quoteType, InstrumentType::COMMODITY_OPTION), commodityName_(commodityName),
-      quoteCurrency_(quoteCurrency), expiry_(expiry), strike_(strike), optionType_(optionType) {}
+      quoteCurrency_(quoteCurrency), expiry_(expiry), strike_(strike), optionType_(optionType) {
+
+    if (auto date = boost::dynamic_pointer_cast<ExpiryDate>(expiry))
+        QL_REQUIRE(asof <= date->expiryDate(), "CommodityOptionQuote: Invalid CommodityOptionQuote, expiry date "
+                                                   << date->expiryDate() << " must be after asof date " << asof);
+}
 
 CorrelationQuote::CorrelationQuote(Real value, const Date& asof, const string& name, QuoteType quoteType,
                                    const string& index1, const string& index2, const string& expiry,
@@ -158,6 +301,10 @@ CorrelationQuote::CorrelationQuote(Real value, const Date& asof, const string& n
     Period outPeriod;
     bool outBool;
     parseDateOrPeriod(expiry_, outDate, outPeriod, outBool);
+
+    if (outBool)
+        QL_REQUIRE(asof <= outDate, "CorrelationQuote: Invalid CorrelationQuote, expiry date "
+            << outDate << " must be after asof date " << asof);
 }
 
 template <class Archive> void MarketDatum::serialize(Archive& ar, const unsigned int version) {
@@ -218,6 +365,7 @@ template <class Archive> void DiscountQuote::serialize(Archive& ar, const unsign
     ar& boost::serialization::base_object<MarketDatum>(*this);
     ar& ccy_;
     ar& date_;
+    ar& tenor_;
 }
 
 template <class Archive> void MMFutureQuote::serialize(Archive& ar, const unsigned int version) {
@@ -301,12 +449,14 @@ template <class Archive> void SwaptionQuote::serialize(Archive& ar, const unsign
     ar& term_;
     ar& dimension_;
     ar& strike_;
+    ar& quoteTag_;
 }
 
 template <class Archive> void SwaptionShiftQuote::serialize(Archive& ar, const unsigned int version) {
     ar& boost::serialization::base_object<MarketDatum>(*this);
     ar& ccy_;
     ar& term_;
+    ar& quoteTag_;
 }
 
 template <class Archive> void BondOptionQuote::serialize(Archive& ar, const unsigned int version) {
@@ -330,12 +480,14 @@ template <class Archive> void CapFloorQuote::serialize(Archive& ar, const unsign
     ar& atm_;
     ar& relative_;
     ar& strike_;
+    ar& indexName_;
 }
 
 template <class Archive> void CapFloorShiftQuote::serialize(Archive& ar, const unsigned int version) {
     ar& boost::serialization::base_object<MarketDatum>(*this);
     ar& ccy_;
     ar& indexTenor_;
+    ar& indexName_;
 }
 
 template <class Archive> void FXSpotQuote::serialize(Archive& ar, const unsigned int version) {

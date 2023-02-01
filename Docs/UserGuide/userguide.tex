@@ -33,7 +33,7 @@
 \usepackage{makecell}
 
 % Use \setminted here to get horizontal line above and below listings
-\usepackage[cache=false]{minted}
+\usepackage{minted}
 \setminted{
    frame=lines,
    framesep=2mm
@@ -126,12 +126,7 @@
 %\title{Open Source Risk Engine \\ User Guide  }
 \title{ORE User Guide}
 \author{Acadia Inc.}
-%\date{7 October 2016}
-%\date{28 April 2017}
-%\date{7 December 2017}
-%\date{28 May 2019}
-%\date{19 June 2020}
-\date{30 June 2021}
+\date{6 December 2022}
 \maketitle
 
 \newpage
@@ -150,6 +145,8 @@ Date & Author & Comment \\
 20 March 2019 & Quaternion & updates for release 4\\
 19 June 2020 & Quaternion & updates for release 5\\
 30 June 2021 & Acadia & updates for release 6\\
+16 September 2022 & Acadia & updates for release 7\\
+6 December 2022 & Acadia & updates for release 8\\
 \hline
 \end{supertabular}
 \end{center}
@@ -229,7 +226,7 @@ Subsequent ORE releases will also compute {\bf regulatory capital charges} for c
 %releases from Q1 2017 onwards will extend the derivative product and the risk factor range to Inflation, Credit, Equity
 %and Commodity. With the introduction of credit risk factors, the scope will also be extended to cover cash products
 %(loans and bonds) and related portfolio analytics.
-The product coverage of the fifth release of ORE in June 2020 is sketched in the following table.
+The product coverage of the seventh release of ORE in September 2022 is sketched in Table \ref{tab_coverage}.
 \begin{table}[hbt]
 \scriptsize
 \begin{center}
@@ -247,11 +244,13 @@ Swaptions & Y & Y & Y &Y \\
 \hline
 Constant Maturity Swaps, CMS Caps/Floors & Y & Y & Y & Y\\
 \hline
-FX Forwards & Y & Y & Y & Y \\
+FX Forwards and Average Forwards & Y & Y & Y & Y \\
 \hline
 Cross Currency Swaps & Y & Y & Y & Y \\
 \hline
 FX European and Asian Options & Y & Y & Y & Y\\
+\hline
+FX Exotic Options (see below) & Y & Y & Y & Y\\
 \hline
 Equity Forwards & Y & Y & Y & Y\\
 \hline
@@ -259,11 +258,17 @@ Equity Swaps & Y & Y & Y & N\\
 \hline
 Equity European and Asian Options & Y & Y & Y & Y \\
 \hline
+Equity Exotic Options (see below)  & Y & Y & Y & Y \\
+\hline
 Equity Future Options & Y & Y & Y & Y \\
 \hline
-Commodity Forwards & Y & Y & N & N\\
+Commodity Forwards and Swaps & Y & Y & Y & Y\\
 \hline
-Commodity European and Asian Options & Y & Y & N & N \\
+Commodity European and Asian Options & Y & Y & Y & Y \\
+\hline
+Commodity Digital Options & Y & Y & Y & Y \\
+\hline
+Commodity Swaptions & Y & Y & Y & Y\\
 \hline
 CPI Swaps & Y & Y & N & Y \\
 \hline
@@ -277,7 +282,7 @@ Credit Default Swaps & Y & Y & N & N \\
 \hline
 
 \end{tabular}
-\caption{ORE product coverage.}
+\caption{ORE product coverage. FX/Equity Exotics include Barrier, Digital, Digital Barrier (FX only), Double Barrier, European Barrier, KIKO Barrier (FX only), Touch and Double Touch Options.}
 \label{tab_coverage}
 \end{center}
 \end{table}
@@ -287,7 +292,7 @@ Future releases will further extend the product range and analytics coverage ind
 \medskip The simulation models applied in ORE's risk factor evolution implement the models discussed in detail in {\em
   Modern Derivatives Pricing and Credit Exposure Analysis} \cite{Lichters}: The IR/FX/INF/EQ risk factor evolution is based on
 a cross currency model consisting of an arbitrage free combination of Linear Gauss Markov models for all interest rates
-and lognormal processes for FX rates and EQ prices, Dodgson-Kainth models for inflation. The model components are calibrated to cross currency discounting and forward curves, Swaptions, FX Options, EQ Options and CPI caps/floors.
+and lognormal processes for FX rates and EQ prices, Dodgson-Kainth (or Jarrow-Yildirim) models for inflation. The model components are calibrated to cross currency discounting and forward curves, Swaptions, FX Options, EQ Options and CPI caps/floors. With the 8th release, Commodity simulation has been added, as well as the foundation for a multi-factor Hull-White based IR/FX/COM simulation model. 
 
 \subsubsection*{Further Resources}
 \begin{itemize}
@@ -312,123 +317,91 @@ parametrisation and the structure of trade and market data input.
 \section{Release Notes}\label{sec:releasenotes}
 %========================================================
 
-This section summarises the high level changes between release 5 (June 2020) and 6 (June 2021).
+This section summarises the notable changes between release 7 (September 2022) and 8 (December 2022).
 
 \bigskip
-INSTRUMENTS
+INSTRUMENTS 
 \begin{itemize}
-\item Add Equity, FX and Commodity Asian Options (thanks to Skandinaviska Enskilda Banken)
-\item Add Equity Future Option
-\item Support Quanto Equity Options
-\item Add Digital CMS Leg
-\item Add Duration Adjusted CMS Leg
-\item Allow settlement delay in FX Forwards
-\item Support separate caps/floors on inflation coupon and redemption
-\item CPI and YoY coupons can now pay the inflation ratio or the inflation rate = inflation ratio - 1 
-\item Support caps / floors on ON index fixings, see LocalCapFloor tag in the User Guide
-\item Support local and global caps / floors on ON average coupons
-\item Reference commodity index in Commodity forwards
-\item Support strike of type yield-to-maturity in bond forwards (T-Locks etc.)
-\item Support averaging and in-advance fixing for SOFR/ON-Index linked legs
-\item Add LastRecentPeriodCalendar to handle SOFR30A, 90A, 180A 
-\item Fix construction of notional amortization schedules
-\item Update CDS Option Pricing (O’Kane, 2008)
-\item Refine Cross Currency Swap pricing (thanks to Ioannis Rigopoulos)
-\item Allow for more than one premium, introduce new premium node (ORE ticket 1705)
+\item roll out Commodity derivatives, thanks to Acadia Inc., as announced in September 22:
+  \begin{itemize}
+    \item add Commodity Swap
+    \item add Commodity Swaption
+    \item add Commodity Average Price Option
+    \item add Commodity Option Strips and Digital Option Strip
+  \end{itemize}
+  see user guide and in particular Example 24
+\item add Equity Cliquet Option, missed in the 7th release, thanks to Acadia
+\item add Equity/FX/Commodity Variance Swap, missed in the 7th release, thanks to Acadia
+\item introduce separate trade types for Cross Currency and Inflation Swap
+\item merge QuantExt and QuantLib CDS and midpoint engine in ORE's QuantLib fork;
+  QuantLib pull request to follow
 \end{itemize}
 
 \bigskip
 MARKETS
 
 \begin{itemize}
-\item Add minor currency support (GBX, ZAC, ILA)
-\item Add currencies - AOA, ETB, GEL and XOF
-\item Add configurable currencies support to cover all remaining ISO currencies, see Examples/Input/currencies.xml
-\item Add configurable calendars
-\item Add various hard-coded IBOR Indices, DKK CITA and SEK STINA (thanks to Skandinaviska Enskilda Banken), AED EIBOR, GBP BoEBase, CNH HIBOR, CNY REPOFIX, HKD HONIA, JPY-Euroyen TIBOR, ZAR SABOR
-\item Add Inflation indices - AUCPI, FRCPI, BEHICP
-\item Add configurable, conventions based, IR/INF index support for greater flexibility in adding indexes to ORE 
-\item Add LIBOR fallback support based on configurable adjustment spread, cessation date and RFR index
-\item Fix the FX triangulation to avoid spurious small FX sensitivities
+\item performance optimizations for curve builders
+\item extend the market interface to optionally handle precious metals and crypto currencies as commodities instead of FX
 \end{itemize}
 
 \bigskip
 TERM STRUCTURES
 
 \begin{itemize}
-\item Support 1M SOFR Futures in yield curve building
-\item Support CDS upfront quotes in default curve building
-\item Add support for delta-based Equity volatility surfaces 
-\item Improve robustness of Cap/Floor volatility surfaces to missing data
-\item Support commodity volatility surfaces built from option prices
-\item Support flat zero extrapolation on yield curves
-\item Support linear zero interpolation for yield curves (thanks to Steven van Haren)
-\item Support delta interpolated FX volatility surfaces accepting BF/RR market data
-\item Support wild cards in FX volatility surface configurations
-\item Support Hermite interpolation in commodity price curves (thanks to Skandinaviska Enskilda Banken)
-\item Arbitrage checks for Equity and FX volatility surfaces 
-\item Report to list market data points used in t0 market curve building
-\item Set up ScenarioSimMarket curves and surfaces as spreads over the t0 market
-\item Support fix-float mtm reset cross currency swaps in curve building
-\item Extend yield curve interpolation methods (quadratic, log-quadratic, Hermite, cubic spline)  
+\item (no notable changes)
 \end{itemize}
 
 \bigskip
 ANALYTICS
 
 \begin{itemize}
-\item Introduce an optional close-out grid for exposure simulation and XVA, see Example 31, section \ref{example:31}
-\item Add inflation simulation for exposure and XVA using Jarrow-Yildirim, see Example 32, section \ref{example:32}
-\item Add credit simulation for exposure and XVA using Gaussian and Cox-Ingersoll-Ross models, see Examples 33 and 34, sections \ref{example:33} and \ref{example:34}
-\item Add “flipped view” XVA feature, flipping “our” perspective to “theirs” (thanks to Roland Kapl), see Example 35, section \ref{example:35}
-\item Add option to switch from the LGM measure to the Bank Account measure for exposure simulations, see Example 36, section \ref{example:36}
-\item Refactoring of the exposure and XVA post processor, separating out various classes
-\item Support one-sided Initial Margin in CSAs
-\item Fix the treatment of independent amounts in Variation Margin calculation 
-\item Export additional pricing engine and trade additional results for a range of instruments (Bonds, CDS, Swaps, Swaptions, Equity Forwards/Swaps/Options, FX Forwards and Options)
-\item Add an option to include past cashflows in the cashflow report
-\item Add accrual start/end dates and accrued amounts to the cash flow report (thanks to Roland Kapl)
-\item Fix LGM calibration with Best Fit
-\item Update trade notional/maturity in line with ISDA AANA/GRID recommendations
+\item add American Monte Carlo simulation components to support fast Bermudan Swaption
+  exposure simulation and more, thanks to Acadia;\\
+  the integration into the ORE command line app will follow with the next release (March 23)
+  as it requires some refactoring.
+\item add Commodity simulation to the cross asset model and market simulation, integraded
+  with the LGM-based Cross Asset Model, thanks to Acadia
+\item  add a multi-factor Hull-White / FX / Commodity simulation model, thanks to Acadia; 
+  calibration to be added
 \end{itemize}
 
 \bigskip
 TESTS
 
 \begin{itemize}
-\item QuantExt: 203 test functions (vs 180 in the previous release)
-\item OREData: 160 test functions (vs 135 in the previous release)
-\item OREAnalytics: 65 test functions (vs 61 in the previous release) 
+\item QuantExt: 242 test functions (vs 214 in the previous release)
+\item OREData: 199 test functions (vs. 192 in the previous release)
+\item OREAnalytics: 66 test functions (vs. 65 in the previous release)
 \end{itemize}
 with associated increases in the number of data driven test cases 
 
 \bigskip
-EXAMPLES
+DOCUMENTATION
 
 \begin{itemize}
-\item Added Examples 31 - 36, see the first five bullet points in the ANALYTICS section above
-\item Established regression tests for Example outputs
-\end{itemize}
-
-\bigskip
-USER GUIDE
-
-\begin{itemize}
-\item Grown from 267 to 326 pages (thanks also to Roland Kapl and Skandinaviska Enskilda Banken)
+\item the user guide is maintained continuously incorporating user feedback, in particular
+  from Acadia service clients; it has grown from 404 to 440 pages, mainly due to the
+  migration of Commodity and Equity/FX instruments into ORE
 \end{itemize}
 
 \bigskip
 LANGUAGE BINDUNGS
 
 \begin{itemize}
-\item Maintenance to ensure ORE SWIG wrappers build with current ORE, QuantLib-1.22 and QuantLib-SWIG-1.22
+\item maintenance to ensure ORE SWIG wrappers build with the current ORE release,
+  QuantLib-1.28 and QuantLib-SWIG-1.28
 \end{itemize}
 
 \bigskip
 OTHER
 
 \begin{itemize}
-\item Fix the instrument schema to include ore\_types.xsd again (thanks to Tomass Wilson) 
+\item changes to build with QuantLib 1.28
+\item extend the CMake setup for Windows / Visual Studio users; \\
+  We will stop maintaining the *.vcxproj and *.vcxproj.filters from the now on
+  and rely on CMakeLists for both *nix and Windows. \\
+  See section 4.2.3 on how to "Generate Visual Studio Projects with CMake"
 \end{itemize}
 
 %========================================================
@@ -685,6 +658,47 @@ C++ support under the Programming Languages features (disabled by default).
 \item Open the {\tt oreEverything\_*.sln} and build the entire solution (again, make sure to select the correct platform in the configuration manager first).
 \end{enumerate}
 
+\subsubsection*{Generate Visual Studio Projects with CMake}
+
+ORE 1.8.9 and later will be shipped without the Visual Studio project and solution files. The Visual Studio projects can be auto-generated from the CMake project files.
+
+\begin{enumerate}
+
+\item Download and install Visual Studio Community Edition (Version 2013 or later). 
+During the installation, make sure you install the Visual
+C++ support under the Programming Languages features (disabled by default).
+
+\item Download and install CMake for Windows (https://cmake.org/download/). Visual Studio Community Edition 2019 or later supports CMake and you can install the feature 'C++ CMake Tools for Windows' instead of installing CMake as standalone program.
+
+\item Set environment variables: \\
+	\begin{itemize}
+  	\item  {\tt \%BOOST\%} pointing to your directory, e.g, {\tt C:{\bs}boost\_1\_72\_0} 
+  	\item {\tt \%BOOST\_LIB32\%} pointing to your Win32 lib directory, e.g, {\tt C:{\bs}boost\_1\_72\_0{\bs}lib32\-msvc\-14.0} 
+	\item  {\tt \%BOOST\_LIB64\%} pointing to your x64 lib directory, e.g, {\tt C:{\bs}boost\_1\_72\_0{\bs}lib64\-msvc\-14.0} 
+     \end{itemize}
+
+\item Generate MSVC project files from CMake files:
+\begin{itemize}
+\item Open a Visual Studio Tools Command Prompt
+\begin{itemize}
+\item 32-bit: VS2022/x86 Native Tools Command Prompt for VS 2022
+\item 64-bit: VS2022/x64 Native Tools   Command Prompt for VS 2022
+\end{itemize}
+\item Navigate to the ORE root directory
+\item Run CMake command:
+\begin{itemize}
+\item 32-bit: \\
+{\tt cmake -G "Visual Studio 17 2022" -A x64 -DBOOST\_INCLUDEDIR=\%BOOST\% -DBOOST\_LIBRARYDIR=\%BOOST\_LIB64\% -DMSVC\_LINK\_DYNAMIC\_RUNTIME=true -B build}
+\item 64-bit: \\
+{\tt cmake -G "Visual Studio 17 2022" -A x32 -DBOOST\_INCLUDEDIR=\%BOOST\% -DBOOST\_LIBRARYDIR=\%BOOST\_LIB32\% -DMSVC\_LINK\_DYNAMIC\_RUNTIME=true -B build}
+\end{itemize}
+Replace the generator "Visual Studio 17 2022" with the actual installed version.
+The solution and project files will be generated in the {\tt $\langle$ORE\_ROOT$\rangle${\bs}build} subdirectory.
+\end{itemize}
+
+\item Open the {\tt build{\bs}ORE.sln} and build the entire solution (again, make sure to select the correct platform in the configuration manager first).
+\end{enumerate}
+
 \subsubsection*{Unix}
 
 With the 5th release we have discontinued automake support so that ORE can only be built with CMake on Unix systems, as follows.
@@ -741,7 +755,14 @@ automatically.
 One advantage of the CMake build system is that it covers both Unix and Windows builds. 
 The same set of {\tt CMakeLists.txt} files as above allows building ORE on Windows. The following instructions use the {\tt Ninja} build system ({\url{ninja-build.org}) that covers the role of {\tt make} on Unix systems and calls the Visual Studio C++ compiler and linker. 
 
+
 \begin{enumerate}
+\item Set environment variables: \\
+	\begin{itemize}
+  	\item  {\tt \%BOOST\%} pointing to your directory, e.g, {\tt C:{\bs}boost\_1\_72\_0} 
+  	\item {\tt \%BOOST\_LIB32\%} pointing to your Win32 lib directory, e.g, {\tt C:{\bs}boost\_1\_72\_0{\bs}lib32\-msvc\-14.0} 
+	\item  {\tt \%BOOST\_LIB64\%} pointing to your x64 lib directory, e.g, {\tt C:{\bs}boost\_1\_72\_0{\bs}lib64\-msvc\-14.0} 
+     \end{itemize}
 \item Open a command prompt, change to directory C:{\textbackslash}Program Files (x86){\textbackslash}Microsoft Visual Studio 14.0{\textbackslash}VC and run\\
 \medskip
 {\tt vcvarsall.bat x64} \\
@@ -750,9 +771,10 @@ to initialize the compiler-related environment.
 \item Change to the ORE project directory that contains the {\tt QuantLib}, {\tt QuantExt}, etc, folders; create subdirectory {\tt build} and change to subdirectory {\tt build}
 \item Configure CMake e.g. by invoking \\
 \medskip
-{\tt cmake -D BOOST\_LIBRARYDIR=/path/to/boost/root/lib64-msvc-14.0 } \textbackslash\\
+{\tt cmake -D BOOST\_INCLUDEDIR=\%BOOST\% } \textbackslash\\
+{\tt \hspace{2cm} -D BOOST\_LIBRARYDIR=\%BOOST\_LIB64\% }\textbackslash\\
 {\tt \hspace{2cm} -D CMAKE\_BUILD\_TYPE=Release }\textbackslash\\
-{\tt \hspace{2cm} -D MSVC\_RUNTIME=static} \textbackslash\\
+{\tt \hspace{2cm} -D MSVC\_LINK\_DYNAMIC\_RUNTIME=true} \textbackslash\\
 {\tt \hspace{2cm} -G Ninja ..} \\
 \medskip
 where the -G option allows choosing the desired build system generator.
@@ -814,8 +836,8 @@ The ORE-SWIG source code is hosted in a separate git repository at \url{https://
 \medskip
 To build the wrappers on Windows, Linux, mac OS
 \begin{enumerate}
-\item build ORE and QuantLib first, as shown in the previous section
-\item check out the ORE-SWIG repository into a project directory {\tt oreswig}, change into that directory
+\item build ORE and QuantLib first, as shown in the previous section. It is strongly advised to switch the codebase to a release tag here (e.g. 1.8.7.0), as the versions of the master branch are not always aligned!
+\item check out the ORE-SWIG repository into a project directory {\tt oreswig}, change into that directory (the same advice as above applies here as well, switch to the same release tag as ORE)
 \item pull in the QuantLib-SWIG project by running \\
 {\tt git submodule init} \\
 {\tt git submodule update}
@@ -970,6 +992,9 @@ Example & Description \\
 \hline
 36 & Choice of Measure \\
 \hline
+37 & Multifactor Hull-White scenario generation \\
+\hline
+38 & Cross Currency Exposure using Multifactor Hull-White Models \\
 \end{tabular}
 \caption{ORE examples.}
 \label{tab_0}
@@ -1596,7 +1621,7 @@ out at the chosen horizon, and the expected rate matches the forward rate.
 \includegraphics[scale=0.45]{mpl_rates.pdf}
 \end{center}
 \caption{Evolution of rate distributions with and without horizon shift (change of measure). Thick lines indicate mean
-  values, thin lines are contours of the rate distribution at $\pm$ one standard devation.}
+  values, thin lines are contours of the rate distribution at $\pm$ one standard deviation.}
 \label{fig_15b}
 \end{figure}
 
@@ -1625,7 +1650,7 @@ and likewise for cases B, C and D. The essential results of each run are are vis
 \item regression plots at selected future times 
 \end{itemize}
 illustrated for cases A and B in figures \ref{fig_ex13a_evolution} - \ref{fig_ex13b_regression}. 
-In the three swap cases, the regression orders do make a noticable difference in the respective expected DIM evolution. In the Swaption case B, first and second order polynomial choice makes a difference before option expiry. More details on this DIM model and its performance can be found in \cite{Anfuso2016,LichtersEtAl}.
+In the three swap cases, the regression orders do make a noticeable difference in the respective expected DIM evolution. In the Swaption case B, first and second order polynomial choice makes a difference before option expiry. More details on this DIM model and its performance can be found in \cite{Anfuso2016,LichtersEtAl}.
  
 \begin{figure}[h!]
 \begin{center}
@@ -1728,12 +1753,10 @@ direction ({\tt UP}, {\tt DOWN}, {\tt CROSS}), the base NPV, the scenario NPV an
 trade and sensitivity key. For an overview over the possible scenario keys see \ref{sec:sensitivity}.
 
 The second file, {\tt sensitivity.csv}, contains the shift size (in absolute terms always) and first (``Delta'') and second
-(``Gamma'') order finite differences computed from the scenario results. Note that the Delta and Gamma results pure
+(``Gamma'') order finite differences computed from the scenario results. Note that the Delta and Gamma results are pure
 differences, i.e. they are not divided by the shift size.
 
-The third file, {\tt crossgamma.csv} contains second order mixed differences according to the specified cross gamma
-filter, along with the shift sizes for the two factors involved. Again the reported result is not divided by the shift
-sizes.
+The second file also contains second order mixed differences according to the specified cross gamma filter, along with the shift sizes for the two factors involved.
 
 The stress scenario definition in {\tt stresstest.xml} defines two stress tests:
 
@@ -1934,17 +1957,33 @@ using a minimal portfolio of four trades, one FRA and three OIS. The essential r
 four {\tt exposure\_trade\_*.csv} files.
 
 %--------------------------------------------------------
-\subsection{Commodity Forward and Option}% Example 24
+\subsection{Commodity Derivatives, Pricing, Sensitivity, Exposure}% Example 24
 \label{example:24}
 %--------------------------------------------------------
 
-The example in folder {\tt Examples/Example\_24} demonstrates pricing and sensitivity analysis for
+Calling
+
+\medskip
+\centerline{\tt python run.py}
+
+\medskip
+in folder {\tt Examples/Example\_24} will launch two ORE runs. The first one determined by {\tt ore.xml} demonstrates pricing and sensitivity analysis for
 \begin{itemize}
 \item Commodity Forwards
 \item European Commodity Options
 \end{itemize}
 using a minimal portfolio of four forwards and two options referencing WTI and Gold. 
 The essential results are in {\tt npv.csv} and {\tt sensitivity.csv}.
+
+The second run determined by {\tt ore\_wti.xml} demonstrates Commodity exposure simulation for a portfolio including a
+\begin{itemize}
+\item Commodity Forward
+\item Commodity Swap
+\item European Commodity Option
+\item Commodity Average Price Option
+\item Commodity Swaption
+\end{itemize}
+with the usual results, exposure reports and graphs. 
 
 %--------------------------------------------------------
 \subsection{CMS Spread with (Digital) Cap/Floor}% Example 25
@@ -2104,7 +2143,6 @@ The relevant configuration changes that trigger this modelling are in the Parame
 \begin{listing}[H]
 \begin{minted}[fontsize=\footnotesize]{xml}
   <Parameters>
-    <Discretization> ... </Discretization>
     <Grid> ... </Grid>
     <Calendar> ... </Calendar>
     <Sequence> ... </Sequence>
@@ -2261,7 +2299,7 @@ Correlation & NettingSetId & CVA & DVA & FBA & FCA \\
 \label{example:35}
 %--------------------------------------------------------------------
 
-The example in folder {\tt Examples/Example\_35} demonstrates how ORE can be used to quickly switch perspectives in XVA calculations with minimal changes in the {\tt ore.xml} file only. In particular it does not involve manipulating the portfolio input.
+The example in folder {\tt Examples/Example\_35} demonstrates how ORE can be used to quickly switch perspectives in XVA calculations with minimal changes in the {\tt ore.xml} file only. In particular it does not involve manipulating the portfolio input or the netting set.
 
 %--------------------------------------------------------------------
 \subsection{Choice of Measure}% Example 36
@@ -2285,6 +2323,138 @@ However, peak exposures are dependent on the measure choice as confirmed graphic
 \caption{Evolution of expected exposures (EPE) and peak exposures (PFE at the 95\% quantile) in three measures, LGM, Bank Account, T-Forward with T=20, with 10k Monte Carlo samples.}
 \label{fig:36}
 \end{figure}
+
+%--------------------------------------------------------------------
+\subsection{Multifactor Hull-White Scenario Generation}% Example 37
+\label{example:37}
+%--------------------------------------------------------------------
+
+The example in folder {\tt Examples/Example\_37} illustrates the scenario generation under a Hull-White multifactor
+model. The model is driven by two independent Brownian motions and has four states. The diffusion matrix sigma is
+therefore 2 x 4. The reversion matrix is a 4 x 4 diagonal matrix and entered as an array. Both diffusion and reversion
+are constant in time. Their values are not calibrated to the option market, but hardcoded in simulation.xml.
+
+The values for the diffusion and reversion matrices were fitted to the first two principal components of a
+(hypothetical) analyis of absolute rate curve movements. These input principal components can be found in
+inputeigenvectors.csv in the input folder. The tenor is given in years, and the two components are given as column
+vectors, see table \ref{tab:ex37_1}.
+
+\begin{table}[hbt]
+\begin{center}
+\begin{tabular}{r|r|r}
+tenor & eigenvector 1  & eigenvector 2   \\
+\hline      
+1     & 0.353553390593 & -0.537955502871 \\
+2     & 0.353553390593 & -0.374924478795 \\
+3     & 0.353553390593 & -0.252916811525 \\
+5     & 0.353553390593 & -0.087587539893 \\
+10    & 0.353553390593 & 0.12267800393   \\
+15    & 0.353553390593 & 0.240659435416  \\
+20    & 0.353553390593 & 0.339148675322  \\
+30    & 0.353553390593 & 0.552478951238
+\end{tabular}
+\caption{Input principal components}
+\label{tab:ex37_1}
+\end{center}
+\end{table}
+
+The first eigenvector represent perfectly parallel movements. The second eigenvector represent a rotation around the 7y
+point of the curve. Furthermore we prescribe an annual volatility of 0.0070 for the first components and 0.0030 for the
+second one. The values can be compared to normal (bp) volatilities.
+
+We follow \cite{Andersen_Piterbarg_2010} chapter 12.1.5 ``Multi-Factor Statistical Gaussian Model'' to calibrate the
+diffusion and reversion matrices to the prescribed components and volatilities. We do not detail the procedure here and
+refer the interested reader to the given reference.
+
+The example generates a single monte carlo path with 5000 daily steps and outputs the generated scenarios in
+scenariodump.csv. The python script pca.py performs a principal component analysis on this output. The model implied
+eigenvalues are given in table \ref{tab:ex37_2}.
+
+\begin{table}[hbt]
+\begin{center}
+\begin{tabular}{r|r}
+number & value                  \\
+\hline      
+1      & 4.9144936649319346e-05 \\
+2      & 8.846877641067412e-06  \\
+3      & 5.82566039467854e-10   \\
+4      & 2.1298948225571415e-10 \\
+5      & 9.254913949332787e-11  \\
+6      & 1.0861256211767673e-11 \\
+7      & 8.478795662698618e-14  \\
+8      & 9.74468069377584e-13   \\
+\end{tabular}
+\caption{Input principal components}
+\label{tab:ex37_2}
+\end{center}
+\end{table}
+
+Only the first two values are relevant, the following are all close to zero. The square root of the first two
+eigenvalues is given in table \ref{tab:ex37_3}.
+
+\begin{table}[hbt]
+\begin{center}
+\begin{tabular}{r|r}
+number & sqrt(value)                \\
+\hline      
+1      & 0.007010344973631422       \\
+2      & 0.0029743701250966414      \\
+\end{tabular}
+\caption{Input principal components}
+\label{tab:ex37_3}
+\end{center}
+\end{table}
+
+matching the prescribed input values of 0.0070 and 0.0030 quite well. The correpsonding eigenvectors are given in etable
+\ref{tab:ex37_4}.
+
+\begin{table}[hbt]
+\begin{center}
+\begin{tabular}{r|r|r}
+tenor & eigenvector 1       & eigenvector 2       \\
+\hline      
+1     & 0.34688826736335926 & 0.5441204725042812  \\
+2     & 0.3489303472083185  & 0.380259707350115   \\
+3     & 0.350362134519783   & 0.2581408080614405  \\
+5     & 0.3523983915961889  & 0.09230899007104967 \\
+10    & 0.3550169593982022  & -0.11856777284904292\\
+15    & 0.35647835947136625 & -0.23676104168229614\\
+20    & 0.3577146190751303  & -0.3354486339442275 \\
+30    & 0.36042236352102563 & -0.549124709243042  \\
+\end{tabular}
+\caption{Input principal components}
+\label{tab:ex37_4}
+\end{center}
+\end{table}
+
+again matching the input principal components quite well. The second eigenvector is the negative of the input vector
+here (the principal compoennt analysis can not distinguish these of course).
+
+The example also produces a plot comparing the input eigenvectors and the model implied eigenvectors as shown in figure \ref{fig:ex37}.
+
+\begin{figure}[h!]
+\begin{center}
+\includegraphics[scale=0.50]{mpl_eigenvectors_ex37.pdf}
+\end{center}
+\caption{Input and model implied eigenvectors for a Hull-White 4-factor model calibrated to 2 principal components of
+  rate curve movements (parallel + rotation). Notice that the model implied 2nd eigenvector is the negative of the input
+  vector.}
+\label{fig:ex37}
+\end{figure}
+
+%--------------------------------------------------------------------
+\subsection{Cross Currency Swap Exposure using Multifactor Hull-White Models}% Example 38
+\label{example:38}
+%--------------------------------------------------------------------
+
+The example in folder {\tt Examples/Example\_38} is similar to Example 8 (EPE, ENE for xccy swap), but uses a
+multifactor HW model for EUR and USD to generate scenarios. The parametrization of the HW models is taken from Example
+37.
+
+Each of the two factors of each HW model is correlated with each of the two factors of the other currency's HW model and
+with the FX factors. Remember that the factors represent principal components of interest rate movements and so the
+correlations can be interpreted as correlations of these principal components with each other and the fx rate processes.
+
 
 \clearpage
 %========================================================
@@ -2425,6 +2595,7 @@ This subset of data is easiest explained using an example, see listing \ref{lst:
   <Parameter name="observationModel">Disable</Parameter>
   <Parameter name="lazyMarketBuilding">false</Parameter>
   <Parameter name="continueOnError">false</Parameter>
+  <Parameter name="buildFailedTrades">true</Parameter>
 </Setup>
 \end{minted}
 %\hrule
@@ -2480,6 +2651,10 @@ are not used. If not given, the parameter defaults to {\tt true}.
 
 \medskip If the parameter {\tt continueOnError} is set to true, the application will not exit on an error, but try to
 continue the processing. If not given, the parameter defaults to {\tt false}.
+
+\medskip If the parameter {\tt buildFailedTrades} is set to true, the application will build a dummy trade if loading or
+building the original trade fails. The dummy trade has trade type ``Failed'', zero notional and NPV.
+If not given, the parameter defaults to {\tt false}.
 
 \subsubsection{Markets}\label{sec:master_input_markets}
 
@@ -2551,7 +2726,7 @@ the list above.
   </Analytic>
   <Analytic type="additionalResults">
     <Parameter name="active">Y</Parameter>
-    <Parameter name="outputFileName">additional\_results.csv</Parameter>
+    <Parameter name="outputFileName">additional_results.csv</Parameter>
   </Analytic> 
   <Analytic type="todaysMarketCalibration">
     <Parameter name="active">Y</Parameter>
@@ -2562,7 +2737,7 @@ the list above.
   </Analytic>      
 </Analytics>      
 \end{minted}
-\caption{ORE analytics: npv, cashflow, curves, additional results, todays market calibratino}
+\caption{ORE analytics: npv, cashflow, curves, additional results, todays market calibration}
 \label{lst:ore_analytics}
 \end{listing}
 
@@ -2606,7 +2781,7 @@ section).  Key {\tt grid} defines the time grid on which the yield curves are ev
 this monthly grid into the csv file specified by key {\tt outputFileName}. The grid can also be specified explicitly by
 a comma separated list of tenor points such as {\tt 1W, 1M, 2M, 3M, \dots}.
 
-The additionalResults analytic writes a report containing any additional results generated for the portfolio. The results are pricingengine specific but Table \ref{additionalreport} shows the output for a vanilla swaption.
+The additionalResults analytic writes a report containing any additional results generated for the portfolio. The results are pricing engine specific but Table \ref{additionalreport} shows the output for a vanilla swaption.
 
 \begin{table}[hbt]
 \scriptsize
@@ -2625,7 +2800,7 @@ example\_swaption & vega & double & 309237709.5 \\
 \hline
 \ldots
 \end{tabular}
-\caption{AddiitonalResults Report}
+\caption{AdditionalResults Report}
 \label{additionalreport}
 \end{center}
 \end{table}
@@ -2735,6 +2910,9 @@ details and analyse their impact on XVAs quickly without re-generating the NPV c
     <Parameter name="rawCubeOutputFile">rawcube.csv</Parameter>
     <Parameter name="netCubeOutputFile">netcube.csv</Parameter>
     <Parameter name="fullInitialCollateralisation">true</Parameter>
+    <Parameter name="flipViewXVA">N</Parameter>
+    <Parameter name="flipViewBorrowingCurvePostfix">_BORROW</Parameter>
+    <Parameter name="flipViewLendingCurvePostfix">_LEND</Parameter>
   </Analytic>
 </Analytics>
 \end{minted}
@@ -2779,7 +2957,7 @@ collateral rates floor to the collateral model file (netting.xml)}
 %basis point is 0.0001) assuming the day count convention of the
 %collateral rate. 
 %basis point is 0.0001) assuming the day count convention of the collateral rate.
-\item {\tt dynamicCredit:} Flag to enable using pathwise survival probabilies when calculating CVA, DVA, FVA and MVA increments from exposures. If set to N the survival probabilities are extracted from T0 curves.
+\item {\tt dynamicCredit:} Flag to enable using pathwise survival probabilities when calculating CVA, DVA, FVA and MVA increments from exposures. If set to N the survival probabilities are extracted from T0 curves.
 \item {\tt kva:} Flag to enable setting the kva ccr parameters.
 \item {\tt kvaCapitalDiscountRate, kvaAlpha, kvaRegAdjustment, kvaCapitalHurdle, kvaOurPdFloor, kvaTheirPdFloor kvaOurCvaRiskWeight, kvaTheirCvaRiskWeight:} the kva CCR parameters (see \ref{sec:app_kva} and \ref{sec:app_kva_cva}.
 \item {\tt dimQuantile:} Quantile for Dynamic Initial Margin (DIM) calculation
@@ -2804,10 +2982,13 @@ through time
 \item {\tt dimOutputNettingSet:} Netting set for the DIM regression snapshot
 \item {\tt dimOutputGridPoints:} Grid point(s) (in time) for the DIM regression snapshot, comma separated list
 \item {\tt rawCubeOutputFile:} File name for the trade NPV cube in human readable csv file format (per trade, date,
-sample)
+sample), leave empty to skip generation of this file.
 \item {\tt netCubeOutputFile:} File name for the aggregated NPV cube in human readable csv file format (per netting set,
-date, sample) {\em after} taking collateral into account
+date, sample) {\em after} taking collateral into account. Leave empty to skip generation of this file.
 \item {\tt fullInitialCollateralisation:} If set to {\tt true}, then for every netting set, the collateral balance at $t=0$ will be set to the NPV of the setting set. The resulting effect is that EPE, ENE and PFE are all zero at $t=0$. If set to {\tt false} (default value), then the collateral balance at $t=0$ will be set to zero.
+\item {\tt flipViewXVA:} If set to {\tt Y}, the perspective in XVA calculations is switched to the cpty view, the npvs and the netting sets being reverted during calculation. In order to get the lending/borrowing curve, the calculation assumes these curves being set up with the cptyname + the postfix given in the next two settings.
+\item {\tt flipViewBorrowingCurvePostfix:} postfix for the borrowing curve, the calculation assumes this is curves being set up with cptyname + postfix given.
+\item {\tt flipViewLendingCurvePostfix:} postfix for the lending curve, the calculation assumes this is curve being set up with cptyname + postfix given.
 \end{itemize}
 
 The two cube file outputs {\tt rawCubeOutputFile} and {\tt netCubeOutputFile} are provided for interactive analysis and visualisation purposes, see section
@@ -2815,7 +2996,7 @@ The two cube file outputs {\tt rawCubeOutputFile} and {\tt netCubeOutputFile} ar
 
 \medskip The {\tt sensitivity} and {\tt stress} 'analytics' provide computation of bump and revalue (zero rate
 resp. optionlet) sensitivities and NPV changes under user defined stress scenarios. Listing \ref{lst:ore_sensitivity}
-shows a typical configuration for sensitvity calculation.
+shows a typical configuration for sensitivity calculation.
 
 \begin{listing}[H]
 %\hrule\medskip
@@ -2850,9 +3031,8 @@ The parameters have the following interpretation:
 \item {\tt scenarioOutputFile:} File containing the results of the sensitivity calculation in terms of the base scenario
   NPV, the scenario NPV and their difference.
 \item {\tt sensitivityOutputFile:} File containing the results of the sensitivity calculation in terms of the base scenario
-  NPV, the shift size and the resulting first and (pure) second order finite differences
-\item {\tt crossGammaOutputFile:} File containing the results of the sensitivity calculation in terms of the base scenario
-  NPV, two shift sizes and a (mixed) second order finite difference associated to a cross gamma calculation
+  NPV, the shift size together with the risk-factor and the resulting first and (pure) second order finite differences.
+  Also included is a second set of shift sizes together with the risk-factor with a (mixed) second order finite difference associated to a cross gamma calculation
 %\item {\tt parRateSensitivityOutputFile:} File containing par sensitivities (only available in ORE+)
 \item {\tt outputSensitivityThreshold:} Only finite differences with absolute value greater than this number are written
   to the output files.
@@ -2971,12 +3151,12 @@ We pick one discounting curve block as an example here (see {\tt Examples/Input/
 \begin{listing}[H]
 %\hrule\medskip
 \begin{minted}[fontsize=\footnotesize]{xml}
-  <DiscountingCurves Id="ois">
-    <DiscountingCurve Currency="EUR">Yield/EUR/EUR1D</DiscountingCurve>
-    <DiscountingCurve Currency="USD">Yield/USD/USD1D</DiscountingCurve>
-    <DiscountingCurve Currency="GBP">Yield/GBP/GBP1D</DiscountingCurve>
-    <DiscountingCurve Currency="CHF">Yield/CHF/CHF6M</DiscountingCurve>
-    <DiscountingCurve Currency="JPY">Yield/JPY/JPY6M</DiscountingCurve>
+  <DiscountingCurves id="ois">
+    <DiscountingCurve currency="EUR">Yield/EUR/EUR1D</DiscountingCurve>
+    <DiscountingCurve currency="USD">Yield/USD/USD1D</DiscountingCurve>
+    <DiscountingCurve currency="GBP">Yield/GBP/GBP1D</DiscountingCurve>
+    <DiscountingCurve currency="CHF">Yield/CHF/CHF6M</DiscountingCurve>
+    <DiscountingCurve currency="JPY">Yield/JPY/JPY6M</DiscountingCurve>
     <!-- ... -->
   </DiscountingCurves>
 \end{minted}
@@ -2997,12 +3177,12 @@ See an excerpt of the index curve block with ID 'default' from the same example 
 \begin{listing}[H]
 %\hrule\medskip
 \begin{minted}[fontsize=\footnotesize]{xml}
-<IndexForwardingCurves Id="default">
-  <Index Name="EUR-EURIBOR-3M">Yield/EUR/EUR3M</Index>
-  <Index Name="EUR-EURIBOR-6M">Yield/EUR/EUR6M</Index>
-  <Index Name="EUR-EURIBOR-12M">Yield/EUR/EUR6M</Index>
-  <Index Name="EUR-EONIA">Yield/EUR/EUR1D</Index>
-  <Index Name="USD-LIBOR-3M">Yield/USD/USD3M</Index>
+<IndexForwardingCurves id="default">
+  <Index name="EUR-EURIBOR-3M">Yield/EUR/EUR3M</Index>
+  <Index name="EUR-EURIBOR-6M">Yield/EUR/EUR6M</Index>
+  <Index name="EUR-EURIBOR-12M">Yield/EUR/EUR12M</Index>
+  <Index name="EUR-EONIA">Yield/EUR/EUR1D</Index>
+  <Index name="USD-LIBOR-3M">Yield/USD/USD3M</Index>
   <!-- ... -->
 </IndexForwardingCurves>
 \end{minted}
@@ -3049,12 +3229,12 @@ The following is an excerpt of the swap index curve block with ID 'default' from
 \begin{listing}[H]
 %\hrule\medskip
 \begin{minted}[fontsize=\footnotesize]{xml}
-<SwapIndexCurves Id="default">
-  <SwapIndex Name="EUR-CMS-1Y">
+<SwapIndexCurves id="default">
+  <SwapIndex name="EUR-CMS-1Y">
     <Index>EUR-EURIBOR-6M</Index>
     <Discounting>EUR-EONIA</Discounting>
   </SwapIndex>
-  <SwapIndex Name="EUR-CMS-30Y">
+  <SwapIndex name="EUR-CMS-30Y">
     <Index>EUR-EURIBOR-6M</Index>
     <Discounting>EUR-EONIA</Discounting>
   </SwapIndex>
@@ -3079,11 +3259,11 @@ The following is an excerpt of the FX spot block with ID 'default' from the same
 \begin{listing}[H]
 %\hrule\medskip
 \begin{minted}[fontsize=\footnotesize]{xml}
-<FxSpots Id="default">
-  <FxSpot Pair="EURUSD">FX/EUR/USD</FxSpot>
-  <FxSpot Pair="EURGBP">FX/EUR/GBP</FxSpot>
-  <FxSpot Pair="EURCHF">FX/EUR/CHF</FxSpot>
-  <FxSpot Pair="EURJPY">FX/EUR/JPY</FxSpot>
+<FxSpots id="default">
+  <FxSpot pair="EURUSD">FX/EUR/USD</FxSpot>
+  <FxSpot pair="EURGBP">FX/EUR/GBP</FxSpot>
+  <FxSpot pair="EURCHF">FX/EUR/CHF</FxSpot>
+  <FxSpot pair="EURJPY">FX/EUR/JPY</FxSpot>
   <!-- ... -->
 </FxSpots>
 \end{minted}
@@ -3101,11 +3281,11 @@ The following is an excerpt of the FX Volatilities block with ID 'default' from 
 \begin{listing}[H]
 %\hrule\medskip
 \begin{minted}[fontsize=\footnotesize]{xml}
-<FxVolatilities Id="default">
-  <FxVolatility Pair="EURUSD">FXVolatility/EUR/USD/EURUSD</FxVolatility>
-  <FxVolatility Pair="EURGBP">FXVolatility/EUR/GBP/EURGBP</FxVolatility>
-  <FxVolatility Pair="EURCHF">FXVolatility/EUR/CHF/EURCHF</FxVolatility>
-  <FxVolatility Pair="EURJPY">FXVolatility/EUR/JPY/EURJPY</FxVolatility>
+<FxVolatilities id="default">
+  <FxVolatility pair="EURUSD">FXVolatility/EUR/USD/EURUSD</FxVolatility>
+  <FxVolatility pair="EURGBP">FXVolatility/EUR/GBP/EURGBP</FxVolatility>
+  <FxVolatility pair="EURCHF">FXVolatility/EUR/CHF/EURCHF</FxVolatility>
+  <FxVolatility pair="EURJPY">FXVolatility/EUR/JPY/EURJPY</FxVolatility>
   <!-- ... -->
 </FxVolatilities>
 \end{minted}
@@ -3123,12 +3303,12 @@ The following is an excerpt of the Swaption Volatilities block with ID 'default'
 \begin{listing}[H]
 %\hrule\medskip
 \begin{minted}[fontsize=\footnotesize]{xml}
-<SwaptionVolatilities Id="default">
-  <SwaptionVolatility Currency="EUR">SwaptionVolatility/EUR/EUR_SW_N</SwaptionVolatility>
-  <SwaptionVolatility Currency="USD">SwaptionVolatility/USD/USD_SW_N</SwaptionVolatility>
-  <SwaptionVolatility Currency="GBP">SwaptionVolatility/GBP/GBP_SW_N</SwaptionVolatility>
-  <SwaptionVolatility Currency="CHF">SwaptionVolatility/CHF/CHF_SW_N</SwaptionVolatility>
-  <SwaptionVolatility Currency="JPY">SwaptionVolatility/CHF/JPY_SW_N</SwaptionVolatility>
+<SwaptionVolatilities id="default">
+  <SwaptionVolatility currency="EUR">SwaptionVolatility/EUR/EUR_SW_N</SwaptionVolatility>
+  <SwaptionVolatility currency="USD">SwaptionVolatility/USD/USD_SW_N</SwaptionVolatility>
+  <SwaptionVolatility currency="GBP">SwaptionVolatility/GBP/GBP_SW_N</SwaptionVolatility>
+  <SwaptionVolatility currency="CHF">SwaptionVolatility/CHF/CHF_SW_N</SwaptionVolatility>
+  <SwaptionVolatility currency="JPY">SwaptionVolatility/CHF/JPY_SW_N</SwaptionVolatility>
 </SwaptionVolatilities>
 \end{minted}
 \caption{Swaption volatility block with ID 'default'}
@@ -3167,10 +3347,10 @@ The following is an excerpt of the Default Curves block with ID 'default' from t
 \begin{listing}[H]
 %\hrule\medskip
 \begin{minted}[fontsize=\footnotesize]{xml}
-<DefaultCurves Id="default">
-  <DefaultCurve Name="BANK">Default/USD/BANK_SR_USD</DefaultCurve>
-  <DefaultCurve Name="CPTY_A">Default/USD/CUST_A_SR_USD</DefaultCurve>
-  <DefaultCurve Name="CPTY_B">Default/USD/CUST_A_SR_USD</DefaultCurve>
+<DefaultCurves id="default">
+  <DefaultCurve name="BANK">Default/USD/BANK_SR_USD</DefaultCurve>
+  <DefaultCurve name="CPTY_A">Default/USD/CUST_A_SR_USD</DefaultCurve>
+  <DefaultCurve name="CPTY_B">Default/USD/CUST_A_SR_USD</DefaultCurve>
   <!-- ... -->
 </DefaultCurves>
 \end{minted}
@@ -3301,7 +3481,7 @@ file:
 %\hrule\medskip
 \begin{minted}[fontsize=\footnotesize]{xml}
   <YYInflationCapFloorVolatilities id="default">
-    <YYInflationCapFloorVolatitlity name="EUHICPXT">
+    <YYInflationCapFloorVolatility name="EUHICPXT">
         InflationCapFloorVolatility/EUHICPXT/EUHICPXT_YY_CF
     </InflationCapFloorVolatility>
   </YYInflationCapFloorVolatilities>
@@ -3323,7 +3503,7 @@ file:
 \end{listing}
 
 This instructs ORE to build a set of year-on-year and zero inflation cap floor volatility surfaces, which are defined in the curve
-configuration file. Each surface is associated with an idnex name. The last token (e.g. EUHICPXT\_ZC\_CF) is user defined
+configuration file. Each surface is associated with an index name. The last token (e.g. EUHICPXT\_ZC\_CF) is user defined
 and will be found in the curve configuration's CurveId tag.
 
 \subsubsection{CDS Volatility Structures}
@@ -3384,16 +3564,16 @@ the {\tt todaysmarket.xml} file:
 \begin{listing}[H]
 %\hrule\medskip
 \begin{minted}[fontsize=\footnotesize]{xml}
-<Configuration Id="default">
+<Configuration id="default">
   <DiscountingCurvesId>xois_eur</DiscountingCurvesId>
 </Configuration>
-<Configuration Id="collateral_inccy">
+<Configuration id="collateral_inccy">
   <DiscountingCurvesId>ois</DiscountingCurvesId>
 </Configuration>
-<Configuration Id="collateral_eur">
+<Configuration id="collateral_eur">
   <DiscountingCurvesId>xois_eur</DiscountingCurvesId>
 </Configuration>
-<Configuration Id="libor">
+<Configuration id="libor">
   <DiscountingCurvesId>inccy_swap</DiscountingCurvesId>
 </Configuration>
 \end{minted}
@@ -3567,9 +3747,10 @@ following is an overview over the Example section's {\tt pricingengine.xml}. Fur
   </Product>
   <GlobalParameters>
     <Parameter name="ContinueOnCalibrationError">true</Parameter>
-    <!-- typcially not present in a user configuration, but used internally -->
+    <!-- typically not present in a user configuration, but used internally -->
     <Parameter name="Calibrate">true</Parameter>
-    <Parameter name="GenerateAdditionalResults"</Parameter>
+    <Parameter name="GenerateAdditionalResults">true</Parameter>
+    <Parameter name="RunType">NPV</Parameter>
   </GlobalParameters>
 \end{minted}
 \caption{Pricing engine configuration}
@@ -3619,6 +3800,11 @@ In addition to product specific settings there is also a block with global param
   suppressed (for those pricing engines which support this). This flag is usually not present in a user configuration,
   but only used internally to improve the performance for processes which only rely on the NPV as a result from pricing
   engines, e.g. when repricing trades under sensitivity or stress scenarios. Option, defaults to false.
+\item RunType: Set automatically. One of NPV, SensitivityDelta, SensitivityDeltaGamma, Stress, Exposure, Capital,
+  TradeDetails, PortfolioAnalyser, HistoricalPnL, depending on the context for which a portfolio was built. Might also
+  be left empty. This is used by some pricing engines to adapt to certain run types. E.g. a first order sensitivity pnl
+  expansion might be used for a SensitivityDelta run by an engine which is able to compute analytical or AAD first order
+  sensitivities.
 \end{itemize}
 
 %--------------------------------------------------------
@@ -3651,7 +3837,6 @@ Let us discuss this section using the following example
 %\hrule\medskip
 \begin{minted}[fontsize=\footnotesize]{xml}
 <Parameters>
-  <Discretization>Exact</Discretization>
   <Grid>80,3M</Grid>
   <Calendar>EUR,USD,GBP,CHF</Calendar>
   <DayCounter>ACT/ACT</DayCounter>
@@ -3670,10 +3855,6 @@ Let us discuss this section using the following example
 \end{listing}
 
 \begin{itemize}
-\item {\tt Discretization:} Chooses between time discretization schemes for the risk factor evolution. {\em Exact} means
-exploiting the analytcal tractability of the model to avoid any time discretization error. {\em Euler} uses a naive time
-discretization scheme which has numerical error and requires small time steps for accurate results (useful for testing
-purposes)
 \item {\tt Grid:} Specifies the simulation time grid, here 80 quarterly steps.\footnote{For exposure calculation under DIM, the second parameter has to match the Margin Period of Risk, i.e. if {\tt MarginPeriodOfRisk} is set to for instance {\tt 2W} in a netting set definition in {\tt netting.xml}, then one has to set {\tt Grid} to for instance {\tt 80,2W}.}
 \item {\tt Calendar:} Calendar or combination of calendars used to adjust the dates of the grid. Date adjustment is
 required because the simulation must step over 'good' dates on which index fixings can be stored.
@@ -3705,6 +3886,8 @@ component's calibration. It is currently made of
 \item $n_c-1$ FX models for each exchange rate to the base currency, 
 \item $n_e$ equity models,
 \item $n_i$ inflation models, 
+\item $n_{cr}$ credit models, 
+\item $n_{com}$ commodity models, 
 \item a specification of the correlation structure between all components.
 \end{itemize}
 
@@ -3726,8 +3909,21 @@ exceptions, but add to the run time of ORE.
     <Currency>CHF</Currency>
     <Currency>JPY</Currency>
   </Currencies>
+  <Equities>
+	<!-- ... -->
+  </Equities>
+  <InflationIndices>
+	<!-- ... -->
+  </InflationIndices>
+  <CreditNames>
+	<!-- ... -->
+  </CreditNames>
+  <Commodities>
+	<!-- ... -->
+  </Commodities>
   <BootstrapTolerance>0.0001</BootstrapTolerance>
   <Measure>LGM</Measure><!-- Choices: LGM, BA -->
+  <Discretization>Exact</Discretization>
   <!-- ... -->
 </CrossAssetModel>
 \end{minted}
@@ -3738,7 +3934,12 @@ exceptions, but add to the run time of ORE.
 Bootstrap tolerance is a global parameter that applies to the calibration of all model components. If the calibration
 error of any component exceeds this tolerance, this will trigger an exception at runtime, early in the ORE process.
 
-The Measure tag allows switching between the LGM and the Bank Account (BA) measure for the risk-neutral market simulations using the Cross Asset Model. Note that within LGM one can shift the horizon (see ParameterTransformation below) to effectively switch to a T-Forward measure. 
+The Measure tag allows switching between the LGM and the Bank Account (BA) measure for the risk-neutral market simulations using the Cross Asset Model. Note that within LGM one can shift the horizon (see ParameterTransformation below) to effectively switch to a T-Forward measure.
+
+The Discretization tag chooses between time discretization schemes for the risk factor evolution. {\em Exact} means
+exploiting the analytical tractability of the model to avoid any time discretization error. {\em Euler} uses a naive
+time discretization scheme which has numerical error and requires small time steps for accurate results (useful for
+testing purposes or if more sophisticated component models are used.)
  
 \medskip
 
@@ -3801,19 +4002,20 @@ to be able to achieve a perfect fit (as with calibration of piecewise volatility
 \item {\tt Volatility/VolatilityType: } Choose volatility parametrisation a la {\em HullWhite} or {\em Hagan}
 \item {\tt Volatility/ParamType: } Choose between {\em Constant} and {\em Piecewise}
 \item {\tt Volatility/TimeGrid: } Initial time grid for this parameter, can be left empty if ParamType is Constant
-\item {\tt Volatility/InitialValue: } Vector of initial values, matching number of entries in time, or single value if
-the time grid is empty
+\item {\tt Volatility/InitialValue: } Vector of initial values, matching number of entries in time (for CalibrationType {\em BestFit} this should be one more entry than the {\tt Volatility/TimeGrid} entries, for {\em Bootstrap} this is ignored), or single value if the time grid is empty
 \item {\tt Reversion/Calibrate: } Flag to enable/disable calibration of this particular parameter
 \item {\tt Reversion/VolatilityType: } Choose reversion parametrisation a la {\em HullWhite} or {\em Hagan}
 \item {\tt Reversion/ParamType: } Choose between {\em Constant} and {\em Piecewise}
 \item {\tt Reversion/TimeGrid: } Initial time grid for this parameter, can be left empty if ParamType is Constant
 \item {\tt Reversion/InitialValue: } Vector of initial values, matching number of entries in time, or single value if
 the time grid is empty
-\item {\tt CalibrationSwaptions: } Choice of calibration instruments by expiry, underlying Swap term and strike
+\item {\tt CalibrationSwaptions: } Choice of calibration instruments by expiry, underlying Swap term and strike. There have to be at least one more calibration options configured than {\tt Volatility/TimeGrid} entries were given.
 \item {\tt ParameterTransformation: } LGM model prices are invariant under scaling and shift transformations
 \cite{Lichters} with advantages for numerical convergence of results in long term simulations. These transformations can
 be chosen here. Default settings are shiftHorizon 0 (time in years) and scaling factor 1.
 \end{itemize}
+
+The reason for having to specify one more {\tt Volatility/InitialValue} entries than {\tt Volatility/TimeGrid} entries (and at least one more calibration option than {\tt Volatility/TimeGrid} entries) is the fact that the intervals defined by the {\tt Volatility/TimeGrid} entries are spanning from $[0,t_1],[t_1,t_2]\ldots[t_n,\infty]$, which results in $n+1$ intervals.
 
 \medskip
 
@@ -3863,11 +4065,10 @@ model parametrisations.  Within each CrossCcyLGM section, the interpretation of 
 \item {\tt Sigma/Calibrate: } Flag to enable/disable calibration of this particular parameter
 \item {\tt Sigma/ParamType: } Choose between {\em Constant} and {\em Piecewise}
 \item {\tt Sigma/TimeGrid: } Initial time grid for this parameter, can be left empty if ParamType is Constant
-\item {\tt Sigma/InitialValue: } Vector of initial values, matching number of entries in time, or single value if the
-time grid is empty
+\item {\tt Sigma/InitialValue: } Vector of initial values, matching number of entries in time (for CalibrationType {\em BestFit} this should be one more entry than the {\tt Sigma/TimeGrid} entries, for {\em Bootstrap} this is ignored), or single value if the time grid is empty
 \item {\tt CalibrationOptions: } Choice of calibration instruments by expiry and strike, strikes can be empty (implying
 the default, ATMF options), or explicitly specified (in terms of FX rates as absolute strike values, in delta notation
-such as $\pm 25D$, $ATMF$ for at the money)
+such as $\pm 25D$, $ATMF$ for at the money). There have to be at least one more calibration options configured than {\tt Sigma/TimeGrid} entries were given
 \end{itemize}
 
 
@@ -3919,10 +4120,9 @@ FX model parameterisations.  Within each CrossAssetLGM section, the interpretati
 	\item {\tt Sigma/Calibrate: } Flag to enable/disable calibration of this particular parameter
 	\item {\tt Sigma/ParamType: } Choose between {\em Constant} and {\em Piecewise}
 	\item {\tt Sigma/TimeGrid: } Initial time grid for this parameter, can be left empty if ParamType is Constant
-	\item {\tt Sigma/InitialValue: } Vector of initial values, matching number of entries in time, or single value if 
-	the time grid is empty
+	\item {\tt Sigma/InitialValue: } Vector of initial values, matching number of entries in time (for CalibrationType {\em BestFit} this should be one more entry than the {\tt Sigma/TimeGrid} entries, for {\em Bootstrap} this is ignored), or single value if the time grid is empty
 	\item {\tt CalibrationOptions: } Choice of calibration instruments by expiry and strike, strikes can be empty 
-	(implying the default, ATMF options), or explicitly specified (in terms of equity prices as absolute strike values)
+	(implying the default, ATMF options), or explicitly specified (in terms of equity prices as absolute strike values). There have to be at least one more calibration options configured than {\tt Sigma/TimeGrid} entries were given
 \end{itemize}
 
 \medskip
@@ -4122,6 +4322,64 @@ be a maturity period e.g.\ \lstinline!5Y!. The \lstinline!Strike! should be an a
 \label{lst:yoy_cf_calibration_inst}
 \end{listing}
 
+% credit models: todo
+
+% commodity models
+
+For commodity simulation we currently provide one model, as described in the methodology appendix. 
+Commodity model components are specified by commodity name, by a block as follows
+
+\begin{listing}[H]
+\begin{minted}[fontsize=\footnotesize]{xml}
+<CrossAssetModel>	
+  <!-- ... -->
+  <CommodityModels>
+    <CommoditySchwartz name="default">
+      <Currency>EUR</Currency>
+      <CalibrationType>None</CalibrationType>
+      <Sigma>
+        <Calibrate>Y</Calibrate>
+        <InitialValue>0.1</InitialValue>
+      </Sigma>
+      <Kappa>
+        <Calibrate>Y</Calibrate>
+        <InitialValue>0.1</InitialValue>
+      </Kappa>
+      <CalibrationOptions>
+           ...
+      </CalibrationOptions>
+      <DriftFreeState>false</DriftFreeState>
+    </CommoditySchwartz>
+    <CommoditySchwartz name="WTI">
+      <!-- ... -->
+    </CommoditySchwartz>
+    <CommoditySchwartz name="NG">
+      <!-- ... -->
+    </CommoditySchwartz>
+      <!-- ... -->
+  </CommodityModels>
+  <!-- ... -->
+<CrossAssetModel>	
+\end{minted}
+\caption{Simulation model commodity configuration}
+\label{lst:simulation_model_com_configuration}
+\end{listing}
+
+CommoditySchwartz sections are defined by commodity name, but we also support a default configuration as above for the IR and 
+FX model parameterisations.  Each component is parameterised in terms of two constant, non time-dependent parameters $\sigma$ and $\kappa$ so far (see appendix).
+Within each CommoditySchwartz section, the interpretation of elements is as follows:
+
+\begin{itemize}
+\item {\tt Currency: } Currency of denomination
+\item {\tt CalibrationType:} Choose between {\em BestFit} and {\em None}.  The choice {\em None} will deactivate calibration as usual. {\em BestFit} will attempt to set the model parameter(s) such that the error in matching calibration instrument prices is minimised.  The option  {\em Bootstrap} is not available here because the model parameters are not time-dependent and the model's degrees of freedom in general do not suffice to perfectly match the calibration instrument prices.
+\item {\tt Sigma/Calibrate:} Flag to enable/disable calibration of this particular parameter
+\item {\tt Sigma/InitialValue:} Initial value of the constant parameter
+\item {\tt Kappa/Calibrate:} Flag to enable/disable calibration of this particular parameter
+\item {\tt Kappa/InitialValue:} Initial value of the constant parameter
+\item {\tt CalibrationOptions:} Choice of calibration instruments by expiry and strike, strikes can be empty 	(implying the default, ATMF options), or explicitly specified (in terms of commodity prices as absolute strike values). 
+\item {\tt DriftFreeState[Optional]:} Boolean to switch between the two implementations of the state variable, see appendix. By default this is set to {\tt false}.        
+\end{itemize}
+
 \medskip
 Finally, the instantaneous correlation structure is specified as follows.
 
@@ -4149,7 +4407,7 @@ Finally, the instantaneous correlation structure is specified as follows.
 \label{lst:simulation_model_correlation_configuration}
 \end{listing}
 
-Any risk factor pair not specified explicitly here will be assumed to have zero correlation.
+Any risk factor pair not specified explicitly here will be assumed to have zero correlation. Note that the commodity components can have non-zero correlations among each other, but correlations to all other CAM components must remain set to zero for the time being.
 
 \subsubsection{Market}\label{sec:sim_market}
 
@@ -4177,13 +4435,18 @@ There are two methods in ORE for swaption volatility cube simulation:
 
 FX volatilities are taken to be a curve by default. To simulate an FX volatility cube with smile the xml node {\tt <Surface> } must be supplied. The surface node contains the moneyness levels to be simulated.
 
-For Yield Curves, Swaption Volatilities, CapFloor Volatilities, Default Curves, Base Correlations and Inflation Curves, a DayCounter may be specified for each riskfactor using the node {\tt <DayCounter name="EXAMPLE\_CURVE">}.  
-If no day counter is specified for a given riskfactor then the default Actual365 is used. To specify a new default for a riskfactor type then use the daycounter node without any attribute,  {\tt <DayCounter>}.
+For Yield Curves, Swaption Volatilities, CapFloor Volatilities, Default Curves, Base Correlations and Inflation Curves, a DayCounter may be specified for each risk factor using the node {\tt <DayCounter name="EXAMPLE\_CURVE">}.  
+If no day counter is specified for a given risk factor then the default Actual365 is used. To specify a new default for a risk factor type then use the daycounter node without any attribute,  {\tt <DayCounter>}.
 
 For Yield Curves, there are several choices for the interpolation and extrapolation:
 \begin{itemize}
 \item Interpolation: This can be LogLinear or LinearZero. If not given, the value defaults to LogLinear.
-\item Extrpolation: This can be FlatFwd or FlatZero. If not given, the value defaults to FlatFwd.
+\item Extrapolation: This can be FlatFwd or FlatZero. If not given, the value defaults to FlatFwd.
+\end{itemize}
+
+For Default Curve, there is a similar choice for the extrapolation:
+\begin{itemize}
+\item Extrapolation: This can be FlatFwd or FlatZero. If not given, the value defaults to FlatFwd.
 \end{itemize}
 
 \begin{longlisting}
@@ -4223,7 +4486,8 @@ For Yield Curves, there are several choices for the interpolation and extrapolat
       </Names> 
       <Tenors>6M,1Y,2Y</Tenors> 
       <SimulateSurvivalProbabilities>true</SimulateSurvivalProbabilities> 
-      <DayCounter name="CPTY1">ACT/ACT</DayCounter> 
+      <DayCounter name="CPTY1">ACT/ACT</DayCounter>
+      <Extrapolation>FlatFwd</Extrapolation>
   </DefaultCurves> 
   <SwaptionVolatilities>
     <ReactionToTimeDecay>ForwardVariance</ReactionToTimeDecay>
@@ -4374,10 +4638,10 @@ The general structure is shown in listing \ref{lst:sensitivity_config}, for a mo
 \item {\tt ShiftTenors:} For curves, the tenor buckets to apply shifts to, given as a comma separated list of periods.
 \item {\tt ShiftExpiries:} For volatility surfaces, the option expiry buckets to apply shifts to, given as a comma
   separated list of periods.
-\item {\tt ShiftTerms:} For swaption volatility surfaces, the underlying terms to apply shifts to, given as a comma
-  separated list of periods.
 \item {\tt ShiftStrikes:} For cap/floor, FX option and equity option volatility surfaces, the strikes to apply shifts to, given as a comma separated
   list of absolute strikes
+\item {\tt ShiftTerms:} For swaption volatility surfaces, the underlying terms to apply shifts to, given as a comma
+  separated list of periods.
 \item {\tt Index:} For cap / floor volatility surfaces, the index which together with the currency defines the surface.
   list of absolute strikes
 \item {\tt CurveType:} In the context of Yield Curves used to identify an equity ``risk free'' rate forecasting curve; set to {\tt EquityForecast} in this case
@@ -4465,8 +4729,8 @@ Additional flags:
       <ShiftType>Relative</ShiftType>
       <ShiftSize>0.01</ShiftSize>
       <ShiftExpiries>1Y,5Y,7Y,10Y</ShiftExpiries>
-      <ShiftTerms>1Y,5Y,10Y</ShiftTerms>
       <ShiftStrikes/>
+      <ShiftTerms>1Y,5Y,10Y</ShiftTerms>
     </SwaptionVolatility>
   </SwaptionVolatilities>
   ...
@@ -4593,13 +4857,13 @@ and {\tt term}) represents a default value that is used whenever no explicit val
 \end{longlisting}
 
 %--------------------------------------------------------
-\subsection{Calendar Adjustment: {\tt calendaradjustment.xml}}\label{sec:calenderdjustment}
+\subsection{Calendar Adjustment: {\tt calendaradjustment.xml}}\label{sec:calendaradjustment}
 %--------------------------------------------------------
 
 \medskip
  This file {\tt calendaradjustment.xml} list out all additional holidays and business days that are added to a specified calendar in ORE.
  These dates would originally be missing from the calendar and has to be added.The general structure is shown in listing \ref{lst:calendar_adjustment}.
-In this example, two additional dates had been added to the calendar "Japan", one addtional holiday and one additional business day. If the user is not certain
+In this example, two additional dates had been added to the calendar "Japan", one additional holiday and one additional business day. If the user is not certain
 wether the date is already included or not, adding it to the {\tt calendaradjustment.xml} to be safe won't raise any errors.
 A sample {\tt calendaradjustment.xml} file can be found in the global example input directory. However, it is only used in Example\_1.
 
@@ -4618,7 +4882,7 @@ A sample {\tt calendaradjustment.xml} file can be found in the global example in
 \caption{Calendar Adjustment}\label{lst:calendar_adjustment}
 \end{longlisting}
 
-If the parameter \lstinline!BaseCalendar! is provided then a new calendar will be created using the specified calendar as a base, and adding any \lstinline!AdditionalHolidays! or \lstinline!AdditionalBusinessDays!. In the example below a new calendar \lstinline!CUSTOM\_Japan! is being created, it will include any additional holidays or business days specified in the original \lstinline!Japan! calendar plus one additional date.
+If the parameter \lstinline!BaseCalendar! is provided then a new calendar will be created using the specified calendar as a base, and adding any \lstinline!AdditionalHolidays! or \lstinline!AdditionalBusinessDays!. In the example below a new calendar \lstinline!CUSTOM_Japan! is being created, it will include any additional holidays or business days specified in the original \lstinline!Japan! calendar plus one additional date.
 
 If a new calendar is added in this way and the schema is being used to validate XML input, the corresponding calendar name must be prefixed with `CUSTOM\_'.
 
@@ -4626,7 +4890,7 @@ If a new calendar is added in this way and the schema is being used to validate 
 \hrule\medskip
 \begin{minted}[fontsize=\scriptsize]{xml}
 <CalendarAdjustments>
-  <Calendar name="CUSTOM\_Japan">
+  <Calendar name="CUSTOM_Japan">
     <BaseCalendar>Japan</BaseCalendar>
     <AdditionalHolidays>
       <Date>2020-04-06</Date>
@@ -4693,6 +4957,7 @@ Listing \ref{lst:swaptionvol_configuration} shows an example of a Swaption volat
     <SmileOptionTenors>6M,1Y,10Y</SmileOptionTenors>
     <SmileSwapTenors>2Y,5Y</SmileSwapTenors>
     <SmileSpreads>-0.02,-0.01,0.01,0.02</SmileSpreads>
+    <QuoteTag/>
   </SwaptionVolatility>
   ...
 </SwaptionVolatilities>
@@ -4728,6 +4993,10 @@ In the case of {\tt ShiftedLognormal}, a matrix of shifts (by option and swap te
 	\item SmileSwapTenors: Underlying Swap term, in period form, where smile section data is to be taken into account
 	\item SmileSpreads: Strikes in smile direction expressed as strike spreads, relative to the ATM strike at the expiry/term point of the ATM matrix
 	\end{itemize}
+\item QuoteTag [Optional]: If non-empty, a tag will be included in the market datum labels. This can be used to set up
+  underlying specific volatility date. For example, if the quote tag is set to EUR-EURIBOR-3M, the market datum labels
+  will be \verb+SWAPTION/RATE\_LNVOL/EUR/EUR-EURIBOR-3M/5Y/10Y/ATM+ instead of
+  \verb+SWAPTION/RATE\_LNVOL/EUR/5Y/10Y/ATM+.
 \end{itemize}
 
 \include{curve_configurations/capfloorvolatility}
@@ -4746,10 +5015,10 @@ Listings \ref{lst:fxoptionvol_configuration_atm}, \ref{lst:fxoptionvol_configura
     <Dimension>ATM</Dimension> 
     <Expiries>1M,3M,6M,1Y,2Y,3Y,10Y</Expiries>
     <FXSpotID>FX/EUR/USD</FXSpotID>
-    <FXForeignCurveID>Yield/EUR/ERU-IN-USD</FXForeignCurveID>
+    <FXForeignCurveID>Yield/EUR/EUR-IN-USD</FXForeignCurveID>
     <FXDomesticCurveID>Yield/USD/USD1D</FXDomesticCurveID>
     <DayCounter>A365</DayCounter>
-    <Calendar>US,TARGET<Calendar>
+    <Calendar>US,TARGET</Calendar>
     <Conventions>EUR-USD-FXOPTION</Conventions>
   </FXVolatility>
 \end{minted}
@@ -4771,7 +5040,7 @@ Listings \ref{lst:fxoptionvol_configuration_atm}, \ref{lst:fxoptionvol_configura
     <FXForeignCurveID>Yield/USD/USD1D</FXForeignCurveID>
     <FXDomesticCurveID>Yield/JPY/JPY-IN-USD</FXDomesticCurveID>
     <DayCounter>A365</DayCounter>
-    <Calendar>US,JP<Calendar>
+    <Calendar>US,JP</Calendar>
     <Conventions>USD-JPY-FXOPTION</Conventions>
   </FXVolatility>
 \end{minted}
@@ -4793,7 +5062,7 @@ Listings \ref{lst:fxoptionvol_configuration_atm}, \ref{lst:fxoptionvol_configura
     <FXForeignCurveID>Yield/USD/USD1D</FXForeignCurveID>
     <FXDomesticCurveID>Yield/JPY/JPY-IN-USD</FXDomesticCurveID>
     <DayCounter>A365</DayCounter>
-    <Calendar>US,JP<Calendar>
+    <Calendar>US,JP</Calendar>
     <Conventions>USD-JPY-FXOPTION</Conventions>
   </FXVolatility>
 \end{minted}
@@ -4815,7 +5084,7 @@ Listings \ref{lst:fxoptionvol_configuration_atm}, \ref{lst:fxoptionvol_configura
     <FXForeignCurveID>Yield/USD/USD1D</FXForeignCurveID>
     <FXDomesticCurveID>Yield/JPY/JPY-IN-USD</FXDomesticCurveID>
     <DayCounter>A365</DayCounter>
-    <Calendar>US,JP<Calendar>
+    <Calendar>US,JP</Calendar>
     <Conventions>USD-JPY-FXOPTION</Conventions>
   </FXVolatility>
 \end{minted}
@@ -4831,7 +5100,7 @@ Listings \ref{lst:fxoptionvol_configuration_atm}, \ref{lst:fxoptionvol_configura
     <Dimension>ATMTriangulated</Dimension> 
     <FXSpotID>FX/EUR/JPY</FXSpotID>
     <DayCounter>A365</DayCounter>
-    <Calendar>US,JP<Calendar>
+    <Calendar>US,JP</Calendar>
     <BaseVolatility1>EURUSD</BaseVolatility1>
     <BaseVolatility2>USDJPY</BaseVolatility2>
   </FXVolatility>
@@ -4866,7 +5135,7 @@ The meaning of each of the elements in Listings \ref{lst:fxoptionvol_configurati
     ATM} or {\tt Delta} or {\tt BFRR} curves.
 \item Deltas [Optional]: Strike grid, required in case of SmileType {\tt Delta} \\ Allowable values: {\tt ATM, *P, *C},
   see example in Listing \ref{lst:fxoptionvol_configuration_smile_delta}
-\item SmileDeltas [Optional]: Strike grid for SmileType {\tt VannaVolga} and {\tt BFRR}, defaults to 25 for VannaVolga
+\item SmileDelta [Optional]: Strike grid for SmileType {\tt VannaVolga} and {\tt BFRR}, defaults to 25 for VannaVolga
   resp. 10,25 for BFRR \\ Allowable values: a list of integers, see example in Listing
   \ref{lst:fxoptionvol_configuration_smile_bfrr}
 \item FXSpotID: ORE representation of the relevant FX spot quote in the form FX/CCY1/CCY2 
@@ -4893,7 +5162,7 @@ Listing \ref{lst:eqcurve_configuration} shows the configuration of equity forwar
 
 \begin{longlisting}
 %\hrule\medskip
-\begin{minted}[fontsize=\footnotesize]{xml}
+\begin{minted}[fontsize=\footnotesize, texcomments]{xml}
 <EquityCurves>
   <EquityCurve>
     <CurveId>SP5</CurveId>
@@ -4918,8 +5187,8 @@ Listing \ref{lst:eqcurve_configuration} shows the configuration of equity forwar
     <DividendInterpolation>
       <!-- Zero, Discount -->
       <InterpolationVariable>Zero</InterpolationVariable>
-      <!-- See \ref{tab:allow_interp_methods} -->
-      <InterpolationMethod>LogLinear</InterpolationMethod>
+      <!-- See Table \ref{tab:allow_interp_methods} for allowed interpolation methods -->
+      <InterpolationMethod>Linear</InterpolationMethod>
     </DividendInterpolation>
     <!-- Optional node, defaults to true -->
     <Extrapolation>True</Extrapolation>
@@ -5128,7 +5397,7 @@ see \ref{md:equity_option_iv} for details of the market data.
 \label{lst:eqoptionvol_mny_surface}
 \end{longlisting}
 
-Finally, the volatility proxy surface configuration layout is given in Listing \ref{lst:eqoptionvol_proxy}. This allows us to use any other surface as a proxy, in cases where there is no option data for a given equity. We provide a name in the \lstinline!ProxySurface! field, which must match the \lstinline!CurveId! of another configuration. The proxy surface looks up the volatility in the reference surface bases on moneyness.
+Finally, the volatility proxy surface configuration layout is given in Listing \ref{lst:eqoptionvol_proxy}. This allows us to use any other surface as a proxy, in cases where there is no option data for a given equity. We provide a name in the \lstinline!EquityVolatilityCurve! field, which must match the \lstinline!CurveId! of another configuration.  \lstinline!FXVolatilityCurve! and \lstinline!CorrelationCurve! must be provided if the currency of the proxy surface is different to that of current surface, that can be omitted otherwise. The proxy surface looks up the volatility in the reference surface based on moneyness.
  
 \begin{longlisting}
 %\hrule\medskip
@@ -5139,7 +5408,11 @@ Finally, the volatility proxy surface configuration layout is given in Listing \
     <CurveDescription>Lognormal option implied vols for APC - proxied from SP5</CurveDescription>
     <Currency>USD</Currency>
     <DayCounter>Actual/365 (Fixed)</DayCounter>
-    <ProxySurface>SP5</PROXYSurface>
+    <ProxySurface>
+      <EquityVolatilityCurve>RIC:.SPX</EquityVolatilityCurve>
+      <FXVolatilityCurve>GBPUSD</FXVolatilityCurve>
+      <CorrelationCurve>FX-GENERIC-GBP-USD&amp;EQ-RIC:VOD.L</CorrelationCurve>
+    </ProxySurface>
   </EquityVolatility>
   <EquityVolatility>
     ...
@@ -5225,7 +5498,7 @@ The optional seasonality block defines a multiplicative seasonality and contains
   month matters, the year is ignored.
 \item {\tt Frequency:} Defines the frequency of the factors (usually identical to the index's fixing frequency).
 \item {\tt Factors:} Multiplicative seasonality correction factors, must be part of the market data.
-\item {\tt OverrideFactors:} A numeric list of seaosonality correction factors, replacing the Factors. This allows to
+\item {\tt OverrideFactors:} A numeric list of seasonality correction factors, replacing the Factors. This allows to
   specify a static seasonality correction that does not require market data quotes. If both Factors and OverrideFactors
   are given, the OverrideFactors are used. Otherwise only one of Factors, OverrideFactors is required in a seasonality
   block.
@@ -5277,7 +5550,7 @@ floor price surface.
 \item {\tt Type}: The type of the surface, {\tt ZC} for zero coupon, {\tt YY} for year on year. 
 \item {\tt QuoteType}: The type of the quotes used to build the surface, {\tt Volatility} for volatility quotes, {\tt Price} for bootstrap from option premia. 
 \item {\tt VolatilityType}: If QuoteType is {\tt Volatility}, this specifies whether the input is {\tt Normal}, {\tt Lognormal} or {\tt ShiftedLognormal}. 
-\item {\tt Extrapolation}: Boolean to indictae whether the surface should allow extrapolation. 
+\item {\tt Extrapolation}: Boolean to indicate whether the surface should allow extrapolation. 
 \item {\tt DayCounter}: The term structure's day counter
 \item {\tt Calendar}: The term structure's calendar 
 \item {\tt BusinessDayConvention}: The term structure's business day convention
@@ -5300,9 +5573,9 @@ floor price surface.
 
 When configuring volatility structures for CDS and index CDS options, there are three options:
 \begin{enumerate}
-\item a constant volatility for all expiries and strikes.
-\item a volatility curve with a dependency on expiry but no strike dimension.
-\item a volatility surface with an expiry and strike dimension.
+\item a constant volatility for all expiries, strikes and terms.
+\item a volatility curve with a dependency on expiry and term, but no strike dimension.
+\item a volatility surface with an expiry, term and strike dimension.
 \end{enumerate}
 
 Firstly, the constant volatility configuration layout is given in Listing \ref{lst:cdsvol_constant_config}. The single volatility quote ID, \lstinline!constant_quote_id!, in the \lstinline!Quote! node should be a CDS option volatility quote as described in Section \ref{md:cds_option_iv}. The \lstinline!DayCounter! node is optional and defaults to \lstinline!A365F!. The \lstinline!Calendar! node is optional and defaults to \lstinline!NullCalendar!. The \lstinline!DayCounter! and \lstinline!Calendar! nodes are common to all three CDS volatility configurations.
@@ -5342,6 +5615,12 @@ The optional boolean parameter \lstinline!EnforceMontoneVariance! should be set 
     <Extrapolation>...</Extrapolation>
     <EnforceMontoneVariance></EnforceMontoneVariance>
   </Curve>
+  <Terms>
+    <Term>
+      <Label>...</Label>
+      <Curve>...</Curve>
+    </Term>
+  </Terms>
   <DayCounter>...</DayCounter>
   <Calendar>...</Calendar>
 </CDSVolatility>
@@ -5352,23 +5631,19 @@ The optional boolean parameter \lstinline!EnforceMontoneVariance! should be set 
 
 For backwards compatibility, the volatility curve configuration can also be given using a single \lstinline!Expiries! node as shown in Listing \ref{lst:cdsvol_curve_config_alt}. Note that this configuration is deprecated and the configuration in \ref{lst:cdsvol_curve_config} is preferred. The \lstinline!Expiries! node should take a comma separated list of tenors and or expiry dates e.g.\ \lstinline!<Expiries>1M,3M,6M</Expiries>!. The list of expiries are extracted and a set of quotes are created of the form \lstinline!INDEX_CDS_OPTION/RATE_LNVOL/[NAME]/[EXPIRY]! or \lstinline!INDEX_CDS_OPTION/RATE_LNVOL/[NAME]/[TERM]/[EXPIRY]!. There is one quote for each expiry in the list where the \lstinline![EXPIRY]! field is understood to be replaced with the expiry string extracted from the list.
 
-The \lstinline![NAME]! field, and possible \lstinline![TERM]! field, in the quote depends on the values of the optional string node \lstinline!QuoteName! and the optional boolean node \lstinline!ParseTerm!. The following logic is used to populate the \lstinline![NAME]! field and possibly the \lstinline![TERM]! field:
+The \lstinline![NAME]! field is populated with the curve id or with the \lstinline![QuoteName]! if that is specified. The rules for including market quotes into the volatility surface construction are as follows:
 
 \begin{itemize}
-\item
-if \lstinline!QuoteName! is provided, it is used directly to populate the \lstinline![NAME]! field. In other words, the quotes will be of the first form i.e.\ \lstinline!INDEX_CDS_OPTION/RATE_LNVOL/QuoteName/[EXPIRY]! and the \lstinline![TERM]! field is not added to the quote string. Note that there is nothing stopping the user from adding the term directly to the \lstinline!QuoteName! i.e.\ using a \lstinline!QuoteName! of \lstinline!SubQuoteName/Term!. In this way, the quotes will be of the second form i.e.\ \lstinline!INDEX_CDS_OPTION/RATE_LNVOL/SubQuoteName/Term/[EXPIRY]! and \lstinline![NAME]! has been populated with \lstinline!SubQuoteName! and \lstinline![TERM]! has been populated with \lstinline!Term!. Obviously, for the quote to be parsed properly, \lstinline!Term! needs to be a valid tenor string.
-
-\item
-if \lstinline!QuoteName! is not provided and \lstinline!ParseTerm! is provided and is \lstinline!true!, an attempt is made to parse a \lstinline!SubCurveId! and \lstinline!Term! from the \lstinline!CurveId! node. In particular, the parsing routine expects the \lstinline!CurveId! to be of the form \lstinline!SubCurveId-Term!. If this is the case, the \lstinline![NAME]! field is populated with \lstinline!SubCurveId/Term!. The reason for this logic is to easily allow different volatility structures for different terms of the same index CDS series or the same CDS reference entity.
-
-As a concrete example, we could have two volatility structures with \lstinline!CurveId!s equal to \lstinline!CDXHYS34V1-5Y! and \lstinline!CDXHYS34V1-10Y!. Assume that \lstinline!QuoteName! is not provided and \lstinline!ParseTerm! is provided and is \lstinline!true! in both configurations. For \lstinline!CDXHYS34V1-5Y!, quotes will be of the form \lstinline!INDEX_CDS_OPTION/RATE_LNVOL/CDXHYS34V1/5Y/[EXPIRY]! and for \lstinline!CDXHYS34V1-10Y!, quotes will be of the form \lstinline!INDEX_CDS_OPTION/RATE_LNVOL/CDXHYS34V1/10Y/[EXPIRY]!.
-
-If the attempt to parse a \lstinline!SubCurveId! and \lstinline!Term! from the \lstinline!CurveId! node fails, the \lstinline![NAME]! field is simply populated with the \lstinline!CurveId! node value.
-
-\item
-if \lstinline!QuoteName! is not provided and \lstinline!ParseTerm! is not provided or is provided and is \lstinline!false!, the \lstinline![NAME]! field is simply populated with the \lstinline!CurveId! node value.
-
+\item All quotes explicitly specified with their full name are loaded (applies to configs of type constant or curve
+  without wildcards)
+\item If a quote does not contain a term, we only load it if at most one term is specified in the vol curve config. The
+  quote gets the unique term specified in the vol curve configs assigned or 5Y if the config does not specify any terms.
+\item If a quote contains a term if this matches one of the configured terms in the curve configuration or if the curve
+  configuration does not specify any terms.
 \end{itemize}
+
+The \lstinline![Terms]! node specifies a list of term labels ``5Y'', ``7Y'', ... and associated credit curve spec names
+representing the curve suitable to estimate the ATM level for that term.
 
 If only one expiry is provided in the list, there is only one quote and a constant volatility structure is configured as in Listing \ref{lst:cdsvol_constant_config}. If more than one expiry is provided, a curve is configured as in \ref{lst:cdsvol_curve_config}. The interpolation is \lstinline!Linear!, the extrapolation is \lstinline!Flat! and \lstinline!EnforceMontoneVariance! is \lstinline!true!.
 
@@ -5381,7 +5656,12 @@ If only one expiry is provided in the list, there is only one quote and a consta
   <DayCounter>...</DayCounter>
   <Calendar>...</Calendar>
   <QuoteName>...</QuoteName>
-  <ParseTerm>...</ParseTerm>
+  <Terms>
+    <Term>
+      <Label>...</Label>
+      <Curve>...</Curve>
+    </Term>
+  </Terms>
 </CDSVolatility>
 \end{minted}
 \caption{Legacy deprecated CDS volatility curve configuration}
@@ -5412,7 +5692,7 @@ Thirdly, the volatility surface configuration layout is given in Listing \ref{ls
 \lstinline!StrikeExtrapolation!: extrapolation in the strike direction. The allowable values are \lstinline!Linear!, \lstinline!UseInterpolator!, \lstinline!Flat! or \lstinline!None!. If \lstinline!Linear! or \lstinline!UseInterpolator! is specified, the extrapolation uses the strike interpolation setting for extrapolation i.e. linear or cubic in this case. If \lstinline!Flat! is specified, the extrapolation is flat. If \lstinline!None! is specified, it is ignored and the extrapolation is flat since extrapolation in the strike direction cannot be turned off in isolation i.e.\ extrapolation can only be turned off for the surface as a whole using the \lstinline!Extrapolation! flag.
 
 \item
-\lstinline!DayCounter!: allowable value is any valid day count fraction. As stated above, this node is optional and defautls to \lstinline!A365F!.
+\lstinline!DayCounter!: allowable value is any valid day count fraction. As stated above, this node is optional and defaults to \lstinline!A365F!.
 
 \item
 \lstinline!Calendar!: allowable value is any valid calendar. As stated above, this node is optional and defaults to \lstinline!NullCalendar!.
@@ -5421,17 +5701,14 @@ Thirdly, the volatility surface configuration layout is given in Listing \ref{ls
 \lstinline!StrikeType!: allowable value is either \lstinline!Price! or \lstinline!Spread!. This flag denotes if the strikes are in terms of spread or price. Currently, this is merely informational and as outlined in the \lstinline!Strikes! section above, it is the responsibility of the user to ensure that the strike type in trades aligns with the configured strike type in the CDS volatility surfaces.
 
 \item
-\lstinline!QuoteName!: this node is optional and the allowable value is any string. This value can be used in determining the name and term that appears in the quote strings that are searched for in the market data to feed into the CDS volatility surface construction. How it is used has been outlined above when describing the derprecated CDS volatility curve configuration.
+\lstinline!QuoteName!: this node is optional and the allowable value is any string. This value can be used in determining the name and term that appears in the quote strings that are searched for in the market data to feed into the CDS volatility surface construction. How it is used has been outlined above when describing the deprecated CDS volatility curve configuration.
 
 \item
-\lstinline!StrikeFactor!: this node is optional and the allowable value is any postive real number. It defaults to 1. The strikes configured and found in the market data quote strings may not be in absolute terms. For example, a quote string such as \lstinline!INDEX_CDS_OPTION/RATE_LNVOL/CDXIGS33V1/5Y/1M/115! could be given to indicate an index CDS option volatility quote for CDX IG Series 33 Version 1, with underlying index term 5Y expiring in 1M with a strike spread of 115 bps. The strike here is in bps and needs to be divided by 10,000 before being used in the ORE volatility objects. The \lstinline!StrikeFactor! would be set to \lstinline!10000! here.
-
-\item
-\lstinline!ParseTerm!: this node is an optional boolean and defaults to \lstinline!false!. This value can be used in determining the name and term that appears in the quote strings that are searched for in the market data to feed into the CDS volatility surface construction. How it is used has been outlined above when describing the derprecated CDS volatility curve configuration.
+\lstinline!StrikeFactor!: this node is optional and the allowable value is any positive real number. It defaults to 1. The strikes configured and found in the market data quote strings may not be in absolute terms. For example, a quote string such as \lstinline!INDEX_CDS_OPTION/RATE_LNVOL/CDXIGS33V1/5Y/1M/115! could be given to indicate an index CDS option volatility quote for CDX IG Series 33 Version 1, with underlying index term 5Y expiring in 1M with a strike spread of 115 bps. The strike here is in bps and needs to be divided by 10,000 before being used in the ORE volatility objects. The \lstinline!StrikeFactor! would be set to \lstinline!10000! here.
 
 \end{itemize}
 
-When the CDS volatility surface is configured as in Listing \ref{lst:cdsvol_surface_config}, the market is searched for quote strings of the form \lstinline!INDEX_CDS_OPTION/RATE_LNVOL/[NAME]/[EXPIRY]/[STRIKE]! or \lstinline!INDEX_CDS_OPTION/RATE_LNVOL/[NAME]/[TERM]/[EXPIRY]/[STRIKE]!. The population of the \lstinline![NAME]! field, and possibly the \lstinline![TERM]! field, and how they depend on the \lstinline!QuoteName! and \lstinline!ParseTerm! nodes has been discussed at length above when describing the derprecated CDS volatility curve configuration. When both the \lstinline!Strikes! and \lstinline!Expiries! are configured explicitly, it is clear that the \lstinline![EXPIRY]! field is populated from the list of expiries in turn and the \lstinline![STRIKE]! field is populated from the list of strikes in turn. If there are $m$ expiries in the \lstinline!Expiries! list and $n$ strikes in the \lstinline!Strikes! list, there will be $m \times n$ quotes created and searched for in the market data. If \lstinline!Expiries! are configured via the wildcard character, \lstinline!*!, all quotes in the market data matching the pattern \lstinline!INDEX_CDS_OPTION/RATE_LNVOL/[NAME]/*/[STRIKE]! will be used if \lstinline![TERM]! has not been populated and all quotes in the market data matching the pattern \lstinline!INDEX_CDS_OPTION/RATE_LNVOL/[NAME]/[TERM]/*/[STRIKE]! will be used if \lstinline![TERM]! has been populated. Similarly for \lstinline!Strikes! configured via the wildcard character, \lstinline!*!.
+When the CDS volatility surface is configured as in Listing \ref{lst:cdsvol_surface_config}, the market is searched for quote strings of the form \lstinline!INDEX_CDS_OPTION/RATE_LNVOL/[NAME]/[EXPIRY]/[STRIKE]! or \lstinline!INDEX_CDS_OPTION/RATE_LNVOL/[NAME]/[TERM]/[EXPIRY]/[STRIKE]!. The population of the \lstinline![NAME]! field, and possibly the \lstinline![TERM]! field, and how they depend on the \lstinline!QuoteName! and \lstinline!ParseTerm! nodes has been discussed at length above when describing the deprecated CDS volatility curve configuration. When both the \lstinline!Strikes! and \lstinline!Expiries! are configured explicitly, it is clear that the \lstinline![EXPIRY]! field is populated from the list of expiries in turn and the \lstinline![STRIKE]! field is populated from the list of strikes in turn. If there are $m$ expiries in the \lstinline!Expiries! list and $n$ strikes in the \lstinline!Strikes! list, there will be $m \times n$ quotes created and searched for in the market data. If \lstinline!Expiries! are configured via the wildcard character, \lstinline!*!, all quotes in the market data matching the pattern \lstinline!INDEX_CDS_OPTION/RATE_LNVOL/[NAME]/*/[STRIKE]! will be used if \lstinline![TERM]! has not been populated and all quotes in the market data matching the pattern \lstinline!INDEX_CDS_OPTION/RATE_LNVOL/[NAME]/[TERM]/*/[STRIKE]! will be used if \lstinline![TERM]! has been populated. Similarly for \lstinline!Strikes! configured via the wildcard character, \lstinline!*!.
 
 \begin{longlisting}
 \begin{minted}[fontsize=\footnotesize]{xml}
@@ -5447,6 +5724,12 @@ When the CDS volatility surface is configured as in Listing \ref{lst:cdsvol_surf
     <TimeExtrapolation>...</TimeExtrapolation>
     <StrikeExtrapolation>...</StrikeExtrapolation>
   </StrikeSurface>
+  <Terms>
+    <Term>
+      <Label>...</Label>
+      <Curve>...</Curve>
+    </Term>
+  </Terms>
   <DayCounter>...</DayCounter>
   <Calendar>...</Calendar>
   <StrikeType>...</StrikeType>
@@ -5541,7 +5824,7 @@ Listing \ref{lst:security_configuration} shows the configuration of the Securiti
 \end{itemize}
 
 If no configuration is given for a security, in general a pricer will assume as zero spread and recovery rate. Notice
-that in this case the spread and recovery will not be simulated and therefore also be excluded from the sensitvitiy and
+that in this case the spread and recovery will not be simulated and therefore also be excluded from the sensitivity and
 stress analysis.
 
 \begin{longlisting}
@@ -5562,7 +5845,7 @@ stress analysis.
 
 \subsubsection{Correlations}
 
-Listing \ref{lst:correlation_configuration} shows the configuration of the Correlations. The Correlation type can be either CMSSpread or Generic. The former one is to configure the correlation between two CMS indexes, the latter one is to  generally configure the correlation between two indexes, e.g. between a CMS index and a IBOR index. Currently only ATM correlation curves or Flat correlation structures are supported. Correlation quotes may be loaded directly (by setting QuoteType to RATE) or calibrated from prices (set QuoteType to PRICE).  Moreover a flat zero correlation curve can be loaded (by setting  QuoteType to NULL). In this case market quotes are not needed to be provided. Currently only CMSSpread correlations can be calibrated. This is done using CMS Spread Options, and requires a CMSSpreadOption convention, SwaptionVolatility and DiscountCurve to be provided. OptionTenors can be a comma separaed list of periods, 1Y,2Y etc, or a \lstinline!*! to indicate a wildcard. If a wildcard is provided, all relevant market data quotes are used.
+Listing \ref{lst:correlation_configuration} shows the configuration of the Correlations. The Correlation type can be either CMSSpread or Generic. The former one is to configure the correlation between two CMS indexes, the latter one is to  generally configure the correlation between two indexes, e.g. between a CMS index and a IBOR index. Currently only ATM correlation curves or Flat correlation structures are supported. Correlation quotes may be loaded directly (by setting QuoteType to RATE) or calibrated from prices (set QuoteType to PRICE).  Moreover a flat zero correlation curve can be loaded (by setting  QuoteType to NULL). In this case market quotes are not needed to be provided. Currently only CMSSpread correlations can be calibrated. This is done using CMS Spread Options, and requires a CMSSpreadOption convention, SwaptionVolatility and DiscountCurve to be provided. OptionTenors can be a comma separated list of periods, 1Y,2Y etc, or a \lstinline!*! to indicate a wildcard. If a wildcard is provided, all relevant market data quotes are used.
 
 \begin{longlisting}
 %\hrule\medskip
@@ -5707,10 +5990,11 @@ This node should hold a real number. It provides an upper bound for the search d
 
 
 %========================================================
-%\section{Trade Data}\label{sec:portfolio_data}
+\section{Trade Data}\label{sec:portfolio_data}
 %========================================================
 \input{tradedata/intro}
 \input{tradedata/envelope}
+\input{tradedata/nettingsetdetails}
 \input{tradedata/tradespecifics}
 
 \input{tradedata/swap}
@@ -5721,41 +6005,70 @@ This node should hold a real number. It provides an upper bound for the search d
 \input{tradedata/fxforward}
 \input{tradedata/fxswap}
 \input{tradedata/fxoption}
+\input{tradedata/fx_asianoption}
+\input{tradedata/fx_barrieroption}
+\input{tradedata/fx_digitalbarrieroption}
+\input{tradedata/fx_digitaloption}
+\input{tradedata/fx_doublebarrieroption}
+\input{tradedata/fx_doubletouchoption}
+\input{tradedata/fx_europeanbarrieroption}
+\input{tradedata/fx_kikobarrieroption}
+\input{tradedata/fx_touchoption}
+\input{tradedata/fxvarianceswap}
 \input{tradedata/equityoption}
 \input{tradedata/equityfuturesoption}
 \input{tradedata/equityforward}
 \input{tradedata/equityswap}
+\input{tradedata/eq_asianoption}
+\input{tradedata/eq_barrieroption}
+\input{tradedata/eq_digitaloption}
+\input{tradedata/eq_doublebarrieroption}
+\input{tradedata/eq_doubletouchoption}
+\input{tradedata/eq_europeanbarrieroption}
+\input{tradedata/eq_touchoption}
+\input{tradedata/equityvarianceswap}
+\input{tradedata/equitycliquetoption}
 \input{tradedata/cpiswap}
 \input{tradedata/yyswap}
 \input{tradedata/bond}
 \input{tradedata/forwardbond}
 \input{tradedata/creditdefaultswap}
-\input{tradedata/commodityoption}
 \input{tradedata/commodityforward}
+\input{tradedata/commodityswap}
+\input{tradedata/commodityswaption}
+\input{tradedata/commodityoption}
+\input{tradedata/commodityapo}
+\input{tradedata/commodityoptionstrip}
+\input{tradedata/commodityvarianceswap}
 
 %\include{tradecomponents}
-\input{../../Docs/UserGuide/tradecomponents/tradecomponentsintro}
-\input{../../Docs/UserGuide/tradecomponents/optiondata}
-\input{../../Docs/UserGuide/tradecomponents/premiums}
-\input{../../Docs/UserGuide/tradecomponents/legdatanotionals}
-\input{../../Docs/UserGuide/tradecomponents/scheduledata}
-\input{../../Docs/UserGuide/tradecomponents/fixedlegdatarates}
-\input{../../Docs/UserGuide/tradecomponents/floatinglegdata}
-\input{../../Docs/UserGuide/tradecomponents/legdataamortisation}
-\input{../../Docs/UserGuide/tradecomponents/indexings}
-\input{../../Docs/UserGuide/tradecomponents/cashflowleg}
-\input{../../Docs/UserGuide/tradecomponents/cmsleg}
-\input{../../Docs/UserGuide/tradecomponents/digitalcmsleg}
-\input{../../Docs/UserGuide/tradecomponents/durationadjustedcmsleg}
-\input{../../Docs/UserGuide/tradecomponents/cmsspreadleg}
-\input{../../Docs/UserGuide/tradecomponents/digitalcmsspreadleg}
-\input{../../Docs/UserGuide/tradecomponents/equityleg}
-\input{../../Docs/UserGuide/tradecomponents/cpileg}
-\input{../../Docs/UserGuide/tradecomponents/yyleg}
-\input{../../Docs/UserGuide/tradecomponents/zerocouponleg}
-\input{../../Docs/UserGuide/tradecomponents/cdsreferenceinformation}
-\input{../../Docs/UserGuide/tradecomponents/underlying}
-
+\input{tradecomponents/tradecomponentsintro}
+\input{tradecomponents/optiondata}
+\input{tradecomponents/premiums}
+\input{tradecomponents/legdatanotionals}
+\input{tradecomponents/scheduledata}
+\input{tradecomponents/fixedlegdatarates}
+\input{tradecomponents/floatinglegdata}
+\input{tradecomponents/legdataamortisation}
+\input{tradecomponents/indexings}
+\input{tradecomponents/cashflowleg}
+\input{tradecomponents/cmsleg}
+\input{tradecomponents/cmbleg}
+\input{tradecomponents/digitalcmsleg}
+\input{tradecomponents/durationadjustedcmsleg}
+\input{tradecomponents/cmsspreadleg}
+\input{tradecomponents/digitalcmsspreadleg}
+\input{tradecomponents/equityleg}
+\input{tradecomponents/cpileg}
+\input{tradecomponents/yyleg}
+\input{tradecomponents/zerocouponleg}
+\input{tradecomponents/commodityfixedleg}
+\input{tradecomponents/commodityfloatingleg}
+\input{tradecomponents/equitymarginleg}
+\input{tradecomponents/cdsreferenceinformation}
+\input{tradecomponents/underlying}
+\input{tradecomponents/strikedata}
+\input{tradecomponents/barrierdata}
 
 \include{allowablevalues}
 
@@ -5792,7 +6105,7 @@ ORE applies the cross asset model described in detail in \cite{Lichters} to evol
 evolution model in ORE supports IR and FX risk factors for any number of currencies, Equity and Inflation as well as Credit. Extensions to full simulation of Commodity is planned. \\
 
 The Cross Asset Model is based on the Linear Gauss Markov model (LGM) for interest rates, lognormal FX and equity 
-processes, Dodgson-Kainth model for inflation, LGM or Extended Cox-Ingersoll-Ross model (CIR++) for credit.
+processes, Dodgson-Kainth model for inflation, LGM or Extended Cox-Ingersoll-Ross model (CIR++) for credit, and a single-factor log-normal model for commodity curves.
 We identify a single {\em domestic} currency; its LGM process,
 which is labelled $z_0$; and a set of $n$ foreign currencies with associated LGM processes that are labelled $z_i$, 
 $i=1,\dots,n$. 
@@ -5884,6 +6197,43 @@ and
   & & -\rho^{zI}_{i,k} \int_t^T (H_i(T)-H_i(s))\alpha_i(s)(H_{I,k}(T)-H_{I,k}(s))\alpha_{I,k}(s) ds \\
   & & +\rho^{xI}_{i,k} \int_t^T \sigma_i(s)(H_{I,k}(T)-H_{I,k}(s))\alpha_{I,k}(s) ds
 \end{eqnarray*}
+
+\subsubsection*{Commodity}
+
+Each commodity component models the commodity price curve as 
+\begin{eqnarray}
+\frac{dF(t,T)}{F(t,T)} &=& \sigma\,e^{-\kappa\,(T-t)}\, dW(t)  \label{gabillon1f}
+\end{eqnarray}
+which is a single-factor version of the Gabillon (1991) model that is e.g. described in \cite{Lichters}. It can also be seen as the Schwartz (1997) model formulated in terms of forward curve dynamics. The extension to the full Gabillon model with two factors and time-dependent multiplier
+\begin{eqnarray}
+\frac{dF(t,T)}{F(t,T)} &=& \alpha(t)\,
+\left( \sigma_S \,e^{-\kappa\,(T-t)}\, dW_S(t) + \sigma_L\,\left(1-e^{-\kappa\,(T-t)}\right)\,dW_L(t)\right) \label{gabillon2f}
+\end{eqnarray}
+for richer dynamics of the curve and accurate calibration to options will follow. 
+
+The commodity components' Wiener processes can be correlated. However, the integration of commodity components into the overall CAM assumes zero correlations between commodities and non-commodity drivers for the time being.
+
+To propagate the one-factor model, we can use an artificial (Ornstein-Uhlenbeck) spot price process
+\begin{align*}
+dX(t) &= -\kappa\,X(t)\,dt + \sigma(t)\,dW(t), \qquad X(0)=0\\
+X(t) &= X(s)\,e^{-\kappa(t-s)}+ \int_s^t \sigma\,e^{-\kappa(t-u)}\, dW(u)
+\end{align*}
+with 
+\begin{align*}
+F(t,T) &= F(0,T) \:\exp\left( X(t)\,e^{-\kappa\,(T-t)} - \frac{1}{2}\,(V(0,T)-V(t,T))  \right) \\
+V(t,T) &= e^{-2\kappa T}\int_t^T\sigma^2\:e^{2\kappa u}\,du.
+\end{align*}
+Note that 
+$$
+\V[\ln F(T,T)] = \V[X(T)] 
+$$
+is the variance that is used in the pricing of a Futures Option which in turn is used in the calibration of the Schwartz model.
+
+Alternatively, one can use the drift-free state variable $Y(t)=e^{\kappa t} X(t)$ with
+\begin{align*}
+dY(t) &= \sigma \: e^{\kappa \, t} \, dW(t).
+\end{align*}
+Both choices of state dynamics are possible in ORE. 
 
 \subsection{Analytical Moments of the Risk Factor Evolution Model}\label{sec:app_analytical_moments}
 
@@ -6867,6 +7217,8 @@ implementation of the inverse cumulative normal distribution to transform $U[0,1
 
   % \bibitem{OO} http://www.openoffice.org
 
+\bibitem{Andersen_Piterbarg_2010} Andersen, L., and Piterbarg, V. (2010): Interest Rate Modeling, Volume I-III
+  
 \bibitem{LichtersEtAl} Peter Caspers, Paul Giltinan, Paul; Lichters, Roland; Nowaczyk , Nikolai. {\em Forecasting Initial Margin Requirements – A Model Evaluation}, Journal of Risk Management in Financial Institutions, Vol. 10 (2017), No. 4, \url{https://ssrn.com/abstract=2911167}
 
 \bibitem{corrSalv} R. Rebonato and P. Jaeckel, The most general methodology to create a valid correlation matrix for

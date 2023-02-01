@@ -84,7 +84,7 @@ public:
     bool simulateSwapVolATMOnly() const { return swapVolSimulateATMOnly_; }
     const vector<Period>& swapVolTerms(const string& key) const;
     const vector<Period>& swapVolExpiries(const string& key) const;
-    vector<string> swapVolCcys() const { return paramsLookup(RiskFactorKey::KeyType::SwaptionVolatility); }
+    vector<string> swapVolKeys() const { return paramsLookup(RiskFactorKey::KeyType::SwaptionVolatility); }
     const string& swapVolDecayMode() const { return swapVolDecayMode_; }
     const vector<Real>& swapVolStrikeSpreads(const string& key) const;
 
@@ -92,10 +92,10 @@ public:
     const vector<Period>& yieldVolTerms() const { return yieldVolTerms_; }
     const vector<Period>& yieldVolExpiries() const { return yieldVolExpiries_; }
     vector<string> yieldVolNames() const { return paramsLookup(RiskFactorKey::KeyType::YieldVolatility); }
-    const string& yieldVolDecarayMode() const { return yieldVolDecayMode_; }
+    const string& yieldVolDecayMode() const { return yieldVolDecayMode_; }
 
     bool simulateCapFloorVols() const { return paramsSimulate(RiskFactorKey::KeyType::OptionletVolatility); }
-    vector<string> capFloorVolCcys() const { return paramsLookup(RiskFactorKey::KeyType::OptionletVolatility); }
+    vector<string> capFloorVolKeys() const { return paramsLookup(RiskFactorKey::KeyType::OptionletVolatility); }
     const vector<Period>& capFloorVolExpiries(const string& key) const;
     bool hasCapFloorVolExpiries(const string& key) const { return capFloorVolExpiries_.count(key) > 0; }
     const vector<QuantLib::Rate>& capFloorVolStrikes(const std::string& key) const;
@@ -107,7 +107,7 @@ public:
     */
     bool capFloorVolAdjustOptionletPillars() const { return capFloorVolAdjustOptionletPillars_; }
     /*! If \c true, use ATM cap rate when \c capFloorVolIsAtm is \c true when querying the todaysmarket optionlet 
-        volatility structure at the confirgured expiries. Otherwise, use the index forward rate.
+        volatility structure at the configured expiries. Otherwise, use the index forward rate.
     */
     bool capFloorVolUseCapAtm() const { return capFloorVolUseCapAtm_; }
 
@@ -143,6 +143,7 @@ public:
     const string& defaultCurveCalendar(const string& key) const;
     const vector<Period>& defaultTenors(const string& key) const;
     bool hasDefaultTenors(const string& key) const { return defaultTenors_.count(key) > 0; }
+    const string& defaultCurveExtrapolation() const { return defaultCurveExtrapolation_; }
 
     bool simulateCdsVols() const { return paramsSimulate(RiskFactorKey::KeyType::CDSVolatility); }
     const vector<Period>& cdsVolExpiries() const { return cdsVolExpiries_; }
@@ -157,19 +158,15 @@ public:
 
     // fxvol getters
     bool simulateFXVols() const { return paramsSimulate(RiskFactorKey::KeyType::FXVolatility); }
+    bool simulateFxVolATMOnly() const { return fxVolSimulateATMOnly_; }    
     bool fxVolIsSurface(const std::string& ccypair) const;
-    bool fxVolIsSurface() const;
-    bool hasFxPairWithSurface() const { return hasFxPairWithSurface_; }
-    bool useMoneyness(const std::string& ccypair) const;
-    bool useMoneyness() const;
-    const vector<Period>& fxVolExpiries() const { return fxVolExpiries_; }
+    bool fxUseMoneyness(const std::string& ccypair) const;
+    const vector<Period>& fxVolExpiries(const string& key) const;
     const string& fxVolDecayMode() const { return fxVolDecayMode_; }
     vector<string> fxVolCcyPairs() const { return paramsLookup(RiskFactorKey::KeyType::FXVolatility); }
     const vector<Real>& fxVolMoneyness(const string& ccypair) const;
-    const vector<Real>& fxVolMoneyness() const;
     const vector<Real>& fxVolStdDevs(const string& ccypair) const;
-    const vector<Real>& fxVolStdDevs() const;
-
+    
     bool simulateEquityVols() const { return paramsSimulate(RiskFactorKey::KeyType::EquityVolatility); }
     bool simulateEquityVolATMOnly() const { return equityVolSimulateATMOnly_; }
     bool equityUseMoneyness(const string& key) const;
@@ -246,11 +243,11 @@ public:
     void setSwapVolIsCube(const string& key, bool isCube);
     bool& simulateSwapVolATMOnly() { return swapVolSimulateATMOnly_; }
     void setSwapVolTerms(const string& key, const vector<Period>& p);
-    void setSwapVolCcys(vector<string> names);
+    void setSwapVolKeys(vector<string> names);
     void setSwapVolExpiries(const string& key, const vector<Period>& p);
     void setSwapVolStrikeSpreads(const std::string& key, const std::vector<QuantLib::Rate>& strikes);
     string& swapVolDecayMode() { return swapVolDecayMode_; }
-
+  
     void setSimulateYieldVols(bool simulate);
     vector<Period>& yieldVolTerms() { return yieldVolTerms_; }
     void setYieldVolNames(vector<string> names);
@@ -258,7 +255,7 @@ public:
     string& yieldVolDecayMode() { return yieldVolDecayMode_; }
 
     void setSimulateCapFloorVols(bool simulate);
-    void setCapFloorVolCcys(vector<string> names);
+    void setCapFloorVolKeys(vector<string> names);
     void setCapFloorVolExpiries(const string& key, const vector<Period>& p);
     void setCapFloorVolStrikes(const std::string& key, const std::vector<QuantLib::Rate>& strikes);
     void setCapFloorVolIsAtm(const std::string& key, bool isAtm);
@@ -287,6 +284,7 @@ public:
     void setDefaultNames(vector<string> names);
     void setDefaultTenors(const string& key, const vector<Period>& p);
     void setDefaultCurveCalendars(const string& key, const string& p);
+    void setDefaultCurveExtrapolation(const std::string& e) { defaultCurveExtrapolation_ = e; }
 
     void setSimulateCdsVols(bool simulate);
     vector<Period>& cdsVolExpiries() { return cdsVolExpiries_; }
@@ -300,12 +298,10 @@ public:
 
     // FX volatility data setters
     void setSimulateFXVols(bool simulate);
+    void setSimulateFxVolATMOnly(bool simulateATMOnly) { fxVolSimulateATMOnly_ = simulateATMOnly; }
     void setFxVolIsSurface(const string& ccypair, bool val);
     void setFxVolIsSurface(bool val);
-    void setHasFxPairWithSurface(bool val);
-    void setUseMoneyness(const string& ccypair, bool val);
-    void setUseMoneyness(bool val);
-    void setFxVolExpiries(const vector<Period>& expiries);
+    void setFxVolExpiries(const string& name, const vector<Period>& expiries);
     void setFxVolDecayMode(const string& val);
     void setFxVolCcyPairs(vector<string> names);
     void setFxVolMoneyness(const string& ccypair, const vector<Real>& moneyness);
@@ -371,8 +367,8 @@ public:
 
     //! \name Serialisation
     //@{
-    virtual void fromXML(XMLNode* node);
-    virtual XMLNode* toXML(ore::data::XMLDocument& doc);
+    virtual void fromXML(XMLNode* node) override;
+    virtual XMLNode* toXML(ore::data::XMLDocument& doc) override;
     //@}
 
     //! \name Equality Operators
@@ -423,6 +419,7 @@ private:
 
     map<string, string> defaultCurveCalendars_;
     map<string, vector<Period>> defaultTenors_;
+    string defaultCurveExtrapolation_;
 
     vector<Period> cdsVolExpiries_;
     string cdsVolDecayMode_;
@@ -430,15 +427,14 @@ private:
     map<string, vector<Period>> equityDividendTenors_;
 
     // FX volatility data
-    bool hasFxPairWithSurface_;
-    map<std::string, bool> useMoneyness_;
+    bool fxVolSimulateATMOnly_ = false;
     map<std::string, bool> fxVolIsSurface_;
-    vector<Period> fxVolExpiries_;
+    map<string, vector<Period>> fxVolExpiries_;
     string fxVolDecayMode_;
     map<string, vector<Real>> fxMoneyness_;
     map<string, vector<Real>> fxStandardDevs_;
 
-    bool equityVolSimulateATMOnly_;
+    bool equityVolSimulateATMOnly_ = false;
     map<string, bool> equityVolIsSurface_;
     map<string, vector<Period>> equityVolExpiries_;
     string equityVolDecayMode_;

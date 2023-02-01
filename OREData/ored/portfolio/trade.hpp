@@ -52,6 +52,10 @@ using std::string;
 */
 class Trade : public XMLSerializable {
 public:
+
+    //! Default constructor
+    Trade() {}
+
     //! Base class constructor
     Trade(const string& tradeType, const Envelope& env = Envelope(), const TradeActions& ta = TradeActions())
         : tradeType_(tradeType), envelope_(env), tradeActions_(ta) {
@@ -61,7 +65,8 @@ public:
     //! Default destructor
     virtual ~Trade() {}
 
-    //! Build QuantLib/QuantExt instrument, link pricing engine
+    /*! Build QuantLib/QuantExt instrument, link pricing engine. If build() is called multiple times, reset() should
+        be called between these calls. */
     virtual void build(const boost::shared_ptr<EngineFactory>&) = 0;
 
     /*! Return the fixings that will be requested in order to price this Trade given the \p settlementDate.
@@ -89,12 +94,21 @@ public:
 
     //! \name Serialisation
     //@{
-    virtual void fromXML(XMLNode* node);
-    virtual XMLNode* toXML(XMLDocument& doc);
+    virtual void fromXML(XMLNode* node) override;
+    virtual XMLNode* toXML(XMLDocument& doc) override;
     //@}
 
-    //! Reset trade, clear all base class data
+    //! Reset trade, clear all base class data. This does not reset accumulated timings for this trade.
     void reset();
+
+    //! Reset accumulated timings to given values
+    void resetPricingStats(const std::size_t numberOfPricings = 0,
+                           const boost::timer::nanosecond_type cumulativePricingTime = 0) {
+        savedNumberOfPricings_ = numberOfPricings;
+        savedCumulativePricingTime_ = cumulativePricingTime;
+        if (instrument_ != nullptr)
+            instrument_->resetPricingStats();
+    }
 
     //! \name Setters
     //@{
@@ -157,6 +171,16 @@ public:
     virtual bool hasCashflows() const { return true; }
     //@}
 
+    //! Get cumulative timing spent on pricing
+    boost::timer::nanosecond_type getCumulativePricingTime() const {
+        return savedCumulativePricingTime_ + (instrument_ != nullptr ? instrument_->getCumulativePricingTime() : 0);
+    }
+
+    //! Get number of pricings
+    std::size_t getNumberOfPricings() const {
+        return savedNumberOfPricings_ + (instrument_ != nullptr ? instrument_->getNumberOfPricings() : 0);
+    }
+
 protected:
     string tradeType_; // class name of the derived class
     boost::shared_ptr<InstrumentWrapper> instrument_;
@@ -168,12 +192,16 @@ protected:
     string notionalCurrency_;
     Date maturity_;
 
+    std::size_t savedNumberOfPricings_ = 0;
+    boost::timer::nanosecond_type savedCumulativePricingTime_ = 0;
+
     // Utility to add premiums such that they are taken into account in pricing and cash flow projection.
     // For example, an option premium flow is not covered by the underlying option instrument in
     // QuantLib and needs to be represented separately. This is done by inserting it as an additional instrument
     // into the InstrumentWrapper. This utility creates the additional instrument. The actual insertion into the
     // instrument wrapper is done in the individual trade builders when they instantiate the InstrumentWrapper.
-    void addPremiums(std::vector<boost::shared_ptr<Instrument>>& instruments, std::vector<Real>& multipliers,
+    // The returned date is the latest premium payment date added.
+    Date addPremiums(std::vector<boost::shared_ptr<Instrument>>& instruments, std::vector<Real>& multipliers,
                      const Real tradeMultiplier, const PremiumData& premiumData, const Real premiumMultiplier,
                      const Currency& tradeCurrency, const boost::shared_ptr<EngineFactory>& factory,
                      const string& configuration);

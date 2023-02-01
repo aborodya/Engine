@@ -1,7 +1,20 @@
 /*
  Copyright (C) 2020 Quaternion Risk Management Ltd
  All rights reserved.
- */
+
+ This file is part of ORE, a free-software/open-source library
+ for transparent pricing and risk analysis - http://opensourcerisk.org
+
+ ORE is free software: you can redistribute it and/or modify it
+ under the terms of the Modified BSD License.  You should have received a
+ copy of the license along with this program.
+ The license is also available online at <http://opensourcerisk.org>
+
+ This program is distributed on the basis that it will form a useful
+ contribution to risk analytics and model standardisation, but WITHOUT
+ ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ FITNESS FOR A PARTICULAR PURPOSE. See the license for more details.
+*/
 
 #include <ored/portfolio/underlying.hpp>
 #include <ored/utilities/parsers.hpp>
@@ -45,7 +58,7 @@ void BasicUnderlying::fromXML(XMLNode* node) {
 }
 
 XMLNode* BasicUnderlying::toXML(XMLDocument& doc) {
-    XMLNode* node = doc.allocNode(nodeName_, name_);
+    XMLNode* node = doc.allocNode(basicUnderlyingNodeName_, name_);
     return node;
 }
 
@@ -73,7 +86,7 @@ void EquityUnderlying::fromXML(XMLNode* node) {
         Underlying::fromXML(node);
         QL_REQUIRE(type_ == "Equity", "Underlying must be of type 'Equity'.");
         identifierType_ = XMLUtils::getChildValue(node, "IdentifierType", false);
-        // if no identfier is provided, we just use name
+        // if no identifier is provided, we just use name
         if (!identifierType_.empty()) {
             currency_ = XMLUtils::getChildValue(node, "Currency", false);
             exchange_ = XMLUtils::getChildValue(node, "Exchange", false);
@@ -243,6 +256,44 @@ XMLNode* InflationUnderlying::toXML(XMLDocument& doc) {
     return node;
 }
 
+void BondUnderlying::setBondName() {
+    if (bondName_.empty()) {
+        if (!identifierType_.empty())
+            bondName_ = identifierType_ + ":" + name_;
+        else
+            bondName_ = name_;
+    }
+}
+
+void BondUnderlying::fromXML(XMLNode* node) {
+    if (XMLUtils::getNodeName(node) == basicUnderlyingNodeName_) {
+        name_ = XMLUtils::getNodeValue(node);
+        isBasic_ = true;
+    } else if (XMLUtils::getNodeName(node) == nodeName_) {
+        Underlying::fromXML(node);
+        QL_REQUIRE(type_ == "Bond", "Underlying must be of type 'Bond'.");
+        identifierType_ = XMLUtils::getChildValue(node, "IdentifierType", false);
+        setBondName();
+        isBasic_ = false;
+    } else {
+        QL_FAIL("Need either a " << basicUnderlyingNodeName_ << " or " << nodeName_ << " for BondUnderlying.");
+    }
+    bidAskAdjustment_ = XMLUtils::getChildValueAsDouble(node, "BidAskAdjustment", false, 0.0);
+    setType("Bond");
+}
+
+XMLNode* BondUnderlying::toXML(XMLDocument& doc) {
+    XMLNode* node;
+    if (isBasic_) {
+        node = doc.allocNode(basicUnderlyingNodeName_, name_);
+    } else {
+        node = Underlying::toXML(doc);
+        if (!identifierType_.empty())
+            XMLUtils::addChild(doc, node, "IdentifierType", identifierType_);
+    }
+    return node;
+}
+
 void UnderlyingBuilder::fromXML(XMLNode* node) {
     if (XMLUtils::getNodeName(node) == basicUnderlyingNodeName_) {
         underlying_ = boost::make_shared<BasicUnderlying>();
@@ -260,6 +311,8 @@ void UnderlyingBuilder::fromXML(XMLNode* node) {
             underlying_ = boost::make_shared<InflationUnderlying>();
         else if (type == "Credit")
             underlying_ = boost::make_shared<CreditUnderlying>();
+        else if (type == "Bond")
+            underlying_ = boost::make_shared<BondUnderlying>();
         else {
             QL_FAIL("Unknown Underlying type " << type);
         }

@@ -49,9 +49,9 @@ public:
 
     //! \name InflationTermStructure interface
     //@{
-    Date baseDate() const;
-    Time maxTime() const;
-    Date maxDate() const;
+    Date baseDate() const override;
+    Time maxTime() const override;
+    Date maxDate() const override;
     //@}
 
     //! \name Inspectors
@@ -65,21 +65,22 @@ public:
 
     //! \name Observer interface
     //@{
-    void update();
+    void update() override;
     //@}
 
 private:
     //! \name LazyObject interface
     //@{
-    void performCalculations() const;
+    void performCalculations() const override;
     //@}
 
 protected:
     //! \name ZeroInflationTermStructure Interface
     //@{
-    Rate zeroRateImpl(Time t) const;
+    Rate zeroRateImpl(Time t) const override;
     //@}
     std::vector<Handle<Quote> > quotes_;
+    bool indexIsInterpolated_;
     mutable Date baseDate_;
 };
 
@@ -91,9 +92,8 @@ ZeroInflationCurveObserverMoving<Interpolator>::ZeroInflationCurveObserverMoving
     Frequency frequency, bool indexIsInterpolated, const std::vector<Time>& times,
     const std::vector<Handle<Quote>>& rates, const boost::shared_ptr<Seasonality>& seasonality,
     const Interpolator& interpolator)
-    : ZeroInflationTermStructure(settlementDays, calendar, dayCounter, rates[0]->value(), lag, frequency,
-                                 indexIsInterpolated, seasonality),
-      InterpolatedCurve<Interpolator>(std::vector<Time>(), std::vector<Real>(), interpolator), quotes_(rates) {
+    : ZeroInflationTermStructure(settlementDays, calendar, dayCounter, rates[0]->value(), lag, frequency, seasonality),
+      InterpolatedCurve<Interpolator>(std::vector<Time>(), std::vector<Real>(), interpolator), quotes_(rates), indexIsInterpolated_(indexIsInterpolated) {
 
     QL_REQUIRE(times.size() > 1, "too few times: " << times.size());
     this->times_.resize(times.size());
@@ -106,7 +106,7 @@ ZeroInflationCurveObserverMoving<Interpolator>::ZeroInflationCurveObserverMoving
     QL_REQUIRE(this->quotes_.size() == this->times_.size(),
                "quotes/times count mismatch: " << this->quotes_.size() << " vs " << this->times_.size());
 
-    // initalise data vector, values are copied from quotes in performCalculations()
+    // initialise data vector, values are copied from quotes in performCalculations()
     this->data_.resize(this->times_.size());
     for (Size i = 0; i < this->times_.size(); i++)
         this->data_[0] = 0.0;

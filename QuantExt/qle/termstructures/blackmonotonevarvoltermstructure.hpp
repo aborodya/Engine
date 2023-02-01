@@ -32,7 +32,7 @@
 namespace QuantExt {
 using namespace QuantLib;
 
-//! Black volatility surface that that monotonises the variance in an existing surface
+//! Black volatility surface that monotonises the variance in an existing surface
 /*! This class is used when monotonic variance is required
 
             \ingroup termstructures
@@ -52,29 +52,29 @@ public:
 
     //! \name TermStructure interface
     //@{
-    const Date& referenceDate() const { return vol_->referenceDate(); }
-    Date maxDate() const { return vol_->maxDate(); }
-    Natural settlementDays() const { return vol_->settlementDays(); }
-    Calendar calendar() const { return vol_->calendar(); }
+    const Date& referenceDate() const override { return vol_->referenceDate(); }
+    Date maxDate() const override { return vol_->maxDate(); }
+    Natural settlementDays() const override { return vol_->settlementDays(); }
+    Calendar calendar() const override { return vol_->calendar(); }
     //! \name Observer interface
     //@{
-    void update() {
+    void update() override {
         monoVars_.clear();
         notifyObservers();
     }
     //@}
     //! \name VolatilityTermStructure interface
     //@{
-    Real minStrike() const { return vol_->minStrike(); }
-    Real maxStrike() const { return vol_->maxStrike(); }
+    Real minStrike() const override { return vol_->minStrike(); }
+    Real maxStrike() const override { return vol_->maxStrike(); }
     //@}
     //! \name Visitability
     //@{
-    virtual void accept(AcyclicVisitor&);
+    virtual void accept(AcyclicVisitor&) override;
     //@}
 protected:
-    virtual Real blackVarianceImpl(Time t, Real strike) const { return getMonotoneVar(t, strike); }
-    virtual Volatility blackVolImpl(Time t, Real strike) const { return sqrt(getMonotoneVar(t, strike) / t); }
+    virtual Real blackVarianceImpl(Time t, Real strike) const override { return getMonotoneVar(t, strike); }
+    virtual Volatility blackVolImpl(Time t, Real strike) const override { return std::sqrt(getMonotoneVar(t, strike) / t); }
 
     void setMonotoneVar(const Real& strike) const {
         QL_REQUIRE(timePoints_.size() > 0, "timePoints cannot be empty");
@@ -99,7 +99,7 @@ private:
     Handle<BlackVolTermStructure> vol_;
     std::vector<Time> timePoints_;
 
-    class closeDouble : public std::binary_function<double, double, bool> {
+    class closeDouble {
     public:
         bool operator()(const double& left, const double& right) const {
             return left < right && !QuantLib::close_enough(left, right);

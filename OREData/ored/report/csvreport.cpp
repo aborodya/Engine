@@ -17,6 +17,8 @@
 */
 
 #include <boost/variant/static_visitor.hpp>
+#include <boost/filesystem/path.hpp>
+#include <boost/filesystem/operations.hpp>
 #include <ored/report/csvreport.hpp>
 #include <ored/utilities/to_string.hpp>
 #include <ql/errors.hpp>
@@ -68,10 +70,11 @@ private:
 
     // Shared implementation to include the quote character.
     void fprintString(const string& s) const {
-        if (quoteChar_ != '\0')
+        bool quoted = s.size() > 1 && s[0] == quoteChar_ && s[s.size() - 1] == quoteChar_;
+        if (!quoted && quoteChar_ != '\0')
             fputc(quoteChar_, fp_);
         fprintf(fp_, "%s", s.c_str());
-        if (quoteChar_ != '\0')
+        if (!quoted && quoteChar_ != '\0')
             fputc(quoteChar_, fp_);
     }
 
@@ -82,18 +85,46 @@ private:
 };
 
 CSVFileReport::CSVFileReport(const string& filename, const char sep, const bool commentCharacter, char quoteChar,
-                             const string& nullString, bool lowerHeader)
+                             const string& nullString, bool lowerHeader, QuantLib::Size rolloverSize)
     : filename_(filename), sep_(sep), commentCharacter_(commentCharacter), quoteChar_(quoteChar),
-      nullString_(nullString), lowerHeader_(lowerHeader), i_(0), fp_(NULL) {
-    fp_ = fopen(filename_.c_str(), "w+");
-    QL_REQUIRE(fp_, "Error opening file " << filename_);
+      nullString_(nullString), lowerHeader_(lowerHeader), rolloverSize_(rolloverSize), i_(0), fp_(NULL) {    
+    baseFilename_ = filename_;
+    open();
 }
 
-CSVFileReport::~CSVFileReport() { end(); }
+CSVFileReport::~CSVFileReport() {
+    if (!finalized_) {
+        WLOG("CSV file report '" << filename_ << "' was not finalized, call end() on the report instance.");
+        end();
+    }
+}
 
-void CSVFileReport::flush() { fflush(fp_); }
+void CSVFileReport::open() {
+    LOG("Opening CSV file report '" << filename_ << "'");
+    fp_ = fopen(filename_.c_str(), "w");
+    QL_REQUIRE(fp_, "Error opening file '" << filename_ << "'");
+    finalized_ = false;
+}
+
+void CSVFileReport::rollover() { 
+    checkIsOpen("rollover()");
+    end();
+    version_++;
+    boost::filesystem::path p(baseFilename_);
+    boost::filesystem::path newFilepath =
+        p.parent_path() / boost::filesystem::path(p.stem().string() + "_" + to_string(version_) + p.extension().string());
+    filename_ = newFilepath.string();
+    open();
+}
+
+void CSVFileReport::flush() {
+    checkIsOpen("flush()");
+    LOG("CVS file report '" << filename_ << "' is flushed");
+    fflush(fp_);
+}
 
 Report& CSVFileReport::addColumn(const string& name, const ReportType& rt, Size precision) {
+    checkIsOpen("addColumn(" + name + ")");
     columnTypes_.push_back(rt);
     printers_.push_back(ReportTypePrinter(fp_, precision, quoteChar_, nullString_));
     if (i_ == 0 && commentCharacter_)
@@ -109,13 +140,27 @@ Report& CSVFileReport::addColumn(const string& name, const ReportType& rt, Size 
 }
 
 Report& CSVFileReport::next() {
+    // check the filesize every for every 1000 rows, and roll if necessary
+    if (rolloverSize_ != Null<Size>()) {     
+        if (j_ >= 10000) {
+            auto fileSize = boost::filesystem::file_size(filename_);
+            TLOG("CSV size of " << filename_ << " is " << fileSize);
+            if (fileSize > rolloverSize_ * 1024 * 1024)
+                rollover();
+            j_ = 0;
+        } else
+            j_++;
+    }
+
+    checkIsOpen("next()");
     QL_REQUIRE(i_ == columnTypes_.size(), "Cannot go to next line, only " << i_ << " entries filled");
     fprintf(fp_, "\n");
-    i_ = 0;
+    i_ = 0;    
     return *this;
 }
 
 Report& CSVFileReport::add(const ReportType& rt) {
+    checkIsOpen("add()");
     QL_REQUIRE(i_ < columnTypes_.size(), "No column to add [" << rt << "] to.");
     QL_REQUIRE(rt.which() == columnTypes_[i_].which(), "Cannot add value " << rt << " of type " << rt.which()
                                                                            << " to column " << i_ << " of type "
@@ -127,12 +172,30 @@ Report& CSVFileReport::add(const ReportType& rt) {
     i_++;
     return *this;
 }
+
 void CSVFileReport::end() {
+    checkIsOpen("end()");
+
     if (fp_) {
         fprintf(fp_, "\n");
-        fclose(fp_);
-        fp_ = NULL;
+        if (int rc = fclose(fp_)) {
+            ALOG("CSV file report '" << filename_ << "' can not be closed (return code " << rc << ")");
+        } else {
+            LOG("CSV file report '" << filename_ << "' closed.");
+        }
+    } else {
+        ALOG("CSV file report '" << filename_ << "' can not be closed (file handle is null).");
     }
+
+    QL_REQUIRE(i_ == columnTypes_.size() || i_ == 0, "csv report is finalized with incomplete row, got data for "
+                                                         << i_ << " columns out of " << columnTypes_.size());
+    finalized_ = true;
 }
+
+void CSVFileReport::checkIsOpen(const std::string& op) const {
+    QL_REQUIRE(!finalized_,
+               "CSV file report '" << filename_ << "' is already finalized, can not process operation " << op);
+}
+
 } // namespace data
 } // namespace ore

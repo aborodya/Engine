@@ -69,7 +69,7 @@ void OptionletStripper1::performCalculations() const {
     }
 
     const Handle<YieldTermStructure>& discountCurve =
-        discount_.empty() ? iborIndex_->forwardingTermStructure() : discount_;
+        discount_.empty() ? index_->forwardingTermStructure() : discount_;
 
     const std::vector<Rate>& strikes = termVolSurface_->strikes();
     DayCounter dc = termVolSurface_->dayCounter();
@@ -102,14 +102,14 @@ void OptionletStripper1::performCalculations() const {
         // to switch
         CapFloor::Type capFloorType = strikes[j] < switchStrike_ ? CapFloor::Floor : CapFloor::Cap;
 
-        // we do this with the above to keep the variables capFloors_ etc consistant, but really its the
+        // we do this with the above to keep the variables capFloors_ etc consistent, but really its the
         // optionletStdDevs_ below that we want.
         Real previousCapFloorPrice = 0.0;
         for (Size i = 0; i < nOptionletTenors_; ++i) {
 
             capFloorVols_[i][j] = termVolSurface_->volatility(capFloorLengths_[i], strikes[j], true);
             volQuotes_[i][j]->setValue(capFloorVols_[i][j]);
-            capFloors_[i][j] = MakeCapFloor(capFloorType, capFloorLengths_[i], iborIndex_, strikes[j], -0 * Days)
+            capFloors_[i][j] = MakeCapFloor(capFloorType, capFloorLengths_[i], index_, strikes[j], -0 * Days)
                                    .withPricingEngine(capFloorEngines_[i][j]);
             capFloorPrices_[i][j] = capFloors_[i][j]->NPV();
             optionletPrices_[i][j] = capFloorPrices_[i][j] - previousCapFloorPrice;
@@ -146,7 +146,7 @@ bool OptionletStripper1::stripOptionlets(std::vector<Real>& out, CapFloor::Type 
     for (Size i = 0; i < nOptionletTenors_; ++i) {
 
         // we have capFloorVols_[i][j] & volQuotes_[i][j]
-        CapFloor capFloor = MakeCapFloor(capFloorType, capFloorLengths_[i], iborIndex_, strike, -0 * Days)
+        CapFloor capFloor = MakeCapFloor(capFloorType, capFloorLengths_[i], index_, strike, -0 * Days)
                                 .withPricingEngine(capFloorEngines_[i][j]);
         Real capFloorPrice = capFloor.NPV();
         Real optionletPrice = std::max(0.0, capFloorPrice - previousCapFloorPrice);

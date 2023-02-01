@@ -1,7 +1,20 @@
 /*
  Copyright (C) 2020 Quaternion Risk Management Ltd
  All rights reserved.
- */
+
+ This file is part of ORE, a free-software/open-source library
+ for transparent pricing and risk analysis - http://opensourcerisk.org
+
+ ORE is free software: you can redistribute it and/or modify it
+ under the terms of the Modified BSD License.  You should have received a
+ copy of the license along with this program.
+ The license is also available online at <http://opensourcerisk.org>
+
+ This program is distributed on the basis that it will form a useful
+ contribution to risk analytics and model standardisation, but WITHOUT
+ ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ FITNESS FOR A PARTICULAR PURPOSE. See the license for more details.
+*/
 
 /*! \file ored/portfolio/underlying.hpp
     \brief underlying data model
@@ -67,7 +80,7 @@ public:
         isBasic_ = true;
     };
 
-    //! Constructor with identifer
+    //! Constructor with identifier
     explicit BasicUnderlying(const std::string& name) : Underlying("Basic", name) { isBasic_ = true; }
 
     //! \name Serialisation
@@ -85,7 +98,7 @@ public:
     //! Constructor with equity name
     explicit EquityUnderlying(const std::string& equityName) : Underlying("Equity", equityName) { isBasic_ = true; };
 
-    //! Constructor with identifer infomation
+    //! Constructor with identifier information
     EquityUnderlying(const std::string& name, const std::string& identifierType, const std::string& currency,
                      const std::string& exchange, const QuantLib::Real weight)
         : Underlying("Equity", name, weight), identifierType_(identifierType), currency_(currency),
@@ -116,7 +129,7 @@ public:
     //! Default Constructor
     CommodityUnderlying() : Underlying() { setType("Commodity"); }
 
-    //! Constructor with identifer infomation
+    //! Constructor with identifier information
     CommodityUnderlying(const std::string& name, const QuantLib::Real weight, const std::string& priceType,
                         const QuantLib::Size futureMonthOffset, const QuantLib::Size deliveryRollDays,
                         const std::string& deliveryRollCalendar)
@@ -146,7 +159,7 @@ public:
     //! Default Constructor
     explicit FXUnderlying() : Underlying() { setType("FX"); };
 
-    //! Constructor with identifer infomation
+    //! Constructor with identifier information
     FXUnderlying(const std::string& type, const std::string& name, const QuantLib::Real weight)
         : Underlying(type, name, weight){};
 
@@ -162,7 +175,7 @@ public:
     //! Default Constructor
     explicit InterestRateUnderlying() : Underlying() { setType("InterestRate"); };
 
-    //! Constructor with identifer infomation
+    //! Constructor with identifier information
     InterestRateUnderlying(const std::string& type, const std::string& name, const QuantLib::Real weight)
         : Underlying(type, name, weight){};
 
@@ -178,7 +191,7 @@ public:
     //! Default Constructor
     explicit InflationUnderlying() : Underlying() { setType("Inflation"); };
 
-    //! Constructor with identifer infomation
+    //! Constructor with identifier information
     InflationUnderlying(const std::string& type, const std::string& name, const QuantLib::Real weight,
                         const QuantLib::CPI::InterpolationType& interpolation = QuantLib::CPI::InterpolationType::Flat)
         : Underlying(type, name, weight), interpolation_(interpolation){};
@@ -198,7 +211,7 @@ public:
     //! Default Constructor
     explicit CreditUnderlying() : Underlying() { setType("Credit"); };
 
-    //! Constructor with identifer infomation
+    //! Constructor with identifier information
     CreditUnderlying(const std::string& type, const std::string& name, const QuantLib::Real weight)
         : Underlying(type, name, weight){};
 
@@ -207,6 +220,36 @@ public:
     void fromXML(XMLNode* node) override;
     XMLNode* toXML(XMLDocument& doc) override;
     //@}
+};
+
+class BondUnderlying : public Underlying {
+public:
+    //! Default constructor
+    BondUnderlying() : Underlying() { setType("Bond"); }
+
+    //! Constructor with full bond name (e.g. ISIN:DE00001142867)
+    explicit BondUnderlying(const std::string& name) : Underlying("Bond", name) { isBasic_ = true; };
+
+    //! Constructor with identifer infomation (e.g. identifier = DE00001142867, identifierType = ISIN)
+    BondUnderlying(const std::string& identifier, const std::string& identifierType, const QuantLib::Real weight)
+        : Underlying("Bond", identifier, weight), identifierType_(identifierType){};
+
+    const std::string& name() const override { return bondName_.empty() ? name_ : bondName_; };
+    const std::string& identifierType() const { return identifierType_; }
+    double bidAskAdjustment() const { return bidAskAdjustment_; }
+
+    //! set name of bond
+    void setBondName();
+
+    //! \name Serialisation
+    //@{
+    void fromXML(XMLNode* node) override;
+    XMLNode* toXML(XMLDocument& doc) override;
+    //@}
+
+private:
+    std::string bondName_, identifierType_;
+    double bidAskAdjustment_ = 0.0;
 };
 
 class UnderlyingBuilder : public XMLSerializable {

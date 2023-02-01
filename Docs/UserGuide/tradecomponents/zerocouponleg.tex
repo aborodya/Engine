@@ -5,7 +5,9 @@ A Zero Coupon Fixed leg contains a series of Zero Coupon payments, i.e $(1 + r)^
 
 Listing \ref{lst:zerolegdata} shows an example for a leg of type Zero Coupon Fixed. 
 
-To create a leg with only one payment, the schedule must only contain the start and end date. Not that this can be achieved by setting the \emph{Tenor} to \emph{0D} in a rule based Schedule. 
+To create a leg with only one payment, the schedule must only contain the start and end date. Note that this can be achieved by setting the \emph{Tenor} to \emph{0D} in a rules based Schedule. 
+
+Note that the DayCounter in a Zero Coupon Fixed leg is used to compute $t$ in $(1+r)^t$ so that the series of zero coupon payments are calculated as $(1 + r)^t \,N$. For all other leg types, the DayCounter is used to compute the “Accrual” (i.e. the accrual time period of a coupon) in a coupon payment calculated as: $N * Accrual * r$. However, the “Accrual” in the coupon formula is defaulted to 1 for the Zero Coupon Fixed leg type.
 
 \begin{itemize}
 \item Rates: The fixed real rate(s) of the leg. While this can be a single value, a vector of values or a dated vector of
@@ -13,13 +15,16 @@ To create a leg with only one payment, the schedule must only contain the start 
  
  Allowable values: Each rate element can take any  real number. The rate is
   expressed in decimal form, e.g. \emph{0.05} is a rate of 5\%.
-\item Compounding: The method of compounding applied to the rate.
+\item Compounding [Optional]:  The method of compounding applied to the rate.
 
-Allowable values: \emph{Simple} i.e. $(1 + r * t)$, or \emph{Compounded} i.e. $(1 + r)^t$
+Allowable values: \emph{Simple} i.e. $(1 + r * t)$, or \emph{Compounded} i.e. $(1 + r)^t$. Defaults to \emph{Compounded} if left blank or omitted. 
+
 
 \item SubtractNotional [Optional]:  Decides whether the notional is
   subtracted from the compounding factor,  i.e. $(1 + r * t)  - 1$
   respectively  $(1 + r)^t - 1$, or not, i.e. $(1 + r * t)$  respectively  $(1 + r)^t$
+
+Note that if NotionalFinalExchange is set to  \emph{true} an additional final uninflated notional flow $N$ is added. So if NotionalFinalExchange is set to \emph{true}, and SubtractNotional is set to \emph{false}, there will be two final notional flows. It is recommended to omit NotionalFinalExchange causing it to default to \emph{false}, and solely use SubtractNotional to determine the final notional flow.
 
 Allowable values: \emph{true},  \emph{Y} or \emph{false}, \emph{N}, defaults to \emph{true} if left blank or omitted. 
 
@@ -35,7 +40,7 @@ Allowable values: \emph{true},  \emph{Y} or \emph{false}, \emph{N}, defaults to 
         <Notionals>
           <Notional>10000000</Notional>
         </Notionals>
-        <DayCounter>ACT/ACT</DayCounter>
+        <DayCounter>Year</DayCounter>
         <PaymentConvention>Following</PaymentConvention>
         <ScheduleData>
           <Rules>

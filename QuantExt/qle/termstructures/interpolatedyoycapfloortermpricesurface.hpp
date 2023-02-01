@@ -19,7 +19,7 @@
 /*! \file qle/termstructures/interpolatedyoycapfloortermpricesurface.hpp
     \brief Interpolated YoY Inflation Cap floor term price surface -
            extends QuantLib InterpolatedYoYCapFloorTermPriceSurface to allow
-           choice of termstruture directly from YoY swap quotes or from
+           choice of termstructure directly from YoY swap quotes or from
            atm swap quotes stripped from cap/floor price surface
     \ingroup termstructures
 */
@@ -51,31 +51,31 @@ public:
 
     //! inflation term structure interface
     //@{
-    virtual Date maxDate() const { return yoy_->maxDate(); }
-    virtual Date baseDate() const { return yoy_->baseDate(); }
+    virtual Date maxDate() const override { return yoy_->maxDate(); }
+    virtual Date baseDate() const override { return yoy_->baseDate(); }
     //@}
-    virtual Natural fixingDays() const { return fixingDays_; }
+    virtual Natural fixingDays() const override { return fixingDays_; }
 
     //! \name YoYCapFloorTermPriceSurface interface
     //@{
-    virtual std::pair<std::vector<Time>, std::vector<Rate> > atmYoYSwapTimeRates() const {
+    virtual std::pair<std::vector<Time>, std::vector<Rate> > atmYoYSwapTimeRates() const override {
         return atmYoYSwapTimeRates_;
     }
-    virtual std::pair<std::vector<Date>, std::vector<Rate> > atmYoYSwapDateRates() const {
+    virtual std::pair<std::vector<Date>, std::vector<Rate> > atmYoYSwapDateRates() const override {
         return atmYoYSwapDateRates_;
     }
-    virtual boost::shared_ptr<YoYInflationTermStructure> YoYTS() const {
+    virtual boost::shared_ptr<YoYInflationTermStructure> YoYTS() const override {
         return yoyIndex_->yoyInflationTermStructure().empty() ? yoy_
                                                               : yoyIndex_->yoyInflationTermStructure().currentLink();
     }
 
-    virtual Rate price(const Date& d, const Rate k) const;
-    virtual Real floorPrice(const Date& d, const Rate k) const;
-    virtual Real capPrice(const Date& d, const Rate k) const;
-    virtual Rate atmYoYSwapRate(const Date& d, bool extrapolate = true) const {
+    virtual Rate price(const Date& d, const Rate k) const override;
+    virtual Real floorPrice(const Date& d, const Rate k) const override;
+    virtual Real capPrice(const Date& d, const Rate k) const override;
+    virtual Rate atmYoYSwapRate(const Date& d, bool extrapolate = true) const override {
         return atmYoYSwapRateCurve_(timeFromReference(d), extrapolate);
     }
-    virtual Rate atmYoYRate(const Date& d, const Period& obsLag = Period(-1, Days), bool extrapolate = true) const {
+    virtual Rate atmYoYRate(const Date& d, const Period& obsLag = Period(-1, Days), bool extrapolate = true) const override {
         // work in terms of maturity-of-instruments
         // so ask for rate with observation lag
         // Third parameter = force linear interpolation of yoy
@@ -85,7 +85,7 @@ public:
 
     //! \name LazyObject interface
     //@{
-    void update();
+    void update() override;
     void performCalculations() const;
     //@}
 
@@ -159,7 +159,7 @@ template <class I2D, class I1D> void InterpolatedYoYCapFloorTermPriceSurface<I2D
                 }
             }
         }
-        QL_REQUIRE(overlappingStrikes.size(), "No overlapping stikes between caps and floors for "
+        QL_REQUIRE(overlappingStrikes.size(), "No overlapping strikes between caps and floors for "
                                                   << "yoycapfloortermpricesurface " << yoyIndex_->name());
 
         // calculate the yoy termstructure from the first overlapping strike

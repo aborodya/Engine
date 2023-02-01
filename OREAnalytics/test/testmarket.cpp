@@ -40,64 +40,11 @@ using QuantExt::PriceTermStructure;
 
 namespace testsuite {
 
-TestMarket::TestMarket(Date asof) {
+TestMarket::TestMarket(Date asof) : MarketImpl(false) {
+
+    TestConfigurationObjects::setConventions();
+    
     asof_ = asof;
-
-    // add conventions
-    boost::shared_ptr<ore::data::Convention> swapIndexEURConv(
-        new ore::data::SwapIndexConvention("EUR-CMS-2Y", "EUR-6M-SWAP-CONVENTIONS"));
-    boost::shared_ptr<ore::data::Convention> swapIndexEURLongConv(
-        new ore::data::SwapIndexConvention("EUR-CMS-30Y", "EUR-6M-SWAP-CONVENTIONS"));
-    boost::shared_ptr<ore::data::Convention> swapIndexUSDConv(
-        new ore::data::SwapIndexConvention("USD-CMS-2Y", "USD-3M-SWAP-CONVENTIONS"));
-    boost::shared_ptr<ore::data::Convention> swapIndexUSDLongConv(
-        new ore::data::SwapIndexConvention("USD-CMS-30Y", "USD-3M-SWAP-CONVENTIONS"));
-    boost::shared_ptr<ore::data::Convention> swapIndexGBPConv(
-        new ore::data::SwapIndexConvention("GBP-CMS-2Y", "GBP-3M-SWAP-CONVENTIONS"));
-    boost::shared_ptr<ore::data::Convention> swapIndexGBPLongConv(
-        new ore::data::SwapIndexConvention("GBP-CMS-30Y", "GBP-6M-SWAP-CONVENTIONS"));
-    boost::shared_ptr<ore::data::Convention> swapIndexCHFConv(
-        new ore::data::SwapIndexConvention("CHF-CMS-2Y", "CHF-3M-SWAP-CONVENTIONS"));
-    boost::shared_ptr<ore::data::Convention> swapIndexCHFLongConv(
-        new ore::data::SwapIndexConvention("CHF-CMS-30Y", "CHF-6M-SWAP-CONVENTIONS"));
-    boost::shared_ptr<ore::data::Convention> swapIndexJPYConv(
-        new ore::data::SwapIndexConvention("JPY-CMS-2Y", "JPY-LIBOR-6M-SWAP-CONVENTIONS"));
-    boost::shared_ptr<ore::data::Convention> swapIndexJPYLongConv(
-        new ore::data::SwapIndexConvention("JPY-CMS-30Y", "JPY-LIBOR-6M-SWAP-CONVENTIONS"));
-
-    conventions_.add(swapIndexEURConv);
-    conventions_.add(swapIndexEURLongConv);
-    conventions_.add(swapIndexUSDConv);
-    conventions_.add(swapIndexUSDLongConv);
-    conventions_.add(swapIndexGBPConv);
-    conventions_.add(swapIndexGBPLongConv);
-    conventions_.add(swapIndexCHFConv);
-    conventions_.add(swapIndexCHFLongConv);
-    conventions_.add(swapIndexJPYConv);
-    conventions_.add(swapIndexJPYLongConv);
-
-    boost::shared_ptr<ore::data::Convention> swapEURConv(new ore::data::IRSwapConvention(
-        "EUR-6M-SWAP-CONVENTIONS", "TARGET", "Annual", "MF", "30/360", "EUR-EURIBOR-6M"));
-    boost::shared_ptr<ore::data::Convention> swapUSDConv(
-        new ore::data::IRSwapConvention("USD-3M-SWAP-CONVENTIONS", "US", "Semiannual", "MF", "30/360", "USD-LIBOR-3M"));
-    boost::shared_ptr<ore::data::Convention> swapGBPConv(
-        new ore::data::IRSwapConvention("GBP-3M-SWAP-CONVENTIONS", "UK", "Semiannual", "MF", "A365", "GBP-LIBOR-3M"));
-    boost::shared_ptr<ore::data::Convention> swapGBPLongConv(
-        new ore::data::IRSwapConvention("GBP-6M-SWAP-CONVENTIONS", "UK", "Semiannual", "MF", "A365", "GBP-LIBOR-6M"));
-    boost::shared_ptr<ore::data::Convention> swapCHFConv(
-        new ore::data::IRSwapConvention("CHF-3M-SWAP-CONVENTIONS", "ZUB", "Annual", "MF", "30/360", "CHF-LIBOR-3M"));
-    boost::shared_ptr<ore::data::Convention> swapCHFLongConv(
-        new ore::data::IRSwapConvention("CHF-6M-SWAP-CONVENTIONS", "ZUB", "Annual", "MF", "30/360", "CHF-LIBOR-6M"));
-    boost::shared_ptr<ore::data::Convention> swapJPYConv(new ore::data::IRSwapConvention(
-        "JPY-LIBOR-6M-SWAP-CONVENTIONS", "JP", "Semiannual", "MF", "A365", "JPY-LIBOR-6M"));
-
-    conventions_.add(swapEURConv);
-    conventions_.add(swapUSDConv);
-    conventions_.add(swapGBPConv);
-    conventions_.add(swapGBPLongConv);
-    conventions_.add(swapCHFConv);
-    conventions_.add(swapCHFLongConv);
-    conventions_.add(swapJPYConv);
 
     // build discount
     yieldCurves_[make_tuple(Market::defaultConfiguration, YieldCurveType::Discount, "EUR")] = flatRateYts(0.02);
@@ -135,10 +82,12 @@ TestMarket::TestMarket(Date asof) {
     addSwapIndex("JPY-CMS-30Y", "JPY-LIBOR-6M", Market::defaultConfiguration);
 
     // add fx rates
-    fxSpots_[Market::defaultConfiguration].addQuote("EURUSD", Handle<Quote>(boost::make_shared<SimpleQuote>(1.2)));
-    fxSpots_[Market::defaultConfiguration].addQuote("EURGBP", Handle<Quote>(boost::make_shared<SimpleQuote>(0.8)));
-    fxSpots_[Market::defaultConfiguration].addQuote("EURCHF", Handle<Quote>(boost::make_shared<SimpleQuote>(1.0)));
-    fxSpots_[Market::defaultConfiguration].addQuote("EURJPY", Handle<Quote>(boost::make_shared<SimpleQuote>(128.0)));
+    std::map<std::string, Handle<Quote>> quotes;
+    quotes["EURUSD"] = Handle<Quote>(boost::make_shared<SimpleQuote>(1.2));
+    quotes["EURGBP"] = Handle<Quote>(boost::make_shared<SimpleQuote>(0.8));
+    quotes["EURCHF"] = Handle<Quote>(boost::make_shared<SimpleQuote>(1.0));
+    quotes["EURJPY"] = Handle<Quote>(boost::make_shared<SimpleQuote>(128.0));
+    fx_ = boost::make_shared<FXTriangulation>(quotes);
 
     // build fx vols
     fxVols_[make_pair(Market::defaultConfiguration, "EURUSD")] = flatRateFxv(0.12);
@@ -161,7 +110,7 @@ TestMarket::TestMarket(Date asof) {
         flatRateDiv(0.0);
 
     equityCurves_[make_pair(Market::defaultConfiguration, "SP5")] = Handle<EquityIndex>(boost::make_shared<EquityIndex>(
-        "SP5", UnitedStates(), parseCurrency("USD"), equitySpot("SP5"), yieldCurve(YieldCurveType::Discount, "USD"),
+        "SP5", UnitedStates(UnitedStates::Settlement), parseCurrency("USD"), equitySpot("SP5"), yieldCurve(YieldCurveType::Discount, "USD"),
         yieldCurve(YieldCurveType::EquityDividend, "SP5")));
     equityCurves_[make_pair(Market::defaultConfiguration, "Lufthansa")] =
         Handle<EquityIndex>(boost::make_shared<EquityIndex>(
@@ -315,7 +264,7 @@ Handle<ZeroInflationIndex> TestMarket::makeZeroInflationIndex(string index, vect
     for (Size i = 0; i < dates.size(); i++) {
         Handle<Quote> quote(boost::shared_ptr<Quote>(new SimpleQuote(rates[i] / 100.0)));
         boost::shared_ptr<BootstrapHelper<ZeroInflationTermStructure>> anInstrument(new ZeroCouponInflationSwapHelper(
-            quote, Period(2, Months), dates[i], TARGET(), ModifiedFollowing, ActualActual(), ii, yts));
+            quote, Period(2, Months), dates[i], TARGET(), ModifiedFollowing, ActualActual(ActualActual::ISDA), ii, CPI::AsIndex, yts));
         anInstrument->unregisterWith(Settings::instance().evaluationDate());
         instruments.push_back(anInstrument);
     };
@@ -323,8 +272,8 @@ Handle<ZeroInflationIndex> TestMarket::makeZeroInflationIndex(string index, vect
     // we know historical is WAY off market-implied, so use market implied flat.
     Rate baseZeroRate = rates[0] / 100.0;
     boost::shared_ptr<PiecewiseZeroInflationCurve<Linear>> pCPIts(
-        new PiecewiseZeroInflationCurve<Linear>(asof_, TARGET(), ActualActual(), Period(2, Months), ii->frequency(),
-                                                ii->interpolated(), baseZeroRate, instruments));
+        new PiecewiseZeroInflationCurve<Linear>(asof_, TARGET(), ActualActual(ActualActual::ISDA), Period(2, Months), ii->frequency(),
+                                                baseZeroRate, instruments));
     pCPIts->recalculate();
     cpiTS = boost::dynamic_pointer_cast<ZeroInflationTermStructure>(pCPIts);
     cpiTS->enableExtrapolation(true);
@@ -343,14 +292,14 @@ Handle<YoYInflationIndex> TestMarket::makeYoYInflationIndex(string index, vector
     for (Size i = 0; i < dates.size(); i++) {
         Handle<Quote> quote(boost::shared_ptr<Quote>(new SimpleQuote(rates[i] / 100.0)));
         boost::shared_ptr<BootstrapHelper<YoYInflationTermStructure>> anInstrument(new YearOnYearInflationSwapHelper(
-            quote, Period(2, Months), dates[i], TARGET(), ModifiedFollowing, ActualActual(), ii, yts));
+            quote, Period(2, Months), dates[i], TARGET(), ModifiedFollowing, ActualActual(ActualActual::ISDA), ii, yts));
         instruments.push_back(anInstrument);
     };
     // we can use historical or first ZCIIS for this
     // we know historical is WAY off market-implied, so use market implied flat.
     Rate baseZeroRate = rates[0] / 100.0;
     boost::shared_ptr<PiecewiseYoYInflationCurve<Linear>> pYoYts(
-        new PiecewiseYoYInflationCurve<Linear>(asof_, TARGET(), ActualActual(), Period(2, Months), ii->frequency(),
+        new PiecewiseYoYInflationCurve<Linear>(asof_, TARGET(), ActualActual(ActualActual::ISDA), Period(2, Months), ii->frequency(),
                                                ii->interpolated(), baseZeroRate, instruments));
     pYoYts->recalculate();
     yoyTS = boost::dynamic_pointer_cast<YoYInflationTermStructure>(pYoYts);
@@ -358,26 +307,64 @@ Handle<YoYInflationIndex> TestMarket::makeYoYInflationIndex(string index, vector
         parseZeroInflationIndex(index, false), false, Handle<YoYInflationTermStructure>(pYoYts)));
 }
 
-boost::shared_ptr<ore::data::Conventions> TestConfigurationObjects::conv() {
-    boost::shared_ptr<ore::data::Conventions> conventions(new ore::data::Conventions());
+void TestConfigurationObjects::setConventions() {
+    boost::shared_ptr<Conventions> conventions = boost::make_shared<Conventions>();
 
-    conventions->add(boost::make_shared<ore::data::SwapIndexConvention>("EUR-CMS-2Y", "EUR-6M-SWAP-CONVENTIONS"));
-    conventions->add(boost::make_shared<ore::data::SwapIndexConvention>("EUR-CMS-30Y", "EUR-6M-SWAP-CONVENTIONS"));
+    // add conventions
+    boost::shared_ptr<ore::data::Convention> swapIndexEURConv(
+        new ore::data::SwapIndexConvention("EUR-CMS-2Y", "EUR-6M-SWAP-CONVENTIONS"));
+    boost::shared_ptr<ore::data::Convention> swapIndexEURLongConv(
+        new ore::data::SwapIndexConvention("EUR-CMS-30Y", "EUR-6M-SWAP-CONVENTIONS"));
+    boost::shared_ptr<ore::data::Convention> swapIndexUSDConv(
+        new ore::data::SwapIndexConvention("USD-CMS-2Y", "USD-3M-SWAP-CONVENTIONS"));
+    boost::shared_ptr<ore::data::Convention> swapIndexUSDLongConv(
+        new ore::data::SwapIndexConvention("USD-CMS-30Y", "USD-3M-SWAP-CONVENTIONS"));
+    boost::shared_ptr<ore::data::Convention> swapIndexGBPConv(
+        new ore::data::SwapIndexConvention("GBP-CMS-2Y", "GBP-3M-SWAP-CONVENTIONS"));
+    boost::shared_ptr<ore::data::Convention> swapIndexGBPLongConv(
+        new ore::data::SwapIndexConvention("GBP-CMS-30Y", "GBP-6M-SWAP-CONVENTIONS"));
+    boost::shared_ptr<ore::data::Convention> swapIndexCHFConv(
+        new ore::data::SwapIndexConvention("CHF-CMS-2Y", "CHF-3M-SWAP-CONVENTIONS"));
+    boost::shared_ptr<ore::data::Convention> swapIndexCHFLongConv(
+        new ore::data::SwapIndexConvention("CHF-CMS-30Y", "CHF-6M-SWAP-CONVENTIONS"));
+    boost::shared_ptr<ore::data::Convention> swapIndexJPYConv(
+        new ore::data::SwapIndexConvention("JPY-CMS-2Y", "JPY-LIBOR-6M-SWAP-CONVENTIONS"));
+    boost::shared_ptr<ore::data::Convention> swapIndexJPYLongConv(
+        new ore::data::SwapIndexConvention("JPY-CMS-30Y", "JPY-LIBOR-6M-SWAP-CONVENTIONS"));
 
-    // boost::shared_ptr<data::Convention> swapConv(
-    //     new data::IRSwapConvention("EUR-6M-SWAP-CONVENTIONS", "TARGET", "Annual", "MF", "30/360", "EUR-EURIBOR-6M"));
-    conventions->add(boost::make_shared<ore::data::IRSwapConvention>("EUR-6M-SWAP-CONVENTIONS", "TARGET", "A", "MF",
-                                                                     "30/360", "EUR-EURIBOR-6M"));
-    conventions->add(boost::make_shared<ore::data::IRSwapConvention>("USD-3M-SWAP-CONVENTIONS", "TARGET", "Q", "MF",
-                                                                     "30/360", "USD-LIBOR-3M"));
-    conventions->add(boost::make_shared<ore::data::IRSwapConvention>("USD-6M-SWAP-CONVENTIONS", "TARGET", "Q", "MF",
-                                                                     "30/360", "USD-LIBOR-6M"));
-    conventions->add(boost::make_shared<ore::data::IRSwapConvention>("GBP-6M-SWAP-CONVENTIONS", "TARGET", "A", "MF",
-                                                                     "30/360", "GBP-LIBOR-6M"));
-    conventions->add(boost::make_shared<ore::data::IRSwapConvention>("JPY-6M-SWAP-CONVENTIONS", "TARGET", "A", "MF",
-                                                                     "30/360", "JPY-LIBOR-6M"));
-    conventions->add(boost::make_shared<ore::data::IRSwapConvention>("CHF-6M-SWAP-CONVENTIONS", "TARGET", "A", "MF",
-                                                                     "30/360", "CHF-LIBOR-6M"));
+    conventions->add(swapIndexEURConv);
+    conventions->add(swapIndexEURLongConv);
+    conventions->add(swapIndexUSDConv);
+    conventions->add(swapIndexUSDLongConv);
+    conventions->add(swapIndexGBPConv);
+    conventions->add(swapIndexGBPLongConv);
+    conventions->add(swapIndexCHFConv);
+    conventions->add(swapIndexCHFLongConv);
+    conventions->add(swapIndexJPYConv);
+    conventions->add(swapIndexJPYLongConv);
+
+    boost::shared_ptr<ore::data::Convention> swapEURConv(new ore::data::IRSwapConvention(
+        "EUR-6M-SWAP-CONVENTIONS", "TARGET", "Annual", "MF", "30/360", "EUR-EURIBOR-6M"));
+    boost::shared_ptr<ore::data::Convention> swapUSDConv(
+        new ore::data::IRSwapConvention("USD-3M-SWAP-CONVENTIONS", "US", "Semiannual", "MF", "30/360", "USD-LIBOR-3M"));
+    boost::shared_ptr<ore::data::Convention> swapGBPConv(
+        new ore::data::IRSwapConvention("GBP-3M-SWAP-CONVENTIONS", "UK", "Semiannual", "MF", "A365", "GBP-LIBOR-3M"));
+    boost::shared_ptr<ore::data::Convention> swapGBPLongConv(
+        new ore::data::IRSwapConvention("GBP-6M-SWAP-CONVENTIONS", "UK", "Semiannual", "MF", "A365", "GBP-LIBOR-6M"));
+    boost::shared_ptr<ore::data::Convention> swapCHFConv(
+        new ore::data::IRSwapConvention("CHF-3M-SWAP-CONVENTIONS", "ZUB", "Annual", "MF", "30/360", "CHF-LIBOR-3M"));
+    boost::shared_ptr<ore::data::Convention> swapCHFLongConv(
+        new ore::data::IRSwapConvention("CHF-6M-SWAP-CONVENTIONS", "ZUB", "Annual", "MF", "30/360", "CHF-LIBOR-6M"));
+    boost::shared_ptr<ore::data::Convention> swapJPYConv(new ore::data::IRSwapConvention(
+        "JPY-LIBOR-6M-SWAP-CONVENTIONS", "JP", "Semiannual", "MF", "A365", "JPY-LIBOR-6M"));
+
+    conventions->add(swapEURConv);
+    conventions->add(swapUSDConv);
+    conventions->add(swapGBPConv);
+    conventions->add(swapGBPLongConv);
+    conventions->add(swapCHFConv);
+    conventions->add(swapCHFLongConv);
+    conventions->add(swapJPYConv);
 
     conventions->add(boost::make_shared<ore::data::DepositConvention>("EUR-DEP-CONVENTIONS", "EUR-EURIBOR"));
     conventions->add(boost::make_shared<ore::data::DepositConvention>("USD-DEP-CONVENTIONS", "USD-LIBOR"));
@@ -385,7 +372,12 @@ boost::shared_ptr<ore::data::Conventions> TestConfigurationObjects::conv() {
     conventions->add(boost::make_shared<ore::data::DepositConvention>("JPY-DEP-CONVENTIONS", "JPY-LIBOR"));
     conventions->add(boost::make_shared<ore::data::DepositConvention>("CHF-DEP-CONVENTIONS", "CHF-LIBOR"));
 
-    return conventions;
+    conventions->add(boost::make_shared<FXConvention>("EUR-USD-FX", "0", "EUR", "USD", "10000", "EUR,USD"));
+    conventions->add(boost::make_shared<FXConvention>("EUR-GBP-FX", "0", "EUR", "GBP", "10000", "EUR,GBP"));
+    conventions->add(boost::make_shared<FXConvention>("EUR-CHF-FX", "0", "EUR", "CHF", "10000", "EUR,CHF"));
+    conventions->add(boost::make_shared<FXConvention>("EUR-JPY-FX", "0", "EUR", "JPY", "10000", "EUR,JPY"));
+
+    InstrumentConventions::instance().setConventions(conventions);
 }
 
 boost::shared_ptr<ore::analytics::ScenarioSimMarketParameters> TestConfigurationObjects::setupSimMarketData2() {
@@ -410,11 +402,11 @@ boost::shared_ptr<ore::analytics::ScenarioSimMarketParameters> TestConfiguration
         "", {1 * Years, 2 * Years, 3 * Years, 4 * Years, 5 * Years, 7 * Years, 10 * Years, 20 * Years});
     simMarketData->setSwapVolExpiries(
         "", {6 * Months, 1 * Years, 2 * Years, 3 * Years, 5 * Years, 7 * Years, 10 * Years, 20 * Years});
-    simMarketData->setSwapVolCcys({"EUR", "GBP"});
+    simMarketData->setSwapVolKeys({"EUR", "GBP"});
     simMarketData->swapVolDecayMode() = "ForwardVariance";
     simMarketData->setSimulateSwapVols(true);
 
-    simMarketData->setFxVolExpiries(
+    simMarketData->setFxVolExpiries("",
         vector<Period>{1 * Months, 3 * Months, 6 * Months, 2 * Years, 3 * Years, 4 * Years, 5 * Years});
     simMarketData->setFxVolDecayMode(string("ConstantVariance"));
     simMarketData->setSimulateFXVols(true);
@@ -448,11 +440,11 @@ boost::shared_ptr<ore::analytics::ScenarioSimMarketParameters> TestConfiguration
     simMarketData->setSwapVolTerms("", {1 * Years, 2 * Years, 3 * Years, 5 * Years, 7 * Years, 10 * Years, 20 * Years});
     simMarketData->setSwapVolExpiries(
         "", {6 * Months, 1 * Years, 2 * Years, 3 * Years, 5 * Years, 7 * Years, 10 * Years, 20 * Years});
-    simMarketData->setSwapVolCcys({"EUR", "GBP", "USD", "CHF", "JPY"});
+    simMarketData->setSwapVolKeys({"EUR", "GBP", "USD", "CHF", "JPY"});
     simMarketData->swapVolDecayMode() = "ForwardVariance";
     simMarketData->setSimulateSwapVols(true); // false;
 
-    simMarketData->setFxVolExpiries(
+    simMarketData->setFxVolExpiries("",
         vector<Period>{1 * Months, 3 * Months, 6 * Months, 2 * Years, 3 * Years, 4 * Years, 5 * Years});
     simMarketData->setFxVolDecayMode(string("ConstantVariance"));
     simMarketData->setSimulateFXVols(true); // false;
@@ -464,7 +456,7 @@ boost::shared_ptr<ore::analytics::ScenarioSimMarketParameters> TestConfiguration
 
     simMarketData->setSimulateCapFloorVols(true);
     simMarketData->capFloorVolDecayMode() = "ForwardVariance";
-    simMarketData->setCapFloorVolCcys({"EUR", "USD"});
+    simMarketData->setCapFloorVolKeys({"EUR", "USD"});
     simMarketData->setCapFloorVolExpiries(
         "", {6 * Months, 1 * Years, 2 * Years, 3 * Years, 5 * Years, 7 * Years, 10 * Years, 15 * Years, 20 * Years});
     simMarketData->setCapFloorVolStrikes("", {0.00, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06});

@@ -35,7 +35,6 @@ XvaRunner::XvaRunner(Date asof, const string& baseCurrency, const boost::shared_
                      const boost::shared_ptr<NettingSetManager>& netting,
                      const boost::shared_ptr<EngineData>& engineData,
                      const boost::shared_ptr<CurveConfigurations>& curveConfigs,
-                     const boost::shared_ptr<Conventions>& conventions,
                      const boost::shared_ptr<TodaysMarketParameters>& todaysMarketParams,
                      const boost::shared_ptr<ScenarioSimMarketParameters>& simMarketData,
                      const boost::shared_ptr<ScenarioGeneratorData>& scenarioGeneratorData,
@@ -47,7 +46,7 @@ XvaRunner::XvaRunner(Date asof, const string& baseCurrency, const boost::shared_
                      map<string, bool> analytics, string calculationType, string dvaName, string fvaBorrowingCurve,
                      string fvaLendingCurve, bool fullInitialCollateralisation, bool storeFlows)
     : asof_(asof), baseCurrency_(baseCurrency), portfolio_(portfolio), netting_(netting), engineData_(engineData),
-      curveConfigs_(curveConfigs), conventions_(conventions), todaysMarketParams_(todaysMarketParams),
+      curveConfigs_(curveConfigs), todaysMarketParams_(todaysMarketParams),
       simMarketData_(simMarketData), scenarioGeneratorData_(scenarioGeneratorData),
       crossAssetModelData_(crossAssetModelData), extraLegBuilders_(extraLegBuilders),
       extraEngineBuilders_(extraEngineBuilders), referenceData_(referenceData), iborFallbackConfig_(iborFallbackConfig),
@@ -89,7 +88,7 @@ void XvaRunner::buildCamModel(const boost::shared_ptr<ore::data::Market>& market
     CrossAssetModelBuilder modelBuilder(market, crossAssetModelData_, Market::defaultConfiguration,
                                         Market::defaultConfiguration, Market::defaultConfiguration,
                                         Market::defaultConfiguration, Market::defaultConfiguration,
-                                        Market::defaultConfiguration, ActualActual(), false, continueOnErr);
+                                        Market::defaultConfiguration, ActualActual(ActualActual::ISDA), false, continueOnErr);
     model_ = *modelBuilder.model();
 }
 
@@ -97,7 +96,7 @@ void XvaRunner::bufferSimulationPaths() {
 
     LOG("XvaRunner::bufferSimulationPaths() called");
 
-    auto stateProcess = model_->stateProcess(scenarioGeneratorData_->discretization());
+    auto stateProcess = model_->stateProcess();
     auto pathGen = MultiPathGeneratorFactory().build(scenarioGeneratorData_->sequenceType(), stateProcess,
                                                      scenarioGeneratorData_->getGrid()->timeGrid(),
                                                      scenarioGeneratorData_->seed(), scenarioGeneratorData_->ordering(),
@@ -135,9 +134,9 @@ void XvaRunner::buildSimMarket(const boost::shared_ptr<ore::data::Market>& marke
     boost::shared_ptr<ScenarioFactory> sf = boost::make_shared<SimpleScenarioFactory>();
     boost::shared_ptr<ScenarioGenerator> sg =
         getProjectedScenarioGenerator(currencyFilter, market, projectedSsmData, sf, continueOnErr);
-    simMarket_ = boost::make_shared<ScenarioSimMarket>(
-        market, projectedSsmData, *conventions_, Market::defaultConfiguration, *curveConfigs_, *todaysMarketParams_,
-        true, false, true, false, iborFallbackConfig_);
+    simMarket_ = boost::make_shared<ScenarioSimMarket>(market, projectedSsmData, Market::defaultConfiguration,
+                                                       *curveConfigs_, *todaysMarketParams_, true, false, true, false,
+                                                       iborFallbackConfig_, false);
     simMarket_->scenarioGenerator() = sg;
 
     for (auto b : extraEngineBuilders_)
@@ -149,9 +148,10 @@ void XvaRunner::buildSimMarket(const boost::shared_ptr<ore::data::Market>& marke
         scenarioGeneratorData_->getGrid()->valuationDates().size(), scenarioGeneratorData_->samples());
     simMarket_->aggregationScenarioData() = scenarioData_;
 
-    simFactory_ =
-        boost::make_shared<EngineFactory>(engineData_, simMarket_, map<MarketContext, string>(), extraEngineBuilders_,
-                                          extraLegBuilders_, referenceData_, iborFallbackConfig_);
+    auto ed = boost::make_shared<EngineData>(*engineData_);
+    ed->globalParameters()["RunType"] = "Exposure";
+    simFactory_ = boost::make_shared<EngineFactory>(ed, simMarket_, map<MarketContext, string>(), extraEngineBuilders_,
+                                                    extraLegBuilders_, referenceData_, iborFallbackConfig_);
 }
 
 void XvaRunner::buildCube(const boost::optional<std::set<std::string>>& tradeIds, const bool continueOnErr) {

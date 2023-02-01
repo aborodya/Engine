@@ -32,9 +32,11 @@ void no_deletion(YieldTermStructure*) {}
 OIBSHelper::OIBSHelper(Natural settlementDays,
                        const Period& tenor, // swap maturity
                        const Handle<Quote>& oisSpread, const boost::shared_ptr<OvernightIndex>& overnightIndex,
-                       const boost::shared_ptr<IborIndex>& iborIndex, const Handle<YieldTermStructure>& discount)
+                       const boost::shared_ptr<IborIndex>& iborIndex, const Handle<YieldTermStructure>& discount,
+                       const bool telescopicValueDates)
     : RelativeDateRateHelper(oisSpread), settlementDays_(settlementDays), tenor_(tenor),
-      overnightIndex_(overnightIndex), iborIndex_(iborIndex), discount_(discount) {
+      overnightIndex_(overnightIndex), iborIndex_(iborIndex), discount_(discount),
+      telescopicValueDates_(telescopicValueDates) {
 
     /* depending on the given curves we proceed as outlined in the following table
 
@@ -118,10 +120,10 @@ void OIBSHelper::initializeDates() {
                                 .withCalendar(iborIndex_->fixingCalendar())
                                 .withConvention(iborIndex_->businessDayConvention())
                                 .forwards();
-    swap_ = boost::shared_ptr<OvernightIndexedBasisSwap>(new OvernightIndexedBasisSwap(OvernightIndexedBasisSwap::Payer,
-                                                                                       10000.0, // arbitrary
-                                                                                       oisSchedule, overnightIndex_,
-                                                                                       iborSchedule, iborIndex_));
+    swap_ = boost::shared_ptr<OvernightIndexedBasisSwap>(
+        new OvernightIndexedBasisSwap(OvernightIndexedBasisSwap::Payer,
+                                      10000.0, // arbitrary
+                                      oisSchedule, overnightIndex_, iborSchedule, iborIndex_, 0.0, 0.0, true));
     boost::shared_ptr<PricingEngine> engine(
         new DiscountingSwapEngine(discount_.empty() ? discountRelinkableHandle_ : discount_));
     swap_->setPricingEngine(engine);
@@ -140,7 +142,7 @@ void OIBSHelper::setTermStructure(YieldTermStructure* t) {
 Real OIBSHelper::impliedQuote() const {
     QL_REQUIRE(termStructure_ != 0, "term structure not set");
     // we didn't register as observers - force calculation
-    swap_->recalculate();
+    swap_->deepUpdate();
     return swap_->fairOvernightSpread();
 }
 

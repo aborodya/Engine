@@ -80,8 +80,8 @@ public:
 
     //! \name Serialisation
     //@{
-    virtual void fromXML(XMLNode* node) = 0;
-    virtual XMLNode* toXML(XMLDocument& doc) = 0;
+    virtual void fromXML(XMLNode* node) override;
+    virtual XMLNode* toXML(XMLDocument& doc) override;
     //@}
 
     //! \name Inspectors
@@ -145,13 +145,13 @@ public:
 
     //! \name Serialisation
     //@{
-    virtual void fromXML(XMLNode* node);
-    virtual XMLNode* toXML(XMLDocument& doc);
+    virtual void fromXML(XMLNode* node) override;
+    virtual XMLNode* toXML(XMLDocument& doc) override;
     //@}
 
     //! \name Visitability
     //@{
-    virtual void accept(AcyclicVisitor&);
+    virtual void accept(AcyclicVisitor&) override;
     //@}
 };
 
@@ -177,8 +177,8 @@ public:
 
     //! \name Serialisation
     //@{
-    virtual void fromXML(XMLNode* node);
-    virtual XMLNode* toXML(XMLDocument& doc);
+    virtual void fromXML(XMLNode* node) override;
+    virtual XMLNode* toXML(XMLDocument& doc) override;
     //@}
 
     //! \name Inspectors
@@ -188,14 +188,14 @@ public:
 
     //! \name Visitability
     //@{
-    virtual void accept(AcyclicVisitor&);
+    virtual void accept(AcyclicVisitor&) override;
     //@}
 
 private:
     string projectionCurveID_;
 };
 
-//! Avergae OIS yield curve segment
+//! Average OIS yield curve segment
 /*!
   The average OIS yield curve segment is used e.g. for USD OIS curve building where
   the curve segment is determined by  a set of composite quotes and a projection curve.
@@ -210,7 +210,7 @@ public:
     //@{
     //! Default constructor
     AverageOISYieldCurveSegment() {}
-    //! Detailec constructor
+    //! Detailed constructor
     AverageOISYieldCurveSegment(const string& typeID, const string& conventionsID, const vector<string>& quotes,
                                 const string& projectionCurveID);
     //! Default destructor
@@ -219,8 +219,8 @@ public:
 
     //! \name Serialisation
     //@{
-    virtual void fromXML(XMLNode* node);
-    virtual XMLNode* toXML(XMLDocument& doc);
+    virtual void fromXML(XMLNode* node) override;
+    virtual XMLNode* toXML(XMLDocument& doc) override;
     //@}
 
     //! \name Inspectors
@@ -230,7 +230,7 @@ public:
 
     //! \name Visitability
     //@{
-    virtual void accept(AcyclicVisitor&);
+    virtual void accept(AcyclicVisitor&) override;
     //@}
 
 private:
@@ -260,8 +260,8 @@ public:
 
     //!\name Serialisation
     //@{
-    virtual void fromXML(XMLNode* node);
-    virtual XMLNode* toXML(XMLDocument& doc);
+    virtual void fromXML(XMLNode* node) override;
+    virtual XMLNode* toXML(XMLDocument& doc) override;
     //@}
 
     //! \name Inspectors
@@ -272,7 +272,7 @@ public:
 
     //! \name Visitability
     //@{
-    virtual void accept(AcyclicVisitor&);
+    virtual void accept(AcyclicVisitor&) override;
     //@}
 
 private:
@@ -307,8 +307,8 @@ public:
 
     //! \name Serialisation
     //@{
-    virtual void fromXML(XMLNode* node);
-    virtual XMLNode* toXML(XMLDocument& doc);
+    virtual void fromXML(XMLNode* node) override;
+    virtual XMLNode* toXML(XMLDocument& doc) override;
     //@}
 
     //! \name Inspectors
@@ -321,7 +321,7 @@ public:
 
     //! \name Visitability
     //@{
-    virtual void accept(AcyclicVisitor&);
+    virtual void accept(AcyclicVisitor&) override;
     //@}
 
 private:
@@ -353,8 +353,8 @@ public:
 
     //! \name Serialisation
     //@{
-    virtual void fromXML(XMLNode* node);
-    virtual XMLNode* toXML(XMLDocument& doc);
+    virtual void fromXML(XMLNode* node) override;
+    virtual XMLNode* toXML(XMLDocument& doc) override;
     //@}
 
     //! \name Inspectors
@@ -364,7 +364,7 @@ public:
 
     //! \name Visitability
     //@{
-    virtual void accept(AcyclicVisitor&);
+    virtual void accept(AcyclicVisitor&) override;
     //@}
 
 private:
@@ -374,7 +374,7 @@ private:
 //! Weighted average yield curve segment
 /*!
   A weighted average segment is used to build a yield curve from two source curves and weights. The
-  resulting disount factor is the weighted sum of the source curves' discount factors.
+  resulting discount factor is the weighted sum of the source curves' discount factors.
 
   \ingroup configuration
 */
@@ -391,8 +391,8 @@ public:
     virtual ~WeightedAverageYieldCurveSegment() {}
     //! \name Serialisation
     //@{
-    virtual void fromXML(XMLNode* node);
-    virtual XMLNode* toXML(XMLDocument& doc);
+    virtual void fromXML(XMLNode* node) override;
+    virtual XMLNode* toXML(XMLDocument& doc) override;
     //@}
 
     //! \name Inspectors
@@ -405,7 +405,7 @@ public:
 
     //! \name Visitability
     //@{
-    virtual void accept(AcyclicVisitor&);
+    virtual void accept(AcyclicVisitor&) override;
     //@}
 
 private:
@@ -435,8 +435,8 @@ public:
     virtual ~YieldPlusDefaultYieldCurveSegment() {}
     //! \name Serialisation
     //@{
-    virtual void fromXML(XMLNode* node);
-    virtual XMLNode* toXML(XMLDocument& doc);
+    virtual void fromXML(XMLNode* node) override;
+    virtual XMLNode* toXML(XMLDocument& doc) override;
     //@}
 
     //! \name Inspectors
@@ -448,7 +448,7 @@ public:
 
     //! \name Visitability
     //@{
-    virtual void accept(AcyclicVisitor&);
+    virtual void accept(AcyclicVisitor&) override;
     //@}
 
 private:
@@ -477,8 +477,8 @@ public:
 
     //! \name Serialisation
     //@{
-    virtual void fromXML(XMLNode* node);
-    virtual XMLNode* toXML(XMLDocument& doc);
+    virtual void fromXML(XMLNode* node) override;
+    virtual XMLNode* toXML(XMLDocument& doc) override;
     //@}
 
     //! \name Inspectors
@@ -493,7 +493,7 @@ public:
 
     //! \name Visitability
     //@{
-    void accept(QuantLib::AcyclicVisitor& v);
+    void accept(QuantLib::AcyclicVisitor& v) override;
     //@}
 
 private:
@@ -519,31 +519,28 @@ public:
     FittedBondYieldCurveSegment() {}
     //! Detailed constructor
     FittedBondYieldCurveSegment(const string& typeID, const vector<string>& quotes,
-                                const map<string, string>& iborIndexCurves, const bool extrapolateFlat,
-                                const Size calibrationTrials);
+                                const map<string, string>& iborIndexCurves, const bool extrapolateFlat);
 
     //! \name Serialisation
     //@{
-    virtual void fromXML(XMLNode* node);
-    virtual XMLNode* toXML(XMLDocument& doc);
+    virtual void fromXML(XMLNode* node) override;
+    virtual XMLNode* toXML(XMLDocument& doc) override;
     //@}
 
     //! \name Inspectors
     //@{
     const map<string, string>& iborIndexCurves() const { return iborIndexCurves_; }
     const bool extrapolateFlat() const { return extrapolateFlat_; }
-    const Size calibrationTrials() const { return calibrationTrials_; }
     //@}
 
     //! \name Visitability
     //@{
-    virtual void accept(AcyclicVisitor&);
+    virtual void accept(AcyclicVisitor&) override;
     //@}
 
 private:
     map<string, string> iborIndexCurves_;
     bool extrapolateFlat_;
-    Size calibrationTrials_;
 };
 
 //! Ibor Fallback yield curve segment
@@ -564,8 +561,8 @@ public:
 
     //! \name Serialisation
     //@{
-    virtual void fromXML(XMLNode* node);
-    virtual XMLNode* toXML(XMLDocument& doc);
+    virtual void fromXML(XMLNode* node) override;
+    virtual XMLNode* toXML(XMLDocument& doc) override;
     //@}
 
     //! \name Inspectors
@@ -578,7 +575,7 @@ public:
 
     //! \name Visitability
     //@{
-    virtual void accept(AcyclicVisitor&);
+    virtual void accept(AcyclicVisitor&) override;
     //@}
 
 private:
@@ -596,7 +593,7 @@ private:
  */
 class YieldCurveConfig : public CurveConfig {
 public:
-    //! \name Constructors/Destructurs
+    //! \name Constructors/Destructors
     //@{
     //! Default constructor
     YieldCurveConfig() {}
@@ -610,7 +607,7 @@ public:
     virtual ~YieldCurveConfig() {}
     //@}
 
-    //! \name Serilalisation
+    //! \name Serialization
     //@{
     virtual void fromXML(XMLNode* node) override;
     virtual XMLNode* toXML(XMLDocument& doc) override;

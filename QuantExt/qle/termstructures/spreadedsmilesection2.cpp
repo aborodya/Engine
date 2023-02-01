@@ -26,19 +26,26 @@ namespace QuantExt {
 
 SpreadedSmileSection2::SpreadedSmileSection2(const boost::shared_ptr<SmileSection>& base,
                                              const std::vector<Real>& volSpreads, const std::vector<Real>& strikes,
-                                             const bool strikesRelativeToAtm, const Real atmLevel)
+                                             const bool strikesRelativeToAtm, const Real baseAtmLevel,
+                                             const Real simulatedAtmLevel, const bool stickyAbsMoney)
     : SmileSection(base->exerciseTime(), base->dayCounter(), base->volatilityType(),
                    base->volatilityType() == ShiftedLognormal ? base->shift() : 0.0),
       base_(base), volSpreads_(volSpreads), strikes_(strikes), strikesRelativeToAtm_(strikesRelativeToAtm),
-      atmLevel_(atmLevel) {
+      baseAtmLevel_(baseAtmLevel), simulatedAtmLevel_(simulatedAtmLevel), stickyAbsMoney_(stickyAbsMoney) {
     registerWith(base_);
-    QL_REQUIRE(!strikes_.empty(), "SpreadedSwaptionSmileSection: strikes empty");
-    QL_REQUIRE(strikes_.size() == volSpreads_.size(), "SpreadedSwaptionSmileSection: strike spreads ("
+    QL_REQUIRE(!strikes_.empty(), "SpreadedSmileSection2: strikes empty");
+    QL_REQUIRE(strikes_.size() == volSpreads_.size(), "SpreadedSmileSection2: strike spreads ("
                                                           << strikes_.size() << ") inconsistent with vol spreads ("
                                                           << volSpreads_.size() << ")");
-    QL_REQUIRE(!strikesRelativeToAtm_ || strikes.size() == 1 || atmLevel != Null<Real>(),
-               "SpreadedSmileSection2: if strikes are relative to atm and more than one strike is given, the atm level "
-               "is required");
+    if ((strikesRelativeToAtm_ && strikes.size() > 1) || stickyAbsMoney) {
+        QL_REQUIRE(baseAtmLevel_ != Null<Real>() || base_->atmLevel() != Null<Real>(),
+                   "SpreadedSmileSection2: if strikeRelativeToATM is true and more than one strike is given, or if "
+                   "stickyAbsMoney is true, the base atm level must be given.");
+    }
+    if (stickyAbsMoney) {
+        QL_REQUIRE(simulatedAtmLevel_ != Null<Real>(),
+                   "SpreadedSmileSection2: if stickyAbsMoney is true, the simulatedAtmLevel must be given");
+    }
     if (volSpreads_.size() > 1) {
         volSpreadInterpolation_ = LinearFlat().interpolate(strikes_.begin(), strikes_.end(), volSpreads_.begin());
         volSpreadInterpolation_.enableExtrapolation();
@@ -47,17 +54,25 @@ SpreadedSmileSection2::SpreadedSmileSection2(const boost::shared_ptr<SmileSectio
 
 Rate SpreadedSmileSection2::minStrike() const { return base_->minStrike(); }
 Rate SpreadedSmileSection2::maxStrike() const { return base_->maxStrike(); }
-Rate SpreadedSmileSection2::atmLevel() const { return atmLevel_ != Null<Real>() ? atmLevel_ : base_->atmLevel(); }
+Rate SpreadedSmileSection2::atmLevel() const {
+    return baseAtmLevel_ != Null<Real>() ? baseAtmLevel_ : base_->atmLevel();
+}
 
 Volatility SpreadedSmileSection2::volatilityImpl(Rate strike) const {
+    Real effStrike;
+    if (stickyAbsMoney_) {
+        effStrike = strike - (simulatedAtmLevel_ - atmLevel());
+    } else {
+        effStrike = strike;
+    }
     if (volSpreads_.size() == 1)
-        return base_->volatility(strike) + volSpreads_.front();
+        return base_->volatility(effStrike) + volSpreads_.front();
     else if (strikesRelativeToAtm_) {
         Real f = atmLevel();
         QL_REQUIRE(f != Null<Real>(), "SpreadedSmileSection2: atm level required");
-        return base_->volatility(strike) + volSpreadInterpolation_(strike - f);
+        return base_->volatility(effStrike) + volSpreadInterpolation_(strike - f);
     } else {
-        return base_->volatility(strike) + volSpreadInterpolation_(strike);
+        return base_->volatility(effStrike) + volSpreadInterpolation_(effStrike);
     }
 }
 

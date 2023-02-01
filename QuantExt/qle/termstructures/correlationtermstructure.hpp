@@ -66,7 +66,7 @@ protected:
     //@}
 
     //! Extra time range check for minimum time, then calls TermStructure::checkRange
-    void checkRange(Time t, bool extrapolate) const;
+    virtual void checkRange(Time t, Real strike, bool extrapolate) const;
 };
 
 //! Wrapper class that inverts the correlation
@@ -83,7 +83,7 @@ private:
     Handle<CorrelationTermStructure> c_;
 };
 
-//! Wrapper class that extracts a value at a given time from the term strucuture
+//! Wrapper class that extracts a value at a given time from the term structure
 class CorrelationValue : public Observer, public Quote {
 public:
     CorrelationValue(const Handle<CorrelationTermStructure>& correlation, const Time t,

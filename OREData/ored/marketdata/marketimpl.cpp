@@ -21,6 +21,7 @@
 #include <ored/configuration/conventions.hpp>
 #include <ored/marketdata/marketimpl.hpp>
 #include <ored/utilities/indexparser.hpp>
+#include <ored/utilities/marketdata.hpp>
 #include <ored/utilities/parsers.hpp>
 #include <qle/termstructures/blackinvertedvoltermstructure.hpp>
 
@@ -33,6 +34,7 @@ using namespace QuantLib;
 
 using QuantExt::PriceTermStructure;
 using QuantExt::CommodityIndex;
+using QuantExt::FxIndex;
 
 namespace ore {
 namespace data {
@@ -40,13 +42,18 @@ namespace data {
 namespace {
 
 template <class A, class B, class C>
-A lookup(const B& map, const C& key, const string& configuration, const string& type) {
+A lookup(const B& map, const C& key, const string& configuration, const string& type, bool continueOnError = false) {
     auto it = map.find(make_pair(configuration, key));
     if (it == map.end()) {
         // fall back to default configuration
         it = map.find(make_pair(Market::defaultConfiguration, key));
-        QL_REQUIRE(it != map.end(), "did not find object " << key << " of type " << type << " under configuration '"
-                                                           << configuration << "' or 'default'");
+        if (it == map.end()) {
+            if (!continueOnError)
+                QL_FAIL("did not find object '" << key << "' of type " << type
+                    << " under configuration '" << configuration << "' or 'default'");
+            else
+                return A();
+        }
     }
     return it->second;
 }
@@ -62,7 +69,6 @@ A lookup(const B& map, const C& key, const YieldCurveType y, const string& confi
     }
     return it->second;
 }
-
 } // anonymous namespace
 
 Handle<YieldTermStructure> MarketImpl::yieldCurve(const YieldCurveType& type, const string& key,
@@ -70,8 +76,7 @@ Handle<YieldTermStructure> MarketImpl::yieldCurve(const YieldCurveType& type, co
     // we allow for standard (i.e. not convention based) ibor index names as keys and return the index forward curve in
     // case of a match
     boost::shared_ptr<IborIndex> notUsed;
-    if (tryParseIborIndex(key, notUsed, conventions_.has(key, Convention::Type::IborIndex)
-        ? conventions_.get(key) : nullptr)) {
+    if (tryParseIborIndex(key, notUsed)) {
         return iborIndex(key, configuration)->forwardingTermStructure();
     }
     // no ibor index found under key => look for a genuine yield curve
@@ -88,7 +93,7 @@ Handle<YieldTermStructure> MarketImpl::yieldCurve(const YieldCurveType& type, co
     return lookup<Handle<YieldTermStructure>>(yieldCurves_, key, type, configuration, "yield curve / ibor index");
 }
 
-Handle<YieldTermStructure> MarketImpl::discountCurve(const string& key, const string& configuration) const {
+Handle<YieldTermStructure> MarketImpl::discountCurveImpl(const string& key, const string& configuration) const {
     require(MarketObject::DiscountCurve, key, configuration);
     return lookup<Handle<YieldTermStructure>>(yieldCurves_, key, YieldCurveType::Discount, configuration,
                                               "discount curve");
@@ -112,17 +117,76 @@ Handle<SwapIndex> MarketImpl::swapIndex(const string& key, const string& configu
 Handle<QuantLib::SwaptionVolatilityStructure> MarketImpl::swaptionVol(const string& key,
                                                                       const string& configuration) const {
     require(MarketObject::SwaptionVol, key, configuration);
-    return lookup<Handle<QuantLib::SwaptionVolatilityStructure>>(swaptionCurves_, key, configuration, "swaption curve");
+    auto it = swaptionCurves_.find(make_pair(configuration, key));
+    if (it != swaptionCurves_.end())
+        return it->second;
+    // try the default config with the same key
+    if (configuration != Market::defaultConfiguration) {
+        require(MarketObject::SwaptionVol, key, Market::defaultConfiguration);
+        auto it2 = swaptionCurves_.find(make_pair(Market::defaultConfiguration, key));
+        if (it2 != swaptionCurves_.end())
+            return it2->second;
+    }
+    // if key is an index name and we have a swaption curve for its ccy, we return that
+    boost::shared_ptr<IborIndex> index;
+    if (!tryParseIborIndex(key, index)) {
+        QL_FAIL("did not find swaption curve for key '" << key << "'");
+    }
+    auto ccy = index->currency().code();
+    require(MarketObject::SwaptionVol, ccy, configuration);
+    auto it3 = swaptionCurves_.find(make_pair(configuration, ccy));
+    if (it3 != swaptionCurves_.end()) {
+        return it3->second;
+    }
+    // check if we have a curve for the ccy in the default config
+    if (configuration != Market::defaultConfiguration) {
+        require(MarketObject::SwaptionVol, ccy, configuration);
+        auto it4 = swaptionCurves_.find(make_pair(Market::defaultConfiguration, ccy));
+        if (it4 != swaptionCurves_.end())
+            return it4->second;
+    }
+    QL_FAIL("did not find swaption curve for key '" << key << "'");
 }
 
-const string MarketImpl::shortSwapIndexBase(const string& key, const string& configuration) const {
+pair<string, string> MarketImpl::swapIndexBases(const string& key, const string& configuration) const {
     require(MarketObject::SwaptionVol, key, configuration);
-    return lookup<pair<string, string>>(swaptionIndexBases_, key, configuration, "short swap index base").first;
+    auto it = swaptionIndexBases_.find(make_pair(configuration, key));
+    if (it != swaptionIndexBases_.end())
+        return it->second;
+    // try the default config with the same key
+    if (configuration != Market::defaultConfiguration) {
+        require(MarketObject::SwaptionVol, key, Market::defaultConfiguration);
+        auto it2 = swaptionIndexBases_.find(make_pair(Market::defaultConfiguration, key));
+        if (it2 != swaptionIndexBases_.end())
+            return it2->second;
+    }
+    // if key is an index name and we have a swaption curve for its ccy, we return that
+    boost::shared_ptr<IborIndex> index;
+    if (!tryParseIborIndex(key, index)) {
+        QL_FAIL("did not find swaption index bases for key '" << key << "'");
+    }
+    auto ccy = index->currency().code();
+    require(MarketObject::SwaptionVol, ccy, configuration);
+    auto it3 = swaptionIndexBases_.find(make_pair(configuration, ccy));
+    if (it3 != swaptionIndexBases_.end()) {
+        return it3->second;
+    }
+    // check if we have a curve for the ccy in the default config
+    if (configuration != Market::defaultConfiguration) {
+        require(MarketObject::SwaptionVol, ccy, configuration);
+        auto it4 = swaptionIndexBases_.find(make_pair(Market::defaultConfiguration, ccy));
+        if (it4 != swaptionIndexBases_.end())
+            return it4->second;
+    }
+    QL_FAIL("did not find swaption index bases for key '" << key << "'");
 }
 
-const string MarketImpl::swapIndexBase(const string& key, const string& configuration) const {
-    require(MarketObject::SwaptionVol, key, configuration);
-    return lookup<pair<string, string>>(swaptionIndexBases_, key, configuration, "swap index base").second;
+string MarketImpl::shortSwapIndexBase(const string& key, const string& configuration) const {
+    return swapIndexBases(key, configuration).first;
+}
+
+string MarketImpl::swapIndexBase(const string& key, const string& configuration) const {
+    return swapIndexBases(key, configuration).second;
 }
 
 Handle<QuantLib::SwaptionVolatilityStructure> MarketImpl::yieldVol(const string& key,
@@ -132,17 +196,26 @@ Handle<QuantLib::SwaptionVolatilityStructure> MarketImpl::yieldVol(const string&
                                                                  "yield volatility curve");
 }
 
-Handle<Quote> MarketImpl::fxSpot(const string& ccypair, const string& configuration) const {
-    require(MarketObject::FXSpot, ccypair, configuration);
-    auto it = fxSpots_.find(configuration);
-    if (it == fxSpots_.end())
-        it = fxSpots_.find(Market::defaultConfiguration);
-    QL_REQUIRE(it != fxSpots_.end(), "did not find object " << ccypair << " of type fx spot under configuration '"
-                                                            << configuration << "' or 'default'");
-    return it->second.getQuote(ccypair); // will throw if not found
+Handle<QuantExt::FxIndex> MarketImpl::fxIndexImpl(const string& fxIndex, const string& configuration) const {
+    QL_REQUIRE(fx_ != nullptr,
+               "MarketImpl::fxIndex(" << fxIndex << "): fx_ is null. This is an internal error. Contact dev.");
+    return fx_->getIndex(fxIndex, this);
 }
 
-Handle<BlackVolTermStructure> MarketImpl::fxVol(const string& ccypair, const string& configuration) const {
+Handle<Quote> MarketImpl::fxRateImpl(const string& ccypair, const string& configuration) const {
+    // if rate requested for a currency against itself, return 1.0
+    if (ccypair.substr(0,3) == ccypair.substr(3))
+        return Handle<Quote>(boost::make_shared<SimpleQuote>(1.0));
+    return fxIndex(ccypair, configuration)->fxQuote();
+}
+
+Handle<Quote> MarketImpl::fxSpotImpl(const string& ccypair, const string& configuration) const {
+    if (ccypair.substr(0, 3) == ccypair.substr(3))
+        return Handle<Quote>(boost::make_shared<SimpleQuote>(1.0));
+    return fxIndex(ccypair, configuration)->fxQuote(true);
+}
+
+Handle<BlackVolTermStructure> MarketImpl::fxVolImpl(const string& ccypair, const string& configuration) const {
     require(MarketObject::FXVol, ccypair, configuration);
     auto it = fxVols_.find(make_pair(configuration, ccypair));
     if (it != fxVols_.end())
@@ -169,9 +242,9 @@ Handle<BlackVolTermStructure> MarketImpl::fxVol(const string& ccypair, const str
     }
 }
 
-Handle<DefaultProbabilityTermStructure> MarketImpl::defaultCurve(const string& key, const string& configuration) const {
+Handle<QuantExt::CreditCurve> MarketImpl::defaultCurve(const string& key, const string& configuration) const {
     require(MarketObject::DefaultCurve, key, configuration);
-    return lookup<Handle<DefaultProbabilityTermStructure>>(defaultCurves_, key, configuration, "default curve");
+    return lookup<Handle<QuantExt::CreditCurve>>(defaultCurves_, key, configuration, "default curve");
 }
 
 Handle<Quote> MarketImpl::recoveryRate(const string& key, const string& configuration) const {
@@ -181,28 +254,89 @@ Handle<Quote> MarketImpl::recoveryRate(const string& key, const string& configur
     return lookup<Handle<Quote>>(recoveryRates_, key, configuration, "recovery rate");
 }
 
-Handle<BlackVolTermStructure> MarketImpl::cdsVol(const string& key, const string& configuration) const {
+Handle<QuantExt::CreditVolCurve> MarketImpl::cdsVol(const string& key, const string& configuration) const {
     require(MarketObject::CDSVol, key, configuration);
-    return lookup<Handle<BlackVolTermStructure>>(cdsVols_, key, configuration, "cds vol curve");
+    return lookup<Handle<QuantExt::CreditVolCurve>>(cdsVols_, key, configuration, "cds vol curve");
 }
 
-Handle<BaseCorrelationTermStructure<BilinearInterpolation>>
+Handle<QuantExt::BaseCorrelationTermStructure>
 MarketImpl::baseCorrelation(const string& key, const string& configuration) const {
     require(MarketObject::BaseCorrelation, key, configuration);
-    return lookup<Handle<BaseCorrelationTermStructure<BilinearInterpolation>>>(baseCorrelations_, key, configuration,
+    return lookup<Handle<QuantExt::BaseCorrelationTermStructure>>(baseCorrelations_, key, configuration,
                                                                                "base correlation curve");
 }
 
 Handle<OptionletVolatilityStructure> MarketImpl::capFloorVol(const string& key, const string& configuration) const {
     require(MarketObject::CapFloorVol, key, configuration);
-    return lookup<Handle<OptionletVolatilityStructure>>(capFloorCurves_, key, configuration, "capfloor curve");
+    auto it = capFloorCurves_.find(make_pair(configuration, key));
+    if (it != capFloorCurves_.end())
+        return it->second;
+    // first try the default config with the same key
+    if (configuration != Market::defaultConfiguration) {
+        require(MarketObject::CapFloorVol, key, Market::defaultConfiguration);
+        auto it2 = capFloorCurves_.find(make_pair(Market::defaultConfiguration, key));
+        if (it2 != capFloorCurves_.end())
+            return it2->second;
+    }
+    // if key is an index name and we have a cap floor surface for its ccy, we return that
+    boost::shared_ptr<IborIndex> index;
+    if (!tryParseIborIndex(key, index)) {
+        QL_FAIL("did not find capfloor curve for key '" << key << "'");
+    }
+    auto ccy = index->currency().code();
+    require(MarketObject::CapFloorVol, ccy, configuration);
+    auto it3 = capFloorCurves_.find(make_pair(configuration, ccy));
+    if (it3 != capFloorCurves_.end()) {
+        return it3->second;
+    }
+    // check if we have a curve for the ccy in the default config
+    if (configuration != Market::defaultConfiguration) {
+	require(MarketObject::CapFloorVol, ccy, configuration);
+        auto it4 = capFloorCurves_.find(make_pair(Market::defaultConfiguration, ccy));
+        if (it4 != capFloorCurves_.end())
+            return it4->second;
+    }
+    QL_FAIL("did not find capfloor curve for key '" << key << "'");
 }
 
-Handle<YoYOptionletVolatilitySurface> MarketImpl::yoyCapFloorVol(const string& key,
-                                                                           const string& configuration) const {
+std::pair<string, QuantLib::Period> MarketImpl::capFloorVolIndexBase(const string& key,
+                                                                     const string& configuration) const {
+    require(MarketObject::CapFloorVol, key, configuration);
+    auto it = capFloorIndexBase_.find(make_pair(configuration, key));
+    if (it != capFloorIndexBase_.end())
+        return it->second;
+    // first try the default config with the same key
+    if (configuration != Market::defaultConfiguration) {
+        require(MarketObject::CapFloorVol, key, Market::defaultConfiguration);
+        auto it2 = capFloorIndexBase_.find(make_pair(Market::defaultConfiguration, key));
+        if (it2 != capFloorIndexBase_.end())
+            return it2->second;
+    }
+    // if key is an index name and we have a cap floor surface for its ccy, we return that
+    boost::shared_ptr<IborIndex> index;
+    if (!tryParseIborIndex(key, index)) {
+        return std::make_pair(string(),0*Days);
+    }
+    auto ccy = index->currency().code();
+    require(MarketObject::CapFloorVol, ccy, configuration);
+    auto it3 = capFloorIndexBase_.find(make_pair(configuration, ccy));
+    if (it3 != capFloorIndexBase_.end()) {
+        return it3->second;
+    }
+    // check if we have a curve for the ccy in the default config
+    if (configuration != Market::defaultConfiguration) {
+        require(MarketObject::CapFloorVol, ccy, configuration);
+        auto it4 = capFloorIndexBase_.find(make_pair(Market::defaultConfiguration, ccy));
+        if (it4 != capFloorIndexBase_.end())
+            return it4->second;
+    }
+    return std::make_pair(string(), 0 * Days);
+}
+
+Handle<YoYOptionletVolatilitySurface> MarketImpl::yoyCapFloorVol(const string& key, const string& configuration) const {
     require(MarketObject::YoYInflationCapFloorVol, key, configuration);
     return lookup<Handle<YoYOptionletVolatilitySurface>>(yoyCapFloorVolSurfaces_, key, configuration,
-                                                                   "yoy inflation capfloor curve");
+                                                         "yoy inflation capfloor curve");
 }
 
 Handle<ZeroInflationIndex> MarketImpl::zeroInflationIndex(const string& indexName, const string& configuration) const {
@@ -337,13 +471,15 @@ Handle<Quote> MarketImpl::cpr(const string& securityID, const string& configurat
 }
 
 void MarketImpl::addSwapIndex(const string& swapIndex, const string& discountIndex, const string& configuration) const {
+    if (swapIndices_.find(make_pair(configuration, swapIndex)) != swapIndices_.end())
+        return;
     try {
         std::vector<string> tokens;
         split(tokens, swapIndex, boost::is_any_of("-"));
         QL_REQUIRE(tokens.size() == 3 || tokens.size() == 4,
                    "three or four tokens required in " << swapIndex << ": CCY-CMS-TENOR or CCY-CMS-TAG-TENOR");
         QL_REQUIRE(tokens[0].size() == 3, "invalid currency code in " << swapIndex);
-        QL_REQUIRE(tokens[1] == "CMS", "expected CMS as middle token in " << swapIndex);
+        QL_REQUIRE(tokens[1] == "CMS", "expected CMS as second token in " << swapIndex);
 
         Handle<YieldTermStructure> discounting, forwarding;
         boost::shared_ptr<IborIndex> dummeyIndex;
@@ -352,18 +488,22 @@ void MarketImpl::addSwapIndex(const string& swapIndex, const string& discountInd
         else
             discounting = yieldCurve(discountIndex, configuration);
 
-        auto swapCon = boost::dynamic_pointer_cast<data::SwapIndexConvention>(conventions_.get(swapIndex));
+        const boost::shared_ptr<Conventions>& conventions = InstrumentConventions::instance().conventions();
+        auto swapCon = boost::dynamic_pointer_cast<data::SwapIndexConvention>(conventions->get(swapIndex));
         QL_REQUIRE(swapCon, "expected SwapIndexConvention for " << swapIndex);
-        auto con = boost::dynamic_pointer_cast<data::IRSwapConvention>(conventions_.get(swapCon->conventions()));
-        QL_REQUIRE(con, "expected IRSwapConvention for " << swapCon->conventions());
-        
-        string fi = con->indexName();
+        auto conIbor = boost::dynamic_pointer_cast<data::IRSwapConvention>(conventions->get(swapCon->conventions()));
+        auto conOisComp = boost::dynamic_pointer_cast<data::OisConvention>(conventions->get(swapCon->conventions()));
+        auto conOisAvg = boost::dynamic_pointer_cast<data::AverageOisConvention>(conventions->get(swapCon->conventions()));
+        QL_REQUIRE(conIbor || conOisComp || conOisAvg,
+                   "expected IRSwapConvention, OisConvention, AverageOisConvention for " << swapCon->conventions());
+
+        string fi = conIbor ? conIbor->indexName() : (conOisComp ? conOisComp->indexName() : conOisAvg->indexName());
         if (isGenericIborIndex(fi))
             forwarding = discounting;
         else
-            forwarding = iborIndex(con->indexName(), configuration)->forwardingTermStructure();
+            forwarding = iborIndex(fi, configuration)->forwardingTermStructure();
 
-        boost::shared_ptr<SwapIndex> si = data::parseSwapIndex(swapIndex, forwarding, discounting, con, swapCon);
+        boost::shared_ptr<SwapIndex> si = data::parseSwapIndex(swapIndex, forwarding, discounting);
         swapIndices_[make_pair(configuration, swapIndex)] = Handle<SwapIndex>(si);
     } catch (std::exception& e) {
         QL_FAIL("Failure in MarketImpl::addSwapIndex() with index " << swapIndex << " : " << e.what());
@@ -417,7 +557,7 @@ void MarketImpl::refresh(const string& configuration) {
         }
         for (auto& x : defaultCurves_) {
             if (x.first.first == configuration || x.first.first == Market::defaultConfiguration)
-                it->second.insert(*x.second);
+                it->second.insert(*x.second->curve());
         }
         for (auto& x : cdsVols_) {
             if (x.first.first == configuration || x.first.first == Market::defaultConfiguration)
@@ -481,16 +621,6 @@ void MarketImpl::refresh(const string& configuration) {
     // therefore we need to call deepUpdate() (=update() if no such nesting is present)
     for (auto& x : it->second)
         x->deepUpdate();
-
-    // update fx spot quotes
-    auto fxSpots = fxSpots_.find(configuration);
-    if (fxSpots != fxSpots_.end()) {
-        for (auto& x : fxSpots->second.quotes()) {
-            auto dq = boost::dynamic_pointer_cast<Observer>(*x.second);
-            if (dq != nullptr)
-                dq->update();
-        }
-    }
 
 } // refresh
 

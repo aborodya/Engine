@@ -39,17 +39,21 @@ class CSVFileReport : public Report {
 public:
     /*! Create a report with the given filename, will throw if it cannot open the file.
         \param filename         name of the csv file that is created
-        \param sep              seperator character for the csv file. It defaults to a comma.
+        \param sep              separator character for the csv file. It defaults to a comma.
         \param commentCharacter if \c true, the first row starts with the \c # character.
         \param quoteChar        character to use to quote strings. If not provided, strings are not quoted.
         \param nullString       string used to represent \c QuantLib::Null values or infinite values. If not provided,
                                 this defaults to \c \#N/A.
         \param lowerHeader      if \c true, makes the first character of each header lower case.
+        \param rolloverSize     in MB, if set we rollover over to a new csv when file size grows above this
     */
     CSVFileReport(const string& filename, const char sep = ',', const bool commentCharacter = true,
-                  char quoteChar = '\0', const std::string& nullString = "#N/A", bool lowerHeader = false);
+                  char quoteChar = '\0', const std::string& nullString = "#N/A", bool lowerHeader = false,
+                  QuantLib::Size rolloverSize = QuantLib::Null<QuantLib::Size>());
     ~CSVFileReport();
 
+    void open();
+    void rollover();
     Report& addColumn(const string& name, const ReportType& rt, Size precision = 0) override;
     Report& next() override;
     Report& add(const ReportType& rt) override;
@@ -57,16 +61,21 @@ public:
     void flush() override;
 
 private:
+    void checkIsOpen(const std::string& op) const;
+
     std::vector<ReportType> columnTypes_;
     std::vector<ReportTypePrinter> printers_;
-    std::string filename_;
+    std::string filename_, baseFilename_;
     char sep_;
     bool commentCharacter_;
     char quoteChar_;
     std::string nullString_;
     bool lowerHeader_;
-    Size i_;
+    QuantLib::Size rolloverSize_;
+    Size i_, j_ = 0;
+    Size version_ = 0;
     FILE* fp_;
+    bool finalized_ = false;
 };
 } // namespace data
 } // namespace ore

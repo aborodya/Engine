@@ -208,6 +208,8 @@ boost::shared_ptr<Trade> buildEquityOption(string id, string longShort, string p
     Date qlExpiry = calendar.adjust(today + expiry * Years);
     string expiryDate = ore::data::to_string(qlExpiry);
 
+    TradeStrike tradeStrike(strike, currency);
+
     // envelope
     Envelope env("CP");
     // option data
@@ -215,7 +217,7 @@ boost::shared_ptr<Trade> buildEquityOption(string id, string longShort, string p
                       premiumDate.empty() ? PremiumData() : PremiumData(premium, premiumCcy, parseDate(premiumDate)));
     // trade
     boost::shared_ptr<Trade> trade(
-        new ore::data::EquityOption(env, option, EquityUnderlying(equityName), currency, strike, quantity));
+        new ore::data::EquityOption(env, option, EquityUnderlying(equityName), currency, quantity, tradeStrike));
     trade->id() = id;
 
     return trade;
@@ -412,8 +414,9 @@ boost::shared_ptr<Trade> buildCommodityOption(const string& id, const string& lo
     Envelope env("CP");
     OptionData option(longShort, putCall, "European", false, expiryDate, "Cash", "",
                       premiumDate.empty() ? PremiumData() : PremiumData(premium, premiumCcy, parseDate(premiumDate)));
+    TradeStrike trStrike(TradeStrike::Type::Price, strike);
     boost::shared_ptr<Trade> trade =
-        boost::make_shared<ore::data::CommodityOption>(env, option, commodityName, currency, strike, quantity);
+        boost::make_shared<ore::data::CommodityOption>(env, option, commodityName, currency, quantity, trStrike);
     trade->id() = id;
 
     return trade;

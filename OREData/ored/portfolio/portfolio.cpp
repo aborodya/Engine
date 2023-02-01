@@ -16,6 +16,7 @@
  FITNESS FOR A PARTICULAR PURPOSE. See the license for more details.
 */
 
+#include <ored/portfolio/failedtrade.hpp>
 #include <ored/portfolio/fxforward.hpp>
 #include <ored/portfolio/portfolio.hpp>
 #include <ored/portfolio/structuredtradeerror.hpp>
@@ -33,6 +34,11 @@ namespace ore {
 namespace data {
 
 using namespace data;
+
+void Portfolio::clear() {
+    trades_.clear();
+    tradeLookup_.clear();
+}
 
 void Portfolio::reset() {
     LOG("Reset portfolio of size " << trades_.size());
@@ -73,6 +79,7 @@ void Portfolio::fromXML(XMLNode* node, const boost::shared_ptr<TradeFactory>& fa
         DLOG("Parsing trade id:" << id);
         boost::shared_ptr<Trade> trade = factory->build(tradeType);
 
+        bool failedToLoad = false;
         if (trade) {
             try {
                 trade->fromXML(nodes[i]);
@@ -83,27 +90,60 @@ void Portfolio::fromXML(XMLNode* node, const boost::shared_ptr<TradeFactory>& fa
                                     << " type:" << tradeType);
             } catch (std::exception& ex) {
                 ALOG(StructuredTradeErrorMessage(id, tradeType, "Error parsing Trade XML", ex.what()));
+                failedToLoad = true;
             }
         } else {
-            WLOG("Unable to build Trade for tradeType=" << tradeType);
+            ALOG(StructuredTradeErrorMessage(id, tradeType, "Error parsing Trade XML"));
+            failedToLoad = true;
+        }
+
+        // If trade loading failed, then insert a dummy trade with same id and envelope
+        if (failedToLoad && buildFailedTrades_) {
+            try {
+                trade = factory->build("Failed");
+                // this loads only type, id and envelope, but type will be set to the original trade's type
+                trade->fromXML(nodes[i]);
+                // create a dummy trade of type "Dummy"
+                boost::shared_ptr<FailedTrade> failedTrade = boost::make_shared<FailedTrade>();
+                // copy id and envelope
+                failedTrade->id() = id;
+                failedTrade->setUnderlyingTradeType(tradeType);
+                failedTrade->envelope() = trade->envelope();
+                // and add it to the portfolio
+                add(failedTrade, checkForDuplicateIds);
+                WLOG("Added trade id " << failedTrade->id() << " type " << failedTrade->tradeType()
+                                       << " for original trade type " << trade->tradeType());
+            } catch (std::exception& ex) {
+                ALOG(StructuredTradeErrorMessage(id, tradeType, "Error parsing type and envelope", ex.what()));
+            }
         }
     }
     LOG("Finished Parsing XML doc");
 }
 
-void Portfolio::save(const string& fileName) const {
-    LOG("Saving Portfolio to " << fileName);
-
-    XMLDocument doc;
+void Portfolio::doc(XMLDocument& doc) const {
     XMLNode* node = doc.allocNode("Portfolio");
     doc.appendNode(node);
-    for (auto t : trades_)
+    for (auto& t : trades_)
         XMLUtils::appendNode(node, t->toXML(doc));
-    // Write doc out.
-    doc.toFile(fileName);
+}
+
+void Portfolio::save(const string& fileName) const {
+    XMLDocument document;
+    LOG("Saving Portfolio to " << fileName);
+    doc(document);
+    document.toFile(fileName);
+}
+
+string Portfolio::saveToXMLString() const {
+    XMLDocument document;
+    LOG("Write Portfolio to xml string.");
+    doc(document);
+    return document.toString();
 }
 
 bool Portfolio::remove(const std::string& tradeID) {
+    tradeLookup_.erase(tradeID);
     for (auto it = trades_.begin(); it != trades_.end(); ++it) {
         if ((*it)->id() == tradeID) {
             trades_.erase(it);
@@ -117,6 +157,7 @@ void Portfolio::removeMatured(const Date& asof) {
     for (auto it = trades_.begin(); it != trades_.end(); /* manual */) {
         if ((*it)->maturity() < asof) {
             ALOG(StructuredTradeErrorMessage(*it, "Trade is Matured", ""));
+	    tradeLookup_.erase((*it)->id());
             it = trades_.erase(it);
         } else {
             ++it;
@@ -124,24 +165,29 @@ void Portfolio::removeMatured(const Date& asof) {
     }
 }
 
-void Portfolio::build(const boost::shared_ptr<EngineFactory>& engineFactory) {
-    LOG("Building Portfolio of size " << trades_.size());
+void Portfolio::build(const boost::shared_ptr<EngineFactory>& engineFactory, const std::string& context,
+                      const bool emitStructuredError) {
+    LOG("Building Portfolio of size " << trades_.size() << " for context = '" << context << "'");
     auto trade = trades_.begin();
+    Size initialSize = trades_.size();
+    Size failedTrades = 0;
     while (trade != trades_.end()) {
-        try {
-            (*trade)->reset();
-            (*trade)->build(engineFactory);
-            TLOG("Required Fixings for trade " << (*trade)->id() << ":");
-            TLOGGERSTREAM << (*trade)->requiredFixings();
+        auto [ft, success] = buildTrade(*trade, engineFactory, context, buildFailedTrades(), emitStructuredError);
+        if(success) {
+	    ++trade;
+        } else if (ft) {
+            *trade = ft;
+            ++failedTrades;
             ++trade;
-        } catch (std::exception& e) {
-            ALOG(StructuredTradeErrorMessage(*trade, "Error building trade", e.what()));
+        } else {
+            tradeLookup_.erase((*trade)->id());
             trade = trades_.erase(trade);
         }
     }
-    LOG("Built Portfolio. Size now " << trades_.size());
+    LOG("Built Portfolio. Initial size = " << initialSize << ", size now " << trades_.size() << ", built "
+                                           << failedTrades << " failed trades, context is " + context);
 
-    QL_REQUIRE(trades_.size() > 0, "Portfolio does not contain any built trades");
+    QL_REQUIRE(trades_.size() > 0, "Portfolio does not contain any built trades, context is '" + context + "'");
 }
 
 Date Portfolio::maturity() const {
@@ -154,21 +200,21 @@ Date Portfolio::maturity() const {
 
 vector<string> Portfolio::ids() const {
     vector<string> ids;
-    for (auto t : trades_)
+    for (const auto& t : trades_)
         ids.push_back(t->id());
     return ids;
 }
 
 map<string, string> Portfolio::nettingSetMap() const {
     map<string, string> nettingSetMap;
-    for (auto t : trades_)
+    for (const auto& t : trades_)
         nettingSetMap[t->id()] = t->envelope().nettingSetId();
     return nettingSetMap;
 }
 
 std::vector<std::string> Portfolio::counterparties() const {
     vector<string> counterparties;
-    for (auto t : trades_)
+    for (const auto& t : trades_)
         counterparties.push_back(t->envelope().counterparty());
     sort(counterparties.begin(), counterparties.end());
     counterparties.erase(unique(counterparties.begin(), counterparties.end()), counterparties.end());
@@ -177,7 +223,7 @@ std::vector<std::string> Portfolio::counterparties() const {
 
 map<string, set<string>> Portfolio::counterpartyNettingSets() const {
     map<string, set<string>> cpNettingSets;
-    for (auto t : trades_)
+    for (const auto& t : trades_)
         cpNettingSets[t->envelope().counterparty()].insert(t->envelope().nettingSetId());
     return cpNettingSets;
 }
@@ -186,22 +232,19 @@ void Portfolio::add(const boost::shared_ptr<Trade>& trade, const bool checkForDu
     QL_REQUIRE(!checkForDuplicateIds || !has(trade->id()),
                "Attempted to add a trade to the portfolio with an id, which already exists.");
     trades_.push_back(trade);
+    tradeLookup_[trade->id()] = trade;
 }
 
 bool Portfolio::has(const string& id) {
-    return find_if(trades_.begin(), trades_.end(),
-                   [id](const boost::shared_ptr<Trade>& trade) { return trade->id() == id; }) != trades_.end();
+    return tradeLookup_.find(id) != tradeLookup_.end();
 }
 
 boost::shared_ptr<Trade> Portfolio::get(const string& id) const {
-    auto it = find_if(trades_.begin(), trades_.end(),
-                      [id](const boost::shared_ptr<Trade>& trade) { return trade->id() == id; });
-
-    if (it == trades_.end()) {
+    auto it = tradeLookup_.find(id);
+    if (it != tradeLookup_.end())
+        return it->second;
+    else
         return nullptr;
-    } else {
-        return *it;
-    }
 }
 
 std::set<std::string> Portfolio::portfolioIds() const {
@@ -209,6 +252,17 @@ std::set<std::string> Portfolio::portfolioIds() const {
     for (auto const& t : trades_)
         portfolioIds.insert(t->portfolioIds().begin(), t->portfolioIds().end());
     return portfolioIds;
+}
+
+bool Portfolio::hasNettingSetDetails() const {
+    bool hasNettingSetDetails = false;
+    for (auto it = trades().begin(); it != trades().end(); it++) {
+        if (!(*it)->envelope().nettingSetDetails().emptyOptionalFields()) {
+            hasNettingSetDetails = true;
+            break;
+        }
+    }
+    return hasNettingSetDetails;
 }
 
 map<string, set<Date>> Portfolio::fixings(const Date& settlementDate) const {
@@ -234,9 +288,13 @@ Portfolio::underlyingIndices(const boost::shared_ptr<ReferenceDataManager>& refe
     map<AssetClass, std::set<std::string>> result;
 
     for (const auto& t : trades_) {
-        auto underlyings = t->underlyingIndices(referenceDataManager);
-        for (const auto& kv : underlyings) {
-            result[kv.first].insert(kv.second.begin(), kv.second.end());
+        try {
+            auto underlyings = t->underlyingIndices(referenceDataManager);
+            for (const auto& kv : underlyings) {
+                result[kv.first].insert(kv.second.begin(), kv.second.end());
+            }
+        } catch (const std::exception& e) {
+            ALOG(StructuredTradeErrorMessage(t->id(), t->tradeType(), "Error retrieving underlying indices", e.what()));
         }
     }
     underlyingIndicesCache_ = result;
@@ -253,6 +311,37 @@ Portfolio::underlyingIndices(AssetClass assetClass,
         return it->second;
     }
     return std::set<std::string>();
+}
+
+std::pair<boost::shared_ptr<Trade>, bool> buildTrade(boost::shared_ptr<Trade>& trade,
+                                                     const boost::shared_ptr<EngineFactory>& engineFactory,
+                                                     const std::string& context, const bool buildFailedTrades,
+                                                     const bool emitStructuredError) {
+    try {
+        trade->reset();
+        trade->build(engineFactory);
+        TLOG("Required Fixings for trade " << trade->id() << ":");
+        TLOGGERSTREAM(trade->requiredFixings());
+        return std::make_pair(nullptr, true);
+    } catch (std::exception& e) {
+        if(emitStructuredError) {
+            ALOG(StructuredTradeErrorMessage(trade, "Error building trade for context '" + context + "'", e.what()));
+        } else {
+            ALOG("Error building trade '" << trade->id() << "' for context '" + context + "': " + e.what());
+        }
+        if (buildFailedTrades) {
+            boost::shared_ptr<FailedTrade> failed = boost::make_shared<FailedTrade>();
+            failed->id() = trade->id();
+            failed->setUnderlyingTradeType(trade->tradeType());
+            failed->envelope() = trade->envelope();
+            failed->build(engineFactory);
+            failed->resetPricingStats(trade->getNumberOfPricings(), trade->getCumulativePricingTime());
+            LOG("Built failed trade with id " << failed->id());
+	    return std::make_pair(failed, false);
+        } else {
+            return std::make_pair(nullptr, false);
+        }
+    }
 }
 
 } // namespace data

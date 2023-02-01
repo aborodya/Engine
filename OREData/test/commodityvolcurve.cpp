@@ -57,10 +57,9 @@ Real testTolerance = 1e-10;
 class MockLoader : public Loader {
 public:
     MockLoader();
-    const vector<boost::shared_ptr<MarketDatum>>& loadQuotes(const Date&) const { return data_; }
-    const boost::shared_ptr<MarketDatum>& get(const string& name, const Date&) const { return dummyDatum_; }
-    const vector<Fixing>& loadFixings() const { return dummyFixings_; }
-    const vector<Fixing>& loadDividends() const { return dummyDividends_; }
+    vector<boost::shared_ptr<MarketDatum>> loadQuotes(const Date&) const override { return data_; }
+    set<Fixing> loadFixings() const override { return dummyFixings_; }
+    set<Fixing> loadDividends() const override { return dummyDividends_; }
     void add(QuantLib::Date date, const string& name, QuantLib::Real value) {}
     void addFixing(QuantLib::Date date, const string& name, QuantLib::Real value) {}
     void addDividend(Date date, const string& name, Real value) {}
@@ -68,8 +67,8 @@ public:
 private:
     vector<boost::shared_ptr<MarketDatum>> data_;
     boost::shared_ptr<MarketDatum> dummyDatum_;
-    vector<Fixing> dummyFixings_;
-    vector<Fixing> dummyDividends_;
+    set<Fixing> dummyFixings_;
+    set<Fixing> dummyDividends_;
 };
 
 MockLoader::MockLoader() {
@@ -114,7 +113,8 @@ boost::shared_ptr<TodaysMarket> createTodaysMarket(const Date& asof, const strin
 
     auto conventions = boost::make_shared<Conventions>();
     conventions->fromFile(TEST_INPUT_FILE(string(inputDir + "/conventions.xml")));
-
+    InstrumentConventions::instance().setConventions(conventions);
+    
     auto curveConfigs = boost::make_shared<CurveConfigurations>();
     curveConfigs->fromFile(TEST_INPUT_FILE(string(inputDir + "/" + curveConfigFile)));
 
@@ -124,7 +124,7 @@ boost::shared_ptr<TodaysMarket> createTodaysMarket(const Date& asof, const strin
     auto loader = boost::make_shared<CSVLoader>(TEST_INPUT_FILE(string(inputDir + "/" + marketFile)),
                                                 TEST_INPUT_FILE(string(inputDir + "/" + fixingsFile)), false);
 
-    return boost::make_shared<TodaysMarket>(asof, todaysMarketParameters, loader, curveConfigs, conventions);
+    return boost::make_shared<TodaysMarket>(asof, todaysMarketParameters, loader, curveConfigs);
 }
 
 // clang-format off
@@ -172,7 +172,8 @@ BOOST_AUTO_TEST_CASE(testCommodityVolCurveTypeConstant) {
     Date asof(5, Feb, 2016);
 
     // Constant volatility config
-    auto cvc = boost::make_shared<ConstantVolatilityConfig>("COMMODITY_OPTION/RATE_LNVOL/GOLD/USD/2Y/ATM/AtmFwd");
+    vector<boost::shared_ptr<VolatilityConfig>> cvc;
+    cvc.push_back(boost::make_shared<ConstantVolatilityConfig>("COMMODITY_OPTION/RATE_LNVOL/GOLD/USD/2Y/ATM/AtmFwd"));
 
     // Volatility configuration with a single quote
     boost::shared_ptr<CommodityVolatilityConfig> curveConfig =
@@ -193,8 +194,7 @@ BOOST_AUTO_TEST_CASE(testCommodityVolCurveTypeConstant) {
 
     // Check commodity volatility construction works
     boost::shared_ptr<CommodityVolCurve> curve;
-    BOOST_CHECK_NO_THROW(curve =
-                             boost::make_shared<CommodityVolCurve>(asof, curveSpec, loader, curveConfigs, conventions));
+    BOOST_CHECK_NO_THROW(curve = boost::make_shared<CommodityVolCurve>(asof, curveSpec, loader, curveConfigs));
 
     // Check volatilities are all equal to the configured volatility regardless of strike and expiry
     Real configuredVolatility = 0.10;
@@ -222,7 +222,8 @@ BOOST_AUTO_TEST_CASE(testCommodityVolCurveTypeCurve) {
                           "COMMODITY_OPTION/RATE_LNVOL/GOLD/USD/5Y/ATM/AtmFwd"};
 
     // Volatility curve config with linear interpolation and flat extrapolation.
-    auto vcc = boost::make_shared<VolatilityCurveConfig>(quotes, "Linear", "Flat");
+    vector<boost::shared_ptr<VolatilityConfig>> vcc;
+    vcc.push_back(boost::make_shared<VolatilityCurveConfig>(quotes, "Linear", "Flat"));
 
     // Commodity volatility configuration with time dependent volatilities
     boost::shared_ptr<CommodityVolatilityConfig> curveConfig =
@@ -243,8 +244,7 @@ BOOST_AUTO_TEST_CASE(testCommodityVolCurveTypeCurve) {
 
     // Check commodity volatility construction works
     boost::shared_ptr<CommodityVolCurve> curve;
-    BOOST_CHECK_NO_THROW(curve =
-                             boost::make_shared<CommodityVolCurve>(asof, curveSpec, loader, curveConfigs, conventions));
+    BOOST_CHECK_NO_THROW(curve = boost::make_shared<CommodityVolCurve>(asof, curveSpec, loader, curveConfigs));
 
     // Check time depending volatilities are as expected
     boost::shared_ptr<BlackVolTermStructure> volatility = curve->volatility();
@@ -290,8 +290,10 @@ BOOST_AUTO_TEST_CASE(testCommodityVolCurveTypeSurface) {
     // extrapolation.
     vector<string> strikes{"1150", "1190"};
     vector<string> expiries{"1Y", "2Y", "5Y"};
-    auto vssc =
-        boost::make_shared<VolatilityStrikeSurfaceConfig>(strikes, expiries, "Linear", "Linear", true, "Flat", "Flat");
+
+    vector<boost::shared_ptr<VolatilityConfig>> vssc;
+    vssc.push_back(
+        boost::make_shared<VolatilityStrikeSurfaceConfig>(strikes, expiries, "Linear", "Linear", true, "Flat", "Flat"));
 
     // Commodity volatility configuration
     boost::shared_ptr<CommodityVolatilityConfig> curveConfig =
@@ -312,8 +314,7 @@ BOOST_AUTO_TEST_CASE(testCommodityVolCurveTypeSurface) {
 
     // Check commodity volatility construction works
     boost::shared_ptr<CommodityVolCurve> curve;
-    BOOST_CHECK_NO_THROW(curve =
-                             boost::make_shared<CommodityVolCurve>(asof, curveSpec, loader, curveConfigs, conventions));
+    BOOST_CHECK_NO_THROW(curve = boost::make_shared<CommodityVolCurve>(asof, curveSpec, loader, curveConfigs));
 
     // Check time and strike depending volatilities are as expected
     boost::shared_ptr<BlackVolTermStructure> volatility = curve->volatility();

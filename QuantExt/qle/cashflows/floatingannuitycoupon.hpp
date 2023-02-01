@@ -43,16 +43,16 @@ public:
                           const Date& refPeriodStart = Date(), const Date& refPeriodEnd = Date(),
                           const DayCounter& dayCounter = DayCounter(), bool isInArrears = false);
     //! \name Cashflow interface
-    Rate amount() const;
+    Rate amount() const override;
 
     //! \name Inspectors
-    Real accruedAmount(const Date& d) const;
-    Rate nominal() const;
+    Real accruedAmount(const Date& d) const override;
+    Rate nominal() const override;
     Rate previousNominal() const;
-    Rate rate() const;
+    Rate rate() const override;
     Real price(const Handle<YieldTermStructure>& discountingCurve) const;
     const boost::shared_ptr<InterestRateIndex>& index() const;
-    DayCounter dayCounter() const;
+    DayCounter dayCounter() const override;
     Rate indexFixing() const;
     Natural fixingDays() const;
     Date fixingDate() const;
@@ -62,12 +62,12 @@ public:
     virtual Rate adjustedFixing() const { return indexFixing(); } // FIXME
     bool isInArrears() const;
     //@}
-    //! \name Visiter interface
+    //! \name Visitor interface
     //@{
-    virtual void accept(AcyclicVisitor&);
+    virtual void accept(AcyclicVisitor&) override;
     //@}
     //! \name LazyObject interface
-    void performCalculations() const;
+    void performCalculations() const override;
 
 private:
     Real annuity_;

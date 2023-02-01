@@ -48,52 +48,90 @@
 namespace QuantExt {
 using namespace QuantLib;
 
+class FxRateQuote : public Quote, public Observer {
+public:
+    FxRateQuote(Handle<Quote> spotQuote, const Handle<YieldTermStructure>& sourceYts,
+                const Handle<YieldTermStructure>& targetYts, Natural fixingDays, const Calendar& fixingCalendar);
+    //! \name Quote interface
+    //@{
+    Real value() const override;
+    bool isValid() const override;
+    //@}
+    //! \name Observer interface
+    //@{
+    void update() override;
+    //@}
+private:
+    const Handle<Quote> spotQuote_;
+    const Handle<YieldTermStructure> sourceYts_, targetYts_;
+    Natural fixingDays_;
+    Calendar fixingCalendar_;
+};
+
+class FxSpotQuote : public Quote, public Observer {
+public:
+    FxSpotQuote(Handle<Quote> todaysQuote, const Handle<YieldTermStructure>& sourceYts,
+                const Handle<YieldTermStructure>& targetYts, Natural fixingDays, const Calendar& fixingCalendar);
+    //! \name Quote interface
+    //@{
+    Real value() const override;
+    bool isValid() const override;
+    //@}
+    //! \name Observer interface
+    //@{
+    void update() override;
+    //@}
+private:
+    const Handle<Quote> todaysQuote_;
+    const Handle<YieldTermStructure> sourceYts_, targetYts_;
+    Natural fixingDays_;
+    Calendar fixingCalendar_;
+};
+
 //! FX Index
 /*! \ingroup indexes */
 class FxIndex : public EqFxIndexBase {
 public:
     /*! familyName may be e.g. ECB
-        settlementDays determine the spot date of the currency pair
+        fixingDays determine the spot date of the currency pair
         source is the asset or foreign currency
         target is the numeraire or domestic currency
         fixingCalendar is the calendar defining good days for the pair
         this class uses the exchange rate manager to retrieve spot values
-
-        if inverseIndex is true, the returned fixing values are flipped, but all inspectors
-        - sourceCurremcy(), targetCurrency()
-        - sourceCurve(), targetCurve()
-        - fxQuote()
-        will still return results in terms of the original pair.
-    */
+        fxSpot is the fx rate settled at today + fixingDays */
     FxIndex(const std::string& familyName, Natural fixingDays, const Currency& source, const Currency& target,
             const Calendar& fixingCalendar, const Handle<YieldTermStructure>& sourceYts = Handle<YieldTermStructure>(),
-            const Handle<YieldTermStructure>& targetYts = Handle<YieldTermStructure>(), bool inverseIndex = false);
+            const Handle<YieldTermStructure>& targetYts = Handle<YieldTermStructure>(),
+            bool fixingTriangulation = false);
     FxIndex(const std::string& familyName, Natural fixingDays, const Currency& source, const Currency& target,
-            const Calendar& fixingCalendar, const Handle<Quote> fxQuote,
+            const Calendar& fixingCalendar, const Handle<Quote> fxSpot,
             const Handle<YieldTermStructure>& sourceYts = Handle<YieldTermStructure>(),
-            const Handle<YieldTermStructure>& targetYts = Handle<YieldTermStructure>(), bool inverseIndex = false);
+            const Handle<YieldTermStructure>& targetYts = Handle<YieldTermStructure>(),
+            bool fixingTriangulation = true);
     //! \name Index interface
     //@{
-    std::string name() const;
-    Calendar fixingCalendar() const;
-    bool isValidFixingDate(const Date& fixingDate) const;
-    Real fixing(const Date& fixingDate, bool forecastTodaysFixing = false) const;
+    std::string name() const override;
+    Calendar fixingCalendar() const override;
+    bool isValidFixingDate(const Date& fixingDate) const override;
+    Real fixing(const Date& fixingDate, bool forecastTodaysFixing = false) const override;
     //@}
     //! \name Observer interface
     //@{
-    void update();
+    void update() override;
     //@}
     //! \name Inspectors
     //@{
     std::string familyName() const { return familyName_; }
+    std::string oreName() const { return oreName_; }
     Natural fixingDays() const { return fixingDays_; }
     Date fixingDate(const Date& valueDate) const;
     const Currency& sourceCurrency() const { return sourceCurrency_; }
     const Currency& targetCurrency() const { return targetCurrency_; }
-    const bool inverseIndex() const { return inverseIndex_; }
     const Handle<YieldTermStructure>& sourceCurve() const { return sourceYts_; }
     const Handle<YieldTermStructure>& targetCurve() const { return targetYts_; }
-    const Handle<Quote>& fxQuote() const { return fxQuote_; }
+
+    //! fxQuote returns instantaneous Quote by default, otherwise settlement after fixingDays
+    const Handle<Quote> fxQuote(bool withSettlementLag = false) const;
     const bool useQuote() const { return useQuote_; }
     //@}
     /*! \name Date calculations */
@@ -101,53 +139,36 @@ public:
     //! \name Fixing calculations
     //@{
     //! It can be overridden to implement particular conventions
-    virtual Real forecastFixing(const Time& fixingTime) const;
+    virtual Real forecastFixing(const Time& fixingTime) const override;
     virtual Real forecastFixing(const Date& fixingDate) const;
-    Real pastFixing(const Date& fixingDate) const;
+    Real pastFixing(const Date& fixingDate) const override;
     // @}
-
+    
     //! clone the index, the clone will be linked to the provided handles
-    boost::shared_ptr<FxIndex> clone(const Handle<Quote> fxQuote, const Handle<YieldTermStructure>& sourceYts,
-                                     const Handle<YieldTermStructure>& targetYts);
+    boost::shared_ptr<FxIndex> clone(const Handle<Quote> fxQuote = Handle<Quote>(),
+                                     const Handle<YieldTermStructure>& sourceYts = Handle<YieldTermStructure>(),
+                                     const Handle<YieldTermStructure>& targetYts = Handle<YieldTermStructure>(),
+                                     const std::string& familyName = std::string());
 
 protected:
-    std::string familyName_;
+    std::string familyName_, oreName_;
     Natural fixingDays_;
     Currency sourceCurrency_, targetCurrency_;
     const Handle<YieldTermStructure> sourceYts_, targetYts_;
     std::string name_;
-    const Handle<Quote> fxQuote_;
+    // Spot as quoted in market
+    const Handle<Quote> fxSpot_;
+    // instantaneous fx rate
+    mutable Handle<Quote> fxRate_;
     bool useQuote_;
 
 private:
     Calendar fixingCalendar_;
-    bool inverseIndex_;
+    bool fixingTriangulation_;
+
+    void initialise();
 };
 
-// inline definitions
-
-inline std::string FxIndex::name() const { return name_; }
-
-inline Calendar FxIndex::fixingCalendar() const { return fixingCalendar_; }
-
-inline bool FxIndex::isValidFixingDate(const Date& d) const { return fixingCalendar().isBusinessDay(d); }
-
-inline void FxIndex::update() { notifyObservers(); }
-
-inline Date FxIndex::fixingDate(const Date& valueDate) const {
-    Date fixingDate = fixingCalendar().advance(valueDate, -static_cast<Integer>(fixingDays_), Days);
-    return fixingDate;
-}
-
-inline Date FxIndex::valueDate(const Date& fixingDate) const {
-    QL_REQUIRE(isValidFixingDate(fixingDate), fixingDate << " is not a valid fixing date");
-    return fixingCalendar().advance(fixingDate, fixingDays_, Days);
-}
-
-inline Real FxIndex::pastFixing(const Date& fixingDate) const {
-    QL_REQUIRE(isValidFixingDate(fixingDate), fixingDate << " is not a valid fixing date");
-    return timeSeries()[fixingDate];
-}
 } // namespace QuantExt
 
 #endif

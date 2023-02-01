@@ -1,6 +1,7 @@
 /*
   Copyright (C) 2021 Skandinaviska Enskilda Banken AB (publ)
   All rights reserved.
+
   This file is part of ORE, a free-software/open-source library
   for transparent pricing and risk analysis - http://opensourcerisk.org
   ORE is free software: you can redistribute it and/or modify it
@@ -33,7 +34,7 @@
  class FxEuropeanAsianOptionMCDAAPEngineBuilder : public EuropeanAsianOptionMCDAAPEngineBuilder {
  public:
      FxEuropeanAsianOptionMCDAAPEngineBuilder()
-         : EuropeanAsianOptionMCDAAPEngineBuilder("BlackScholesMerton", {"FxAsianOptionArithmeticPrice"}, AssetClass::FX,
+         : EuropeanAsianOptionMCDAAPEngineBuilder("GarmanKohlhagen", {"FxAsianOptionArithmeticPrice"}, AssetClass::FX,
                                                   expiryDate_) {}
  };
 
@@ -45,7 +46,7 @@
  class FxEuropeanAsianOptionMCDAASEngineBuilder : public EuropeanAsianOptionMCDAASEngineBuilder {
  public:
      FxEuropeanAsianOptionMCDAASEngineBuilder()
-         : EuropeanAsianOptionMCDAASEngineBuilder("BlackScholesMerton", {"FxAsianOptionArithmeticStrike"},
+         : EuropeanAsianOptionMCDAASEngineBuilder("GarmanKohlhagen", {"FxAsianOptionArithmeticStrike"},
                                                   AssetClass::FX, expiryDate_) {}
  };
 
@@ -57,7 +58,7 @@
  class FxEuropeanAsianOptionMCDGAPEngineBuilder : public EuropeanAsianOptionMCDGAPEngineBuilder {
  public:
      FxEuropeanAsianOptionMCDGAPEngineBuilder()
-         : EuropeanAsianOptionMCDGAPEngineBuilder("BlackScholesMerton", {"FxAsianOptionGeometricPrice"}, AssetClass::FX,
+         : EuropeanAsianOptionMCDGAPEngineBuilder("GarmanKohlhagen", {"FxAsianOptionGeometricPrice"}, AssetClass::FX,
                                                   expiryDate_) {}
  };
 
@@ -68,7 +69,7 @@
  class FxEuropeanAsianOptionADGAPEngineBuilder : public EuropeanAsianOptionADGAPEngineBuilder {
  public:
      FxEuropeanAsianOptionADGAPEngineBuilder()
-         : EuropeanAsianOptionADGAPEngineBuilder("BlackScholesMerton", {"FxAsianOptionGeometricPrice"}, AssetClass::FX) {
+         : EuropeanAsianOptionADGAPEngineBuilder("GarmanKohlhagen", {"FxAsianOptionGeometricPrice"}, AssetClass::FX) {
      }
  };
 
@@ -79,7 +80,7 @@
  class FxEuropeanAsianOptionADGASEngineBuilder : public EuropeanAsianOptionADGASEngineBuilder {
  public:
      FxEuropeanAsianOptionADGASEngineBuilder()
-         : EuropeanAsianOptionADGASEngineBuilder("BlackScholesMerton", {"FxAsianOptionGeometricStrike"},
+         : EuropeanAsianOptionADGASEngineBuilder("GarmanKohlhagen", {"FxAsianOptionGeometricStrike"},
                                                  AssetClass::FX) {}
  };
 
@@ -90,8 +91,18 @@
  class FxEuropeanAsianOptionACGAPEngineBuilder : public EuropeanAsianOptionACGAPEngineBuilder {
  public:
      FxEuropeanAsianOptionACGAPEngineBuilder()
-         : EuropeanAsianOptionACGAPEngineBuilder("BlackScholesMerton", {"FxAsianOptionGeometricPrice"}, AssetClass::FX) {
+         : EuropeanAsianOptionACGAPEngineBuilder("GarmanKohlhagen", {"FxAsianOptionGeometricPrice"}, AssetClass::FX) {
      }
+ };
+
+ //! Discrete Analytic TW Engine Builder for European Asian Fx Arithmetic Average Price Options
+ /*! Pricing engines are cached by asset/currency
+     \ingroup builders
+  */
+ class FxEuropeanAsianOptionTWEngineBuilder : public EuropeanAsianOptionTWEngineBuilder {
+ public:
+     FxEuropeanAsianOptionTWEngineBuilder()
+         : EuropeanAsianOptionTWEngineBuilder("GarmanKohlhagen", {"FxAsianOptionArithmeticPrice"}, AssetClass::FX) {}
  };
 
  } // namespace data

@@ -17,7 +17,7 @@
 */
 
 /*! \file marketdata/dependencygraph.hpp
-    \brief DependencyGraph class to establish build order of marketObjects and its dependendency
+    \brief DependencyGraph class to establish build order of marketObjects and its dependency
     \ingroup marketdata
 */
 
@@ -64,7 +64,7 @@ template <typename Graph> string getCycles(const Graph& g) {
     return cycles.str();
 }
 
-//! Helper class to find the dependend nodes from a given start node and a topological order for them
+//! Helper class to find the dependent nodes from a given start node and a topological order for them
 template <typename Vertex> struct DfsVisitor : public boost::default_dfs_visitor {
     DfsVisitor(std::vector<Vertex>& order, bool& foundCycle) : order_(order), foundCycle_(foundCycle) {}
     template <typename Graph> void finish_vertex(Vertex u, const Graph& g) { order_.push_back(u); }
@@ -74,9 +74,6 @@ template <typename Vertex> struct DfsVisitor : public boost::default_dfs_visitor
 };
 
 } // namespace
-
-//! Helper function to get the two tokens in a correlation name Index2:Index1
-std::vector<std::string> getCorrelationTokens(const std::string& name);
 
 class DependencyGraph {
 
@@ -88,11 +85,9 @@ public:
         const boost::shared_ptr<TodaysMarketParameters>& params,
         //! Description of curve compositions
         const boost::shared_ptr<const CurveConfigurations>& curveConfigs,
-        //! Repository of market conventions
-        const boost::shared_ptr<Conventions>& conventions,
         //! Ibor fallback config
         const IborFallbackConfig& iborFallbackConfig = IborFallbackConfig::defaultConfig())
-        : asof_(asof), params_(params), curveConfigs_(curveConfigs), conventions_(conventions),
+        : asof_(asof), params_(params), curveConfigs_(curveConfigs),
           iborFallbackConfig_(iborFallbackConfig){};
 
     // data structure for a vertex in the graph
@@ -125,7 +120,6 @@ private:
     const Date asof_;
     const boost::shared_ptr<TodaysMarketParameters> params_;
     const boost::shared_ptr<const CurveConfigurations> curveConfigs_;
-    const boost::shared_ptr<Conventions> conventions_;
     const IborFallbackConfig iborFallbackConfig_;
 };
 

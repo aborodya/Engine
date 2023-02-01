@@ -59,7 +59,8 @@ public:
 
     //! \name Inspectors
     //@{
-    std::string currency() { return data_->ccy(); }
+    std::string qualifier() { return data_->qualifier(); }
+    std::string ccy() { return currency_; }
     boost::shared_ptr<QuantExt::LGM> model() const;
     boost::shared_ptr<QuantExt::IrLgm1fParametrization> parametrization() const;
     RelinkableHandle<YieldTermStructure> discountCurve() { return modelDiscountCurve_; }
@@ -93,6 +94,7 @@ private:
     const std::string referenceCalibrationGrid_;
     const bool setCalibrationInfo_;
     bool requiresCalibration_ = false;
+    std::string currency_; // derived from data->qualifier()
 
     mutable Real error_;
     mutable boost::shared_ptr<QuantExt::LGM> model_;
@@ -102,6 +104,7 @@ private:
     // which swaptions in data->optionExpries() are actually in the basket?
     mutable std::vector<bool> swaptionActive_;
     mutable std::vector<boost::shared_ptr<BlackCalibrationHelper>> swaptionBasket_;
+    mutable std::vector<Real> swaptionStrike_;
     mutable std::vector<boost::shared_ptr<SimpleQuote>> swaptionBasketVols_;
     mutable Array swaptionExpiries_;
     mutable Array swaptionMaturities_;
@@ -117,12 +120,12 @@ private:
     EndCriteria endCriteria_;
     BlackCalibrationHelper::CalibrationErrorType calibrationErrorType_;
 
-    // Cache the swation volatilities
+    // Cache the swaption volatilities
     mutable std::vector<QuantLib::Real> swaptionVolCache_;
 
     bool forceCalibration_ = false;
 
-    // LGM Oberver
+    // LGM Observer
     boost::shared_ptr<MarketObserver> marketObserver_;
 };
 } // namespace data

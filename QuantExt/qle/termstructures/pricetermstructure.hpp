@@ -55,13 +55,13 @@ public:
 
     //! \name Observer interface
     //@{
-    void update();
+    void update() override;
     //@}
 
     //! The minimum time for which the curve can return values
     virtual QuantLib::Time minTime() const;
 
-    //! The currency in which prices are expresed
+    //! The currency in which prices are expressed
     virtual const QuantLib::Currency& currency() const = 0;
 
     //! The pillar dates for the PriceTermStructure
@@ -90,13 +90,13 @@ public:
 
     //! \name Quote interface
     //@{
-    QuantLib::Real value() const;
-    bool isValid() const;
+    QuantLib::Real value() const override;
+    bool isValid() const override;
     //@}
 
     //! \name Observer interface
     //@{
-    void update();
+    void update() override;
     //@}
 
 private:

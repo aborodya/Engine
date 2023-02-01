@@ -22,6 +22,7 @@
 #include <ored/portfolio/fxforward.hpp>
 #include <ored/utilities/log.hpp>
 #include <ored/utilities/parsers.hpp>
+#include <ored/utilities/marketdata.hpp>
 #include <ored/utilities/xmlutils.hpp>
 #include <ql/cashflows/simplecashflow.hpp>
 #include <qle/instruments/fxforward.hpp>
@@ -40,22 +41,27 @@ void FxForward::build(const boost::shared_ptr<EngineFactory>& engineFactory) {
     // Derive settlement date from payment data parameters
     Date payDate;
     if (payDate_.empty()) {
-        //LOG("Attempting paydate advance");
-        Period payLag = payLag_.empty() ? 0 * Days : parsePeriod(payLag_);
-        Calendar payCalendar = payCalendar_.empty() ? NullCalendar() : parseCalendar(payCalendar_);
+        Natural conventionalLag = 0;
+        Calendar conventionalCalendar = NullCalendar();
+        BusinessDayConvention conventionalBdc = Unadjusted;
+        if (!fxIndex_.empty() && settlement_ == "Cash") {
+            std::tie(conventionalLag, conventionalCalendar, conventionalBdc) =
+                getFxIndexConventions(fxIndex_.empty() ? boughtCurrency_ + soldCurrency_ : fxIndex_);
+        }
+        PaymentLag paymentLag;
+        if (payLag_.empty())
+            paymentLag = conventionalLag;
+        else
+            paymentLag = parsePaymentLag(payLag_);
+        Period payLag = boost::apply_visitor(PaymentLagPeriod(), paymentLag);
+        Calendar payCalendar = payCalendar_.empty() ? conventionalCalendar : parseCalendar(payCalendar_);
         BusinessDayConvention payConvention =
-            payConvention_.empty() ? Unadjusted : parseBusinessDayConvention(payConvention_);
+            payConvention_.empty() ? conventionalBdc : parseBusinessDayConvention(payConvention_);
         payDate = payCalendar.advance(maturityDate, payLag, payConvention);
     } else {
         payDate = parseDate(payDate_);
         QL_REQUIRE(payDate >= maturityDate, "FX Forward settlement date should equal or exceed the maturity date.");
     }
-
-    // Add required FX fixing for Cash settlement. If fixingDate == payDate, no fixing is actually required.
-    // Currently, fxIndexCalendar_ is "" (NullCalendar) and fxIndexDays_ is 0, so fixingDate = maturityDate always.
-    Date fixingDate;
-    Calendar fxIndexCalendar = fxIndexCalendar_.empty() ? NullCalendar() : parseCalendar(fxIndexCalendar_);
-    fixingDate = fxIndexCalendar.advance(maturityDate, -static_cast<Integer>(fxIndexDays_), Days);
 
     boost::shared_ptr<QuantExt::FxIndex> fxIndex;
     Currency payCcy;
@@ -70,13 +76,15 @@ void FxForward::build(const boost::shared_ptr<EngineFactory>& engineFactory) {
                    "Settlement currency must be either " << boughtCcy.code() << " or " << soldCcy.code() << ".");
     }
 
-    bool fixingRequired = (settlement_ == "Cash") && (payDate > fixingDate);
+    Date fixingDate;
+    bool fixingRequired = (settlement_ == "Cash") && (payDate > maturityDate);
     if (fixingRequired) {
         QL_REQUIRE(!fxIndex_.empty(), "FX settlement index must be specified for non-deliverable forwards");
         Currency nonPayCcy = payCcy == boughtCcy ? soldCcy : boughtCcy;
-        fxIndex = buildFxIndex(fxIndex_, payCcy.code(), nonPayCcy.code(), engineFactory->market(),
-                               engineFactory->configuration(MarketContext::pricing), fxIndexCalendar_, fxIndexDays_);
-        requiredFixings_.addFixingDate(fixingDate, fxIndex_, payDate);
+        fxIndex = buildFxIndex(fxIndex_, nonPayCcy.code(), payCcy.code(), engineFactory->market(),
+                                 engineFactory->configuration(MarketContext::pricing));
+        fixingDate = fxIndex->fixingCalendar().adjust(maturityDate);
+	requiredFixings_.addFixingDate(fixingDate, fxIndex_, payDate);
     }
 
     QL_REQUIRE(tradeActions().empty(), "TradeActions not supported for FxForward");
@@ -89,7 +97,7 @@ void FxForward::build(const boost::shared_ptr<EngineFactory>& engineFactory) {
                                                 settlement_ == "Physical", payDate, payCcy, fixingDate, fxIndex);
     instrument_.reset(new VanillaInstrument(instrument));
 
-    npvCurrency_ = soldCurrency_;
+    npvCurrency_ = payCcy.code();
     notional_ = Null<Real>(); // soldAmount_;
     notionalCurrency_ = "";   // soldCurrency_;
     maturity_ = std::max(payDate, maturityDate);
@@ -120,7 +128,7 @@ void FxForward::build(const boost::shared_ptr<EngineFactory>& engineFactory) {
 QuantLib::Real FxForward::notional() const {
     // try to get the notional from the additional results of the instrument
     try {
-        return instrument_->qlInstrument()->result<Real>("currentNotional");
+        return instrument_->qlInstrument(true)->result<Real>("currentNotional");
     } catch (const std::exception& e) {
         if (strcmp(e.what(), "currentNotional not provided"))
             ALOG("error when retrieving notional: " << e.what());
@@ -132,7 +140,7 @@ QuantLib::Real FxForward::notional() const {
 std::string FxForward::notionalCurrency() const {
     // try to get the notional ccy from the additional results of the instrument
     try {
-        return instrument_->qlInstrument()->result<std::string>("notionalCurrency");
+        return instrument_->qlInstrument(true)->result<std::string>("notionalCurrency");
     } catch (const std::exception& e) {
         if (strcmp(e.what(), "notionalCurrency not provided"))
             ALOG("error when retrieving notional ccy: " << e.what());

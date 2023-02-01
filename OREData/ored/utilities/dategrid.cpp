@@ -81,7 +81,7 @@ DateGrid::DateGrid(const string& grid, const QuantLib::Calendar& gridCalendar, c
             if (tokens.size() == 2)
                 gridTenor = data::parsePeriod(tokens[1]);
             if (gridTenor == Period(1, Days)) {
-                // we have a daily grid. Period and Calendar are not consistant with
+                // we have a daily grid. Period and Calendar are not consistent with
                 // working & actual days, so we set the tenor grid
                 Date today = Settings::instance().evaluationDate();
                 Date d = today;
@@ -231,7 +231,6 @@ void DateGrid::addCloseOutDates(const QuantLib::Period& p) {
                 // adjust the grid to ensure no overlap in valuation and closeout dates
                 if (c >= dates_[i + 1]) {
                     dates_[i + 1] = calendar_.advance(c, QuantLib::Period(1, QuantLib::Days));
-                    std::cout << QuantLib::io::iso_date(dates_[i + 1]) << std::endl;
                     // check that the grid is still monotonic
                     if ((i + 2) < dates_.size()) {
                         QL_REQUIRE(dates_[i + 1] < dates_[i + 2],

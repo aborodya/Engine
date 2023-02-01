@@ -19,6 +19,7 @@
 #include <ored/portfolio/builders/durationadjustedcms.hpp>
 #include <ored/portfolio/durationadjustedcmslegbuilder.hpp>
 #include <ored/portfolio/durationadjustedcmslegdata.hpp>
+#include <ored/utilities/indexnametranslator.hpp>
 
 #include <qle/cashflows/durationadjustedcmscoupon.hpp>
 
@@ -55,13 +56,14 @@ Leg DurationAdjustedCmsLegBuilder::buildLeg(const LegData& data, const boost::sh
 
     applyAmortization(notionals, data, schedule, false);
 
+    PaymentLag paymentLag = parsePaymentLag(data.paymentLag());
     DurationAdjustedCmsLeg leg = DurationAdjustedCmsLeg(schedule, index, cmsData->duration())
                                      .withNotionals(notionals)
                                      .withSpreads(spreads)
                                      .withGearings(gearings)
                                      .withPaymentDayCounter(dc)
                                      .withPaymentAdjustment(bdc)
-                                     .withPaymentLag(data.paymentLag())
+                                     .withPaymentLag(boost::apply_visitor(PaymentLagInteger(), paymentLag))
                                      .withFixingDays(fixingDays)
                                      .inArrears(cmsData->isInArrears());
 
@@ -78,7 +80,7 @@ Leg DurationAdjustedCmsLegBuilder::buildLeg(const LegData& data, const boost::sh
     auto builder = boost::dynamic_pointer_cast<DurationAdjustedCmsCouponPricerBuilder>(
         engineFactory->builder("DurationAdjustedCMS"));
     QL_REQUIRE(builder != nullptr, "No builder found for DurationAdjustedCmsLeg");
-    auto couponPricer = builder->engine(index->currency());
+    auto couponPricer = builder->engine(IndexNameTranslator::instance().oreName(index->iborIndex()->name()));
 
     // Loop over the coupons in the leg and set pricer
     Leg result = leg;
@@ -94,10 +96,8 @@ Leg DurationAdjustedCmsLegBuilder::buildLeg(const LegData& data, const boost::sh
         result = StrippedCappedFlooredCouponLeg(result);
     }
 
-    std::map<std::string, std::string> qlToOREIndexNames;
-    qlToOREIndexNames[index->name()] = indexName;
-    applyIndexing(result, data, engineFactory, qlToOREIndexNames, requiredFixings);
-    addToRequiredFixings(result, boost::make_shared<FixingDateGetter>(requiredFixings, qlToOREIndexNames));
+    applyIndexing(result, data, engineFactory, requiredFixings);
+    addToRequiredFixings(result, boost::make_shared<FixingDateGetter>(requiredFixings));
     return result;
 }
 } // namespace data

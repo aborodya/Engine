@@ -88,9 +88,6 @@ public:
         // TODO shared_ptr or ref?
         //! Market data loader
         const Loader& loader,
-        // TODO shared_ptr or ref?
-        //! Repository of market conventions for building bootstrap helpers
-        const Conventions& conventions,
         //! Map of underlying yield curves if required
         const map<string, boost::shared_ptr<YieldCurve>>& requiredYieldCurves =
             map<string, boost::shared_ptr<YieldCurve>>(),
@@ -105,9 +102,10 @@ public:
         const IborFallbackConfig& iborfallbackConfig = IborFallbackConfig::defaultConfig(),
         //! if true keep qloader quotes linked to yield ts, otherwise detach them
         const bool preserveQuoteLinkage = false,
-        //! Map of underlying discount curves if required
-        const map<string, boost::shared_ptr<YieldCurve>>& requiredDiscountCurves =
-            map<string, boost::shared_ptr<YieldCurve>>());
+        //! build calibration info
+        const bool buildCalibrationInfo = true,
+	//! market object to look up external discount curves
+        const Market* market = nullptr);
 
     //! \name Inspectors
     //@{
@@ -129,7 +127,6 @@ private:
 
     // TODO: const refs for now, only used during ctor
     const Loader& loader_;
-    const Conventions& conventions_;
     RelinkableHandle<YieldTermStructure> h_;
     boost::shared_ptr<YieldTermStructure> p_;
     boost::shared_ptr<YieldCurveCalibrationInfo> calibrationInfo_;
@@ -162,7 +159,8 @@ private:
     const boost::shared_ptr<ReferenceDataManager> referenceData_;
     IborFallbackConfig iborFallbackConfig_;
     const bool preserveQuoteLinkage_;
-    map<string, boost::shared_ptr<YieldCurve>> requiredDiscountCurves_;
+    bool buildCalibrationInfo_;
+    const Market* market_;
 
     boost::shared_ptr<YieldTermStructure> piecewisecurve(vector<boost::shared_ptr<RateHelper>> instruments);
 

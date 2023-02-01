@@ -44,7 +44,7 @@ namespace QuantExt {
     its Handle is empty) or both.
 
     The currencies are deduced from the ibor indexes. The spotFx
-    be be quoted with either of these currencies, this is determined
+    to be quoted with either of these currencies, this is determined
     by the invertFxIndex flag. The settlement date of the spot is
     assumed to be equal to the settlement date of the swap itself.
 
@@ -62,11 +62,18 @@ public:
         const Handle<YieldTermStructure>& foreignCcyFxFwdRateCurve = Handle<YieldTermStructure>(),
         const Handle<YieldTermStructure>& domesticCcyFxFwdRateCurve = Handle<YieldTermStructure>(), bool eom = false,
         bool spreadOnForeignCcy = true, boost::optional<QuantLib::Period> foreignTenor = boost::none,
-        boost::optional<QuantLib::Period> domesticTenor = boost::none);
+        boost::optional<QuantLib::Period> domesticTenor = boost::none, Size foreignPaymentLag = 0,
+        Size domesticPaymentLag = 0, boost::optional<bool> foreignIncludeSpread = boost::none,
+        boost::optional<Period> foreignLookback = boost::none, boost::optional<Size> foreignFixingDays = boost::none,
+        boost::optional<Size> foreignRateCutoff = boost::none, boost::optional<bool> foreignIsAveraged = boost::none,
+        boost::optional<bool> domesticIncludeSpread = boost::none,
+        boost::optional<Period> domesticLookback = boost::none, boost::optional<Size> domesticFixingDays = boost::none,
+        boost::optional<Size> domesticRateCutoff = boost::none, boost::optional<bool> domesticIsAveraged = boost::none,
+        const bool telescopicValueDates = false);
     //! \name RateHelper interface
     //@{
-    Real impliedQuote() const;
-    void setTermStructure(YieldTermStructure*);
+    Real impliedQuote() const override;
+    void setTermStructure(YieldTermStructure*) override;
     //@}
     //! \name inspectors
     //@{
@@ -74,11 +81,11 @@ public:
     //@}
     //! \name Visitability
     //@{
-    void accept(AcyclicVisitor&);
+    void accept(AcyclicVisitor&) override;
     //@}
 
 protected:
-    void initializeDates();
+    void initializeDates() override;
 
     Handle<Quote> spotFX_;
     Natural settlementDays_;
@@ -95,6 +102,20 @@ protected:
     QuantLib::Period foreignTenor_;
     QuantLib::Period domesticTenor_;
 
+    Size foreignPaymentLag_;
+    Size domesticPaymentLag_;
+    // OIS only
+    boost::optional<bool> foreignIncludeSpread_;
+    boost::optional<QuantLib::Period> foreignLookback_;
+    boost::optional<QuantLib::Size> foreignFixingDays_;
+    boost::optional<Size> foreignRateCutoff_;
+    boost::optional<bool> foreignIsAveraged_;
+    boost::optional<bool> domesticIncludeSpread_;
+    boost::optional<QuantLib::Period> domesticLookback_;
+    boost::optional<QuantLib::Size> domesticFixingDays_;
+    boost::optional<Size> domesticRateCutoff_;
+    boost::optional<bool> domesticIsAveraged_;
+
     Currency foreignCurrency_;
     Currency domesticCurrency_;
     boost::shared_ptr<CrossCcyBasisMtMResetSwap> swap_;
@@ -104,6 +125,8 @@ protected:
     RelinkableHandle<YieldTermStructure> domesticDiscountRLH_;
     RelinkableHandle<YieldTermStructure> foreignCcyFxFwdRateCurveRLH_;
     RelinkableHandle<YieldTermStructure> domesticCcyFxFwdRateCurveRLH_;
+
+    bool telescopicValueDates_;
 };
 } // namespace QuantExt
 

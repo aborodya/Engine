@@ -39,7 +39,7 @@ namespace {
 
 class TestMarket : public MarketImpl {
 public:
-    TestMarket() {
+    TestMarket() : MarketImpl(false) {
         asof_ = Date(3, Feb, 2016);
 
         // build discount
@@ -47,12 +47,19 @@ public:
         yieldCurves_[make_tuple(Market::defaultConfiguration, YieldCurveType::Discount, "USD")] = flatRateYts(0.03);
 
         // add fx rates
-        fxSpots_[Market::defaultConfiguration].addQuote("EURUSD", Handle<Quote>(boost::make_shared<SimpleQuote>(1.2)));
+        std::map<std::string, QuantLib::Handle<QuantLib::Quote>> quotes;
+        quotes["EURUSD"] = Handle<Quote>(boost::make_shared<SimpleQuote>(1.2));
+        fx_ = boost::make_shared<FXTriangulation>(quotes);
+
+        // add fx conventions
+        auto conventions = boost::make_shared<Conventions>();
+        conventions->add(boost::make_shared<FXConvention>("EUR-USD-FX", "0", "EUR", "USD", "10000", "EUR,USD"));
+        InstrumentConventions::instance().setConventions(conventions);
 
         // build fx vols
         fxVols_[make_pair(Market::defaultConfiguration, "EURUSD")] = flatRateFxv(0.10);
     }
-    TestMarket(Real spot, Real q, Real r, Real vol, bool withFixings = false) {
+    TestMarket(Real spot, Real q, Real r, Real vol, bool withFixings = false) : MarketImpl(false) {
         asof_ = Date(3, Feb, 2016);
 
         // build discount
@@ -62,7 +69,14 @@ public:
             flatRateYts(q, Actual360());
 
         // add fx rates
-        fxSpots_[Market::defaultConfiguration].addQuote("JPYEUR", Handle<Quote>(boost::make_shared<SimpleQuote>(spot)));
+        std::map<std::string, QuantLib::Handle<QuantLib::Quote>> quotes;
+        quotes["JPYEUR"] = Handle<Quote>(boost::make_shared<SimpleQuote>(spot));
+        fx_ = boost::make_shared<FXTriangulation>(quotes);
+
+        // add fx conventions
+        auto conventions = boost::make_shared<Conventions>();
+        conventions->add(boost::make_shared<FXConvention>("EUR-JPY-FX", "0", "EUR", "JPY", "10000", "EUR,JPY"));
+        InstrumentConventions::instance().setConventions(conventions);
 
         // build fx vols
         fxVols_[make_pair(Market::defaultConfiguration, "JPYEUR")] = flatRateFxv(vol, Actual360());
@@ -77,11 +91,11 @@ public:
     }
 
 private:
-    Handle<YieldTermStructure> flatRateYts(Real forward, const DayCounter& dc = ActualActual()) {
+    Handle<YieldTermStructure> flatRateYts(Real forward, const DayCounter& dc = ActualActual(ActualActual::ISDA)) {
         boost::shared_ptr<YieldTermStructure> yts(new FlatForward(0, NullCalendar(), forward, dc));
         return Handle<YieldTermStructure>(yts);
     }
-    Handle<BlackVolTermStructure> flatRateFxv(Volatility forward, const DayCounter& dc = ActualActual()) {
+    Handle<BlackVolTermStructure> flatRateFxv(Volatility forward, const DayCounter& dc = ActualActual(ActualActual::ISDA)) {
         boost::shared_ptr<BlackVolTermStructure> fxv(new BlackConstantVol(0, NullCalendar(), forward, dc));
         return Handle<BlackVolTermStructure>(fxv);
     }

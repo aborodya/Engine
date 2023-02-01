@@ -49,6 +49,10 @@ struct CashFlowResults {
     QuantLib::Real notional = QuantLib::Null<QuantLib::Real>();
     QuantLib::Real discountFactor = QuantLib::Null<QuantLib::Real>();
     QuantLib::Real presentValue = QuantLib::Null<QuantLib::Real>();
+    QuantLib::Real floorStrike = QuantLib::Null<QuantLib::Real>();
+    QuantLib::Real capStrike = QuantLib::Null<QuantLib::Real>();
+    QuantLib::Real floorVolatility = QuantLib::Null<QuantLib::Real>();
+    QuantLib::Real capVolatility = QuantLib::Null<QuantLib::Real>();
 };
 
 std::ostream& operator<<(std::ostream& out, const CashFlowResults& t);
@@ -59,5 +63,10 @@ CashFlowResults standardCashFlowResults(const boost::shared_ptr<QuantLib::CashFl
                                         const QuantLib::Currency& currency = QuantLib::Currency(),
                                         const QuantLib::Handle<QuantLib::YieldTermStructure>& discountCurve =
                                             QuantLib::Handle<QuantLib::YieldTermStructure>());
+
+CashFlowResults populateCashFlowResultsFromCashflow(const boost::shared_ptr<QuantLib::CashFlow>& c,
+                                                    const QuantLib::Real multiplier = 1.0,
+                                                    const QuantLib::Size legNo = 0,
+                                                    const QuantLib::Currency& currency = QuantLib::Currency());
 
 } // namespace QuantExt

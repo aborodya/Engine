@@ -52,7 +52,7 @@ public:
                            Spread spread = 0.0, Natural rateCutoff = 0, const DayCounter& dayCounter = DayCounter(),
                            const Period& lookback = 0 * Days, const Size fixingDays = Null<Size>(),
                            const Date& rateComputationStartDate = Null<Date>(),
-                           const Date& rateComputationEndDate = Null<Date>());
+                           const Date& rateComputationEndDate = Null<Date>(), const bool telescopicValueDates = false);
     //! \name Inspectors
     //@{
     //! fixing dates for the rates to be averaged
@@ -67,17 +67,24 @@ public:
     Natural rateCutoff() const { return rateCutoff_; }
     //! lookback period
     const Period& lookback() const { return lookback_; }
+    //! rate computation start date
+    const Date& rateComputationStartDate() const { return rateComputationStartDate_; }
+    //! rate computation end date
+    const Date& rateComputationEndDate() const { return rateComputationEndDate_; }
+    //! the underlying index
+    const ext::shared_ptr<OvernightIndex>& overnightIndex() const { return overnightIndex_; }
     //@}
     //! \name FloatingRateCoupon interface
     //@{
     //! the date when the coupon is fully determined
-    Date fixingDate() const;
+    Date fixingDate() const override;
     //@}
     //! \name Visitability
     //@{
-    void accept(AcyclicVisitor&);
+    void accept(AcyclicVisitor&) override;
     //@}
 private:
+    boost::shared_ptr<OvernightIndex> overnightIndex_;
     std::vector<Date> valueDates_, fixingDates_;
     mutable std::vector<Rate> fixings_;
     Size numPeriods_;
@@ -96,6 +103,15 @@ public:
                                         Real cap = Null<Real>(), Real floor = Null<Real>(), bool nakedOption = false,
                                         bool localCapFloor = false, bool includeSpread = false);
 
+    //! \name Observer interface
+    //@{
+    void deepUpdate() override;
+    //@}
+    //! \name LazyObject interface
+    //@{
+    void performCalculations() const override;
+    void alwaysForwardNotifications() override;
+    //@}
     //! \name Coupon interface
     //@{
     Rate rate() const override;
@@ -113,10 +129,6 @@ public:
     Rate effectiveCap() const;
     //! effective floor of fixing
     Rate effectiveFloor() const;
-    //@}
-    //! \name Observer interface
-    //@{
-    void update() override;
     //@}
     //! \name Visitability
     //@{
@@ -162,6 +174,7 @@ public:
     AverageONLeg& withGearings(const std::vector<Real>& gearings);
     AverageONLeg& withSpread(Spread spread);
     AverageONLeg& withSpreads(const std::vector<Spread>& spreads);
+    AverageONLeg& withTelescopicValueDates(bool telescopicValueDates);
     AverageONLeg& withRateCutoff(Natural rateCutoff);
     AverageONLeg& withPaymentCalendar(const Calendar& calendar);
     AverageONLeg& withPaymentLag(Natural lag);
@@ -191,6 +204,7 @@ private:
     Natural paymentLag_;
     std::vector<Real> gearings_;
     std::vector<Spread> spreads_;
+    bool telescopicValueDates_;
     Calendar paymentCalendar_;
     Natural rateCutoff_;
     Period lookback_;

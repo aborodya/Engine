@@ -30,7 +30,11 @@ namespace QuantExt {
 FallbackIborIndex::FallbackIborIndex(const boost::shared_ptr<IborIndex> originalIndex,
                                      const boost::shared_ptr<OvernightIndex> rfrIndex, const Real spread,
                                      const Date& switchDate, const bool useRfrCurve)
-    : FallbackIborIndex(originalIndex, rfrIndex, spread, switchDate,
+    : FallbackIborIndex(originalIndex,
+                        useRfrCurve ? rfrIndex
+                                    : boost::dynamic_pointer_cast<OvernightIndex>(
+                                          rfrIndex->clone(originalIndex->forwardingTermStructure())),
+                        spread, switchDate,
                         useRfrCurve ? Handle<YieldTermStructure>(boost::make_shared<IborFallbackCurve>(
                                           originalIndex, rfrIndex, spread, switchDate))
                                     : originalIndex->forwardingTermStructure()) {}
@@ -78,7 +82,10 @@ Real FallbackIborIndex::fixing(const Date& fixingDate, bool forecastTodaysFixing
     if (fixingDate > today) {
         return IborIndex::forecastFixing(fixingDate);
     } else {
-        return onCoupon(fixingDate, true)->rate() + spread_;
+      if (boost::dynamic_pointer_cast<OvernightIndex>(originalIndex_))
+	  return rfrIndex_->fixing(fixingDate) + spread_;
+      else
+	  return onCoupon(fixingDate, true)->rate() + spread_;
     }
 }
 

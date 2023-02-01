@@ -30,7 +30,6 @@
 #include <ored/portfolio/legdata.hpp>
 
 #include <ql/pricingengine.hpp>
-#include <ql/utilities/disposable.hpp>
 
 #include <boost/shared_ptr.hpp>
 
@@ -41,7 +40,6 @@
 namespace ore {
 namespace data {
 using ore::data::Market;
-using QuantLib::Disposable;
 using QuantLib::PricingEngine;
 using std::map;
 using std::pair;
@@ -142,11 +140,11 @@ public:
     const set<std::pair<string, boost::shared_ptr<ModelBuilder>>>& modelBuilders() const { return modelBuilders_; }
 
     /*! retrieve engine parameter p, first look for p_qualifier, if this does not exist fall back to p */
-    std::string engineParameter(const std::string& p, const std::string qualifier = "", const bool mandatory = true,
-                                const std::string& defaultValue = "");
+    std::string engineParameter(const std::string& p, const std::vector<std::string>& qualifiers = {},
+                                const bool mandatory = true, const std::string& defaultValue = "") const;
     /*! retrieve model parameter p, first look for p_qualifier, if this does not exist fall back to p */
-    std::string modelParameter(const std::string& p, const std::string qualifier = "", const bool mandatory = true,
-                               const std::string& defaultValue = "");
+    std::string modelParameter(const std::string& p, const std::vector<std::string>& qualifiers = {},
+                               const bool mandatory = true, const std::string& defaultValue = "") const;
 
 protected:
     string model_;
@@ -158,6 +156,16 @@ protected:
     map<string, string> engineParameters_;
     std::map<std::string, std::string> globalParameters_;
     set<std::pair<string, boost::shared_ptr<ModelBuilder>>> modelBuilders_;
+};
+
+//! Delegating Engine Builder
+/* Special interface to consolidate different trade builders for one product. See AsianOption for a use case. */
+class DelegatingEngineBuilder : public EngineBuilder {
+public:
+    using EngineBuilder::EngineBuilder;
+    virtual boost::shared_ptr<ore::data::Trade> build(const ore::data::Trade*,
+                                                      const boost::shared_ptr<EngineFactory>& engineFactory) = 0;
+    virtual std::string effectiveTradeType() const = 0;
 };
 
 //! Pricing Engine Factory class
@@ -241,7 +249,7 @@ public:
     }
 
     //! return model builders
-    Disposable<set<std::pair<string, boost::shared_ptr<ModelBuilder>>>> modelBuilders() const;
+    set<std::pair<string, boost::shared_ptr<ModelBuilder>>> modelBuilders() const;
 
 private:
     boost::shared_ptr<Market> market_;

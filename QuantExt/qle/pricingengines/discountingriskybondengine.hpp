@@ -28,6 +28,7 @@
 #include <ql/termstructures/defaulttermstructure.hpp>
 #include <ql/termstructures/yieldtermstructure.hpp>
 #include <ql/time/period.hpp>
+#include <qle/instruments/cashflowresults.hpp>
 
 namespace QuantExt {
 using namespace QuantLib;
@@ -49,6 +50,16 @@ using namespace QuantLib;
 */
 class DiscountingRiskyBondEngine : public QuantLib::Bond::engine {
 public:
+
+    struct BondNPVCalculationResults {
+	// always provided in calculateNpv()
+        Real npv;
+        Real compoundFactorSettlement;
+        Real cashflowsBeforeSettlementValue;
+	// only provided in calculateNpv() when additionalResults = true
+        std::vector<CashFlowResults> cashflowResults;
+    };
+
     DiscountingRiskyBondEngine(const Handle<YieldTermStructure>& discountCurve,
                                const Handle<DefaultProbabilityTermStructure>& defaultCurve,
                                const Handle<Quote>& recoveryRate, const Handle<Quote>& securitySpread,
@@ -58,17 +69,19 @@ public:
     DiscountingRiskyBondEngine(const Handle<YieldTermStructure>& discountCurve, const Handle<Quote>& securitySpread,
                                Period timestepPeriod, boost::optional<bool> includeSettlementDateFlows = boost::none);
 
-    void calculate() const;
+    void calculate() const override;
 
-    /*! Calculate the npv as of the npvDate including cashflows eligible w.r.t. the given settlement date
+    /*! Calculate the npv, compoundFactorSettlement, cashflowsBeforeSettlementValue and the additional CashflowResults
+        as of the npvDate including cashflows eligible w.r.t. the given settlement date
         - If conditionalOnSurvival is set to true, the npv is computed conditional on the survival until the npvDate,
           otherwise the npv is including the default probability between today and the npvDate
         - If an incomeCurve is given, this is used to compound the npv from today to the npvDate, otherwise the curve
           built in the engine as discount curve + security Spread is used. */
-    Real calculateNpv(const Date& npvDate, const Date& settlementDate, const Leg& cashflows,
-                      boost::optional<bool> includeSettlementDateFlows = boost::none,
-                      const Handle<YieldTermStructure>& incomeCurve = Handle<YieldTermStructure>(),
-                      const bool conditionalOnSurvival = true) const;
+    BondNPVCalculationResults calculateNpv(const Date& npvDate, const Date& settlementDate, const Leg& cashflows,
+                                           boost::optional<bool> includeSettlementDateFlows = boost::none,
+                                           const Handle<YieldTermStructure>& incomeCurve = Handle<YieldTermStructure>(),
+                                           const bool conditionalOnSurvival = true,
+                                           const bool additionalResults = true) const;
 
     // inspectors
     Handle<YieldTermStructure> discountCurve() const { return discountCurve_; };
@@ -83,8 +96,6 @@ private:
     Handle<Quote> securitySpread_;
     Period timestepPeriod_;
     boost::optional<bool> includeSettlementDateFlows_;
-    // set by calculateNpv()
-    mutable Real compoundFactorSettlement_, cashflowsBeforeSettlementValue_;
 };
 } // namespace QuantExt
 

@@ -19,7 +19,7 @@
 */
 
 /*! \file qle/cashflows/nonstandardyoyinflationcoupon.hpp
-    \brief capped floored coupon which gerneralize the yoy inflation coupon
+    \brief capped floored coupon which generalize the yoy inflation coupon
     it pays:
          N * (alpha * I_t/I_s + beta)
          N * (alpha * (I_t/I_s - 1) + beta)
@@ -89,7 +89,7 @@ public:
     //! \name augmented Coupon interface
     //@{
     //! swap(let) rate
-    Rate rate() const;
+    Rate rate() const override;
     //! cap
     Rate cap() const;
     //! floor
@@ -102,12 +102,12 @@ public:
 
     //! \name Observer interface
     //@{
-    void update();
+    void update() override;
     //@}
 
     //! \name Visitability
     //@{
-    virtual void accept(AcyclicVisitor& v);
+    virtual void accept(AcyclicVisitor& v) override;
     //@}
 
     bool isCapped() const { return isCapped_; }

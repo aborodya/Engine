@@ -16,11 +16,12 @@ app/oreapp.cpp
 app/parameters.cpp
 app/reportwriter.cpp
 app/sensitivityrunner.cpp
-app/structuredanalyticserror.cpp
 app/xvarunner.cpp
 cube/cubeinterpretation.cpp
 cube/cubewriter.cpp
 cube/sensitivitycube.cpp
+engine/amcvaluationengine.cpp
+engine/bufferedsensitivitystream.cpp
 engine/cptycalculator.cpp
 engine/filteredsensitivitystream.cpp
 engine/mporcalculator.cpp
@@ -36,6 +37,7 @@ engine/sensitivityrecord.cpp
 engine/stresstest.cpp
 engine/valuationcalculator.cpp
 engine/valuationengine.cpp
+scenario/clonedscenariogenerator.cpp
 scenario/clonescenariofactory.cpp
 scenario/crossassetmodelscenariogenerator.cpp
 scenario/lgmscenariogenerator.cpp
@@ -73,6 +75,7 @@ app/parameters.hpp
 app/reportwriter.hpp
 app/sensitivityrunner.hpp
 app/structuredanalyticserror.hpp
+app/structuredanalyticswarning.hpp
 app/xvarunner.hpp
 auto_link.hpp
 cube/cubeinterpretation.hpp
@@ -82,6 +85,8 @@ cube/npvcube.hpp
 cube/npvsensicube.hpp
 cube/sensicube.hpp
 cube/sensitivitycube.hpp
+engine/amcvaluationengine.hpp
+engine/bufferedsensitivitystream.hpp
 engine/cptycalculator.hpp
 engine/filteredsensitivitystream.hpp
 engine/mporcalculator.hpp
@@ -100,6 +105,7 @@ engine/stresstest.hpp
 engine/valuationcalculator.hpp
 engine/valuationengine.hpp
 scenario/aggregationscenariodata.hpp
+scenario/clonedscenariogenerator.hpp
 scenario/clonescenariofactory.hpp
 scenario/crossassetmodelscenariogenerator.hpp
 scenario/lgmscenariogenerator.hpp

@@ -43,12 +43,12 @@ class ReferenceDataManager;
 class Portfolio {
 public:
     //! Default constructor
-    Portfolio() {}
+    explicit Portfolio(bool buildFailedTrades = true) : buildFailedTrades_(buildFailedTrades) {}
 
-    //! Add a trade to the portfoliio
+    //! Add a trade to the portfolio
     void add(const boost::shared_ptr<Trade>& trade, const bool checkForDuplicateIds = true);
 
-    //! Check if a trade id is already in the porfolio
+    //! Check if a trade id is already in the portfolio
     bool has(const string& id);
 
     /*! Get a Trade with the given \p id from the portfolio
@@ -58,7 +58,7 @@ public:
     boost::shared_ptr<Trade> get(const std::string& id) const;
 
     //! Clear the portfolio
-    void clear() { trades_.clear(); }
+    void clear();
 
     //! Reset all trade data
     void reset();
@@ -83,14 +83,18 @@ public:
     //! Save portfolio to an XML file
     void save(const std::string& fileName) const;
 
+    //! Save portfolio to an XML string
+    string saveToXMLString() const;
+
     //! Remove specified trade from the portfolio
     bool remove(const std::string& tradeID);
 
     //! Remove matured trades from portfolio for a given date, each removal is logged with an Alert
     void removeMatured(const QuantLib::Date& asof);
 
-    //! Call build on all trades in the portfolio
-    void build(const boost::shared_ptr<EngineFactory>&);
+    //! Call build on all trades in the portfolio, the context is included in error messages
+    void build(const boost::shared_ptr<EngineFactory>&, const std::string& context = "unspecified",
+               const bool emitStructuredError = true);
 
     //! Calculates the maturity of the portfolio
     QuantLib::Date maturity() const;
@@ -113,6 +117,12 @@ public:
     //! Compute set of portfolios
     std::set<std::string> portfolioIds() const;
 
+    //! Check if at least one trade in the portfolio uses the NettingSetDetails node, and not just NettingSetId
+    bool hasNettingSetDetails() const;
+
+    //! Does this portfolio build failed trades?
+    bool buildFailedTrades() const { return buildFailedTrades_; }
+
     /*! Return the fixings that will be requested in order to price every Trade in this Portfolio given
         the \p settlementDate. The map key is the ORE name of the index and the map value is the set of fixing dates.
 
@@ -129,8 +139,18 @@ public:
                       const boost::shared_ptr<ReferenceDataManager>& referenceDataManager = nullptr);
 
 private:
+    // get representation as XMLDocument
+    void doc(XMLDocument& doc) const;
+    bool buildFailedTrades_;
     std::vector<boost::shared_ptr<Trade>> trades_;
+    std::map<std::string, boost::shared_ptr<Trade>> tradeLookup_;
     std::map<AssetClass, std::set<std::string>> underlyingIndicesCache_;
 };
+
+std::pair<boost::shared_ptr<Trade>, bool> buildTrade(boost::shared_ptr<Trade>& trade,
+                                                     const boost::shared_ptr<EngineFactory>& engineFactory,
+                                                     const std::string& context, const bool buildFailedTrades,
+                                                     const bool emitStructuredError);
+
 } // namespace data
 } // namespace ore

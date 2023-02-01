@@ -20,6 +20,8 @@
 
 #include <ored/utilities/indexparser.hpp>
 
+#include <qle/termstructures/creditcurve.hpp>
+
 #include <ql/termstructures/credit/flathazardrate.hpp>
 #include <ql/termstructures/yield/flatforward.hpp>
 
@@ -27,16 +29,15 @@ namespace ore {
 namespace data {
 
 FittedBondCurveHelperMarket::FittedBondCurveHelperMarket(
-    const std::map<std::string, Handle<YieldTermStructure>>& iborIndexCurves, const Conventions& conventions) {
+    const std::map<std::string, Handle<YieldTermStructure>>& iborIndexCurves, const bool handlePseudoCurrencies)
+    : MarketImpl(handlePseudoCurrencies) {
+
+    boost::shared_ptr<Conventions> conventions = InstrumentConventions::instance().conventions();
 
     // populate the ibor index curves
     for (auto const& c : iborIndexCurves)
         iborIndices_[std::make_pair(Market::defaultConfiguration, c.first)] =
-            Handle<IborIndex>(parseIborIndex(c.first, c.second,
-                                             conventions.has(c.first, Convention::Type::IborIndex) ||
-                                                     conventions.has(c.first, Convention::Type::OvernightIndex)
-                                                 ? conventions.get(c.first)
-                                                 : nullptr));
+            Handle<IborIndex>(parseIborIndex(c.first, c.second));
 }
 
 Handle<YieldTermStructure> FittedBondCurveHelperMarket::yieldCurve(const string& name,
@@ -48,10 +49,11 @@ Handle<Quote> FittedBondCurveHelperMarket::securitySpread(const string& security
     return Handle<Quote>(boost::make_shared<SimpleQuote>(0.0));
 }
 
-Handle<DefaultProbabilityTermStructure> FittedBondCurveHelperMarket::defaultCurve(const string&,
-                                                                                  const string& configuration) const {
-    return Handle<DefaultProbabilityTermStructure>(
-        boost::make_shared<FlatHazardRate>(0, NullCalendar(), 0.0, Actual365Fixed()));
+Handle<QuantExt::CreditCurve> FittedBondCurveHelperMarket::defaultCurve(const string&,
+                                                                        const string& configuration) const {
+    return Handle<QuantExt::CreditCurve>(
+        boost::make_shared<QuantExt::CreditCurve>(Handle<DefaultProbabilityTermStructure>(
+            boost::make_shared<FlatHazardRate>(0, NullCalendar(), 0.0, Actual365Fixed()))));
 }
 
 Handle<Quote> FittedBondCurveHelperMarket::recoveryRate(const string&, const string& configuration) const {

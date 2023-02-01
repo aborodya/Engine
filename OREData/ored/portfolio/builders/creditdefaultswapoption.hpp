@@ -16,8 +16,8 @@
  FITNESS FOR A PARTICULAR PURPOSE. See the license for more details.
 */
 
-/*! \file portfolio/builders/creditdefaultswap.hpp
-\brief Builder that returns an engine to price a credit default swap
+/*! \file portfolio/builders/creditdefaultswapoption.hpp
+\brief Builder that returns an engine to price a credit default swap option
 \ingroup builders
 */
 
@@ -64,9 +64,9 @@ protected:
 
         string curveId = term.empty() ? creditCurveId : creditCurveId + "-" + term;
         Handle<YieldTermStructure> yts = market_->discountCurve(ccy.code(), configuration(MarketContext::pricing));
-        Handle<BlackVolTermStructure> vol = market_->cdsVol(curveId, configuration(MarketContext::pricing));
+        Handle<QuantExt::CreditVolCurve> vol = market_->cdsVol(curveId, configuration(MarketContext::pricing));
         Handle<DefaultProbabilityTermStructure> dpts =
-                market_->defaultCurve(creditCurveId, configuration(MarketContext::pricing));
+            market_->defaultCurve(creditCurveId, configuration(MarketContext::pricing))->curve();
         Handle<Quote> recovery = market_->recoveryRate(creditCurveId, configuration(MarketContext::pricing));
         return boost::make_shared<QuantExt::BlackCdsOptionEngine>(dpts, recovery->value(), yts, vol);
     }

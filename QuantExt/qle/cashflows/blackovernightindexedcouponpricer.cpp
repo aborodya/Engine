@@ -63,12 +63,12 @@ Real BlackOvernightIndexedCouponPricer::optionletRateGlobal(Option::Type optionT
         QL_REQUIRE(!fixingDates.empty(), "BlackOvernightIndexedCouponPricer: empty fixing dates");
         Real fixingStartTime = capletVolatility()->timeFromReference(fixingDates.front());
         Real fixingEndTime = capletVolatility()->timeFromReference(fixingDates.back());
-        QL_REQUIRE(!close_enough(fixingEndTime, fixingStartTime),
-                   "BlackOvernightIndexedCouponPricer: fixingStartTime = fixingEndTime = " << fixingStartTime);
-        Real sigma = capletVolatility()->volatility(lastRelevantFixingDate, effStrike);
-        Real stdDev = sigma * std::sqrt(std::max(fixingStartTime, 0.0) +
-                                        std::pow(fixingEndTime - std::max(fixingStartTime, 0.0), 3.0) /
-                                            std::pow(fixingEndTime - fixingStartTime, 2.0) / 3.0);
+        Real sigma = capletVolatility()->volatility(
+            std::max(fixingDates.front(), capletVolatility()->referenceDate() + 1), effStrike);
+        Real T = std::max(fixingStartTime, 0.0);
+        if (!close_enough(fixingEndTime, T))
+            T += std::pow(fixingEndTime - T, 3.0) / std::pow(fixingEndTime - T, 2.0) / 3.0;
+        Real stdDev = sigma * std::sqrt(T);
         Real shift = capletVolatility()->displacement();
         bool shiftedLn = capletVolatility()->volatilityType() == ShiftedLognormal;
         Rate fixing = shiftedLn ? blackFormula(optionType, effStrike, effectiveIndexFixing_, stdDev, 1.0, shift)
@@ -88,7 +88,7 @@ Real cappedFlooredRate(Real r, Option::Type optionType, Real k) {
 } // namespace
 
 Real BlackOvernightIndexedCouponPricer::optionletRateLocal(Option::Type optionType, Real effStrike) const {
-    // We compuate a rate and a rawRate such that
+    // We compute a rate and a rawRate such that
     // rate * tau * nominal is the amount of the coupon with locally (i.e. daily) capped / floored rates
     // rawRate * tau * nominal is the amount of the coupon without capping / flooring the rate
     // We will then return the difference between rate and rawRate (with the correct sign, see below)
@@ -103,7 +103,7 @@ Real BlackOvernightIndexedCouponPricer::optionletRateLocal(Option::Type optionTy
     Real absStrike = coupon_->underlying()->includeSpread() ? effStrike + coupon_->underlying()->spread() : effStrike;
 
     // This following code is inevitably quite similar to the plain ON coupon pricer code, possibly we can refactor
-    // this, but as a first step it seems safer to add the full modifed code explicitly here and leave the original
+    // this, but as a first step it seems safer to add the full modified code explicitly here and leave the original
     // code alone.
 
     ext::shared_ptr<OvernightIndex> index = ext::dynamic_pointer_cast<OvernightIndex>(coupon_->index());
@@ -172,7 +172,7 @@ Real BlackOvernightIndexedCouponPricer::optionletRateLocal(Option::Type optionTy
             endDiscount *= std::pow(discountCutoffDate, dates[n] - dates[nCutoff]);
         }
 
-        // estimate the average daily rate over the future period (approximate the continously compounded rate)
+        // estimate the average daily rate over the future period (approximate the continuously compounded rate)
         Real tau = coupon_->dayCounter().yearFraction(dates[i], dates.back());
         Real averageRate = -std::log(endDiscount / startDiscount) / tau;
 
@@ -261,6 +261,7 @@ void BlackAverageONIndexedCouponPricer::initialize(const FloatingRateCoupon& cou
         QL_FAIL("BlackAverageONIndexedCouponPricer: CappedFlooredAverageONIndexedCoupon required");
     }
     swapletRate_ = coupon_->underlying()->rate();
+    forwardRate_ = (swapletRate_ - coupon_->underlying()->spread()) / coupon_->underlying()->gearing();
 }
 
 Real BlackAverageONIndexedCouponPricer::optionletRateGlobal(Option::Type optionType, Real effStrike) const {
@@ -288,20 +289,21 @@ Real BlackAverageONIndexedCouponPricer::optionletRateGlobal(Option::Type optionT
         Real fixingEndTime = capletVolatility()->timeFromReference(fixingDates.back());
         QL_REQUIRE(!close_enough(fixingEndTime, fixingStartTime),
                    "BlackAverageONIndexedCouponPricer: fixingStartTime = fixingEndTime = " << fixingStartTime);
-        Real sigma = capletVolatility()->volatility(lastRelevantFixingDate, effStrike);
+        Real sigma = capletVolatility()->volatility(
+            std::max(fixingDates.front(), capletVolatility()->referenceDate() + 1), effStrike);
         Real stdDev = sigma * std::sqrt(std::max(fixingStartTime, 0.0) +
                                         std::pow(fixingEndTime - std::max(fixingStartTime, 0.0), 3.0) /
                                             std::pow(fixingEndTime - fixingStartTime, 2.0) / 3.0);
         Real shift = capletVolatility()->displacement();
         bool shiftedLn = capletVolatility()->volatilityType() == ShiftedLognormal;
-        Rate fixing = shiftedLn ? blackFormula(optionType, effStrike, swapletRate_, stdDev, 1.0, shift)
-                                : bachelierBlackFormula(optionType, effStrike, swapletRate_, stdDev, 1.0);
+        Rate fixing = shiftedLn ? blackFormula(optionType, effStrike, forwardRate_, stdDev, 1.0, shift)
+                                : bachelierBlackFormula(optionType, effStrike, forwardRate_, stdDev, 1.0);
         return gearing_ * fixing;
     }
 }
 
 Real BlackAverageONIndexedCouponPricer::optionletRateLocal(Option::Type optionType, Real effStrike) const {
-    // We compuate a rate and a rawRate such that
+    // We compute a rate and a rawRate such that
     // rate * tau * nominal is the amount of the coupon with locally (i.e. daily) capped / floored rates
     // rawRate * tau * nominal is the amount of the coupon without capping / flooring the rate
     // We will then return the difference between rate and rawRate (with the correct sign, see below)
@@ -316,7 +318,7 @@ Real BlackAverageONIndexedCouponPricer::optionletRateLocal(Option::Type optionTy
     Real absStrike = coupon_->includeSpread() ? effStrike + coupon_->underlying()->spread() : effStrike;
 
     // This following code is inevitably quite similar to the plain ON coupon pricer code, possibly we can refactor
-    // this, but as a first step it seems safer to add the full modifed code explicitly here and leave the original
+    // this, but as a first step it seems safer to add the full modified code explicitly here and leave the original
     // code alone.
 
     ext::shared_ptr<OvernightIndex> index = ext::dynamic_pointer_cast<OvernightIndex>(coupon_->index());
@@ -385,7 +387,7 @@ Real BlackAverageONIndexedCouponPricer::optionletRateLocal(Option::Type optionTy
             endDiscount *= std::pow(discountCutoffDate, dates[n] - dates[nCutoff]);
         }
 
-        // estimate the average daily rate over the future period (approximate the continously compounded rate)
+        // estimate the average daily rate over the future period (approximate the continuously compounded rate)
         Real tau = coupon_->dayCounter().yearFraction(dates[i], dates.back());
         Real averageRate = -std::log(endDiscount / startDiscount) / tau;
 

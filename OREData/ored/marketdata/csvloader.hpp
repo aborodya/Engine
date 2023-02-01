@@ -32,7 +32,7 @@ namespace data {
 //! Utility class for loading market quotes and fixings from a file
 /*!
   Data is loaded with the call to the constructor.
-  Inspectors can be called to then retrive quotes and fixings.
+  Inspectors can be called to then retrieve quotes and fixings.
 
   \ingroup marketdata
  */
@@ -76,15 +76,18 @@ public:
     //! \name Inspectors
     //@{
     //! Load market quotes
-    const std::vector<boost::shared_ptr<MarketDatum>>& loadQuotes(const QuantLib::Date&) const;
+    std::vector<boost::shared_ptr<MarketDatum>> loadQuotes(const QuantLib::Date&) const override;
 
     //! Get a particular quote by its unique name
-    const boost::shared_ptr<MarketDatum>& get(const std::string& name, const QuantLib::Date&) const;
+    using Loader::get;
+
+    //! get quotes matching a wildcard
+    std::set<boost::shared_ptr<MarketDatum>> get(const Wildcard& wildcard, const QuantLib::Date& asof) const override;
 
     //! Load fixings
-    const std::vector<Fixing>& loadFixings() const { return fixings_; }
+    std::set<Fixing> loadFixings() const override { return fixings_; }
     //! Load dividends
-    const std::vector<Fixing>& loadDividends() const { return dividends_; }
+    std::set<Fixing> loadDividends() const override { return dividends_; }
     //@}
 
 private:
@@ -92,9 +95,9 @@ private:
     void loadFile(const string&, DataType);
 
     bool implyTodaysFixings_;
-    std::map<QuantLib::Date, std::vector<boost::shared_ptr<MarketDatum>>> data_;
-    std::vector<Fixing> fixings_;
-    std::vector<Fixing> dividends_;
+    std::map<QuantLib::Date, std::set<boost::shared_ptr<MarketDatum>, SharedPtrMarketDatumComparator>> data_;
+    std::set<Fixing> fixings_;
+    std::set<Fixing> dividends_;
 };
 } // namespace data
 } // namespace ore

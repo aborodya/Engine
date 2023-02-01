@@ -47,8 +47,9 @@ using testsuite::TestMarket;
 namespace {
 
 boost::shared_ptr<data::Conventions> convs() {
-    boost::shared_ptr<data::Conventions> conventions(new data::Conventions());
-
+    boost::shared_ptr<Conventions> conventions = InstrumentConventions::instance().conventions();
+    conventions->clear();
+    
     boost::shared_ptr<data::Convention> swapIndexConv(
         new data::SwapIndexConvention("EUR-CMS-2Y", "EUR-6M-SWAP-CONVENTIONS"));
     conventions->add(swapIndexConv);
@@ -71,14 +72,14 @@ boost::shared_ptr<analytics::ScenarioSimMarketParameters> scenarioParameters() {
 
     parameters->setSwapVolTerms("", {6 * Months, 1 * Years});
     parameters->setSwapVolExpiries("", {1 * Years, 2 * Years});
-    parameters->setSwapVolCcys({"EUR", "USD"});
+    parameters->setSwapVolKeys({"EUR", "USD"});
     parameters->swapVolDecayMode() = "ForwardVariance";
 
     parameters->setDefaultNames({"dc2"});
     parameters->setDefaultTenors("", {6 * Months, 8 * Months, 1 * Years, 2 * Years});
 
     parameters->setSimulateFXVols(false);
-    parameters->setFxVolExpiries(vector<Period>{2 * Years, 3 * Years, 4 * Years});
+    parameters->setFxVolExpiries("", vector<Period>{2 * Years, 3 * Years, 4 * Years});
     parameters->setFxVolDecayMode(string("ConstantVariance"));
     parameters->setSimulateEquityVols(false);
 
@@ -173,8 +174,8 @@ void testFxVolCurve(boost::shared_ptr<data::Market>& initMarket,
         Handle<BlackVolTermStructure> initCurve = initMarket->fxVol(ccyPair);
         vector<Date> dates;
         Date asof = initMarket->asofDate();
-        for (Size i = 0; i < parameters->fxVolExpiries().size(); i++) {
-            dates.push_back(asof + parameters->fxVolExpiries()[i]);
+        for (Size i = 0; i < parameters->fxVolExpiries(ccyPair).size(); i++) {
+            dates.push_back(asof + parameters->fxVolExpiries(ccyPair)[i]);
         }
 
         for (const auto& date : dates) {
@@ -188,8 +189,8 @@ void testDefaultCurve(boost::shared_ptr<ore::data::Market>& initMarket,
                       boost::shared_ptr<analytics::ScenarioSimMarketParameters>& parameters) {
     for (const auto& spec : parameters->defaultNames()) {
 
-        Handle<DefaultProbabilityTermStructure> simCurve = simMarket->defaultCurve(spec);
-        Handle<DefaultProbabilityTermStructure> initCurve = initMarket->defaultCurve(spec);
+        Handle<DefaultProbabilityTermStructure> simCurve = simMarket->defaultCurve(spec)->curve();
+        Handle<DefaultProbabilityTermStructure> initCurve = initMarket->defaultCurve(spec)->curve();
         BOOST_CHECK_EQUAL(initCurve->referenceDate(), simCurve->referenceDate());
         vector<Date> dates;
         Date asof = initMarket->asofDate();
@@ -230,7 +231,7 @@ void testCorrelationCurve(boost::shared_ptr<ore::data::Market>& initMarket,
                           boost::shared_ptr<analytics::ScenarioSimMarketParameters>& parameters) {
     for (const auto& spec : parameters->correlationPairs()) {
         vector<string> tokens;
-        boost::split(tokens, spec, boost::is_any_of(":"));
+        boost::split(tokens, spec, boost::is_any_of(":&"));
         QL_REQUIRE(tokens.size() == 2, "not a valid correlation pair: " << spec);
         pair<string, string> pair = std::make_pair(tokens[0], tokens[1]);
         Handle<QuantExt::CorrelationTermStructure> simCurve = simMarket->correlationCurve(pair.first, pair.second);
@@ -253,11 +254,9 @@ void testToXML(boost::shared_ptr<analytics::ScenarioSimMarketParameters> params)
     BOOST_TEST_MESSAGE("Testing to XML...");
     XMLDocument outDoc;
     string testFile = "simtest.xml";
-    XMLNode* node = params->toXML(outDoc);
+    XMLNode* simulationNode = params->toXML(outDoc);
 
-    XMLNode* simulationNode = outDoc.allocNode("Simulation");
     outDoc.appendNode(simulationNode);
-    XMLUtils::appendNode(simulationNode, node);
     outDoc.toFile(testFile);
 
     boost::shared_ptr<analytics::ScenarioSimMarketParameters> newParams(new analytics::ScenarioSimMarketParameters());
@@ -288,10 +287,10 @@ BOOST_AUTO_TEST_CASE(testScenarioSimMarket) {
 
     // build scenario
     boost::shared_ptr<analytics::ScenarioSimMarketParameters> parameters = scenarioParameters();
-    Conventions conventions = *convs();
+    convs();
     // build scenario sim market
     boost::shared_ptr<analytics::ScenarioSimMarket> simMarket(
-        new analytics::ScenarioSimMarket(initMarket, parameters, conventions));
+        new analytics::ScenarioSimMarket(initMarket, parameters));
     simMarket->scenarioGenerator() = scenarioGenerator;
 
     // test

@@ -26,6 +26,7 @@
 #include <qle/termstructures/iterativebootstrap.hpp>
 #include <qle/termstructures/optionletstripper.hpp>
 #include <qle/termstructures/piecewiseoptionletcurve.hpp>
+#include <qle/termstructures/oiscapfloorhelper.hpp>
 
 namespace QuantExt {
 
@@ -47,7 +48,8 @@ public:
                                const boost::optional<VolatilityType> optionletVolType = boost::none,
                                const boost::optional<QuantLib::Real> optionletVolDisplacement = boost::none,
                                bool interpOnOptionlets = true, const Interpolator& i = Interpolator(),
-                               const Bootstrap<optionlet_curve>& bootstrap = Bootstrap<optionlet_curve>());
+                               const Bootstrap<optionlet_curve>& bootstrap = Bootstrap<optionlet_curve>(),
+                               const Period& rateComputationPeriod = 0 * Days, const Size onCapSettlementDays = 0);
 
     //! \name Inspectors
     //@{
@@ -59,7 +61,7 @@ public:
 
     //! \name LazyObject interface
     //@{
-    void performCalculations() const;
+    void performCalculations() const override;
     //@}
 
 private:
@@ -99,9 +101,10 @@ PiecewiseOptionletStripper<Interpolator, Bootstrap>::PiecewiseOptionletStripper(
     bool flatFirstPeriod, const QuantLib::VolatilityType capFloorVolType, const QuantLib::Real capFloorVolDisplacement,
     const boost::optional<VolatilityType> optionletVolType,
     const boost::optional<QuantLib::Real> optionletVolDisplacement, bool interpOnOptionlets, const Interpolator& i,
-    const Bootstrap<optionlet_curve>& bootstrap)
+    const Bootstrap<optionlet_curve>& bootstrap, const Period& rateComputationPeriod, const Size onCapSettlementDays)
     : OptionletStripper(capFloorSurface, index, discount, optionletVolType ? *optionletVolType : capFloorVolType,
-                        optionletVolDisplacement ? *optionletVolDisplacement : 0.0),
+                        optionletVolDisplacement ? *optionletVolDisplacement : 0.0, rateComputationPeriod,
+                        onCapSettlementDays),
       flatFirstPeriod_(flatFirstPeriod), capFloorVolType_(capFloorVolType),
       capFloorVolDisplacement_(capFloorVolDisplacement), interpOnOptionlets_(interpOnOptionlets), interpolator_(i),
       bootstrap_(bootstrap), strikeCurves_(nStrikes_), helpers_(nStrikes_) {
@@ -117,6 +120,8 @@ PiecewiseOptionletStripper<Interpolator, Bootstrap>::PiecewiseOptionletStripper(
 
     vector<Rate> strikes = termVolSurface_->strikes();
 
+    bool isOis = boost::dynamic_pointer_cast<OvernightIndex>(index) != nullptr;
+
     // If we interpolate on term volatility surface first and then bootstrap, we have a cap floor helper for every
     // optionlet maturity.
     vector<Period> tenors = interpOnOptionlets_ ? termVolSurface_->optionTenors() : capFloorLengths_;
@@ -126,9 +131,18 @@ PiecewiseOptionletStripper<Interpolator, Bootstrap>::PiecewiseOptionletStripper(
     for (Size j = 0; j < strikes.size(); j++) {
         for (Size i = 0; i < tenors.size(); i++) {
             quotes_[i].push_back(boost::make_shared<SimpleQuote>(termVolSurface_->volatility(tenors[i], strikes[j])));
-            helpers_[j].push_back(boost::make_shared<CapFloorHelper>(
-                CapFloorHelper::Automatic, tenors[i], strikes[j], Handle<Quote>(quotes_[i].back()), iborIndex_,
-                discount_, true, Date(), CapFloorHelper::Volatility, capFloorVolType_, capFloorVolDisplacement_));
+	    if(isOis) {
+                Date effDate = index_->fixingCalendar().advance(
+                    index_->fixingCalendar().adjust(capFloorSurface->referenceDate()), onCapSettlementDays_ * Days);
+                helpers_[j].push_back(boost::make_shared<OISCapFloorHelper>(
+                    CapFloorHelper::Automatic, tenors[i], rateComputationPeriod_, strikes[j],
+                    Handle<Quote>(quotes_[i].back()), boost::dynamic_pointer_cast<OvernightIndex>(index_), discount_,
+                    false, effDate, CapFloorHelper::Volatility, capFloorVolType_, capFloorVolDisplacement_));
+            } else {
+                helpers_[j].push_back(boost::make_shared<CapFloorHelper>(
+                    CapFloorHelper::Automatic, tenors[i], strikes[j], Handle<Quote>(quotes_[i].back()), index_,
+                    discount_, true, Date(), CapFloorHelper::Volatility, capFloorVolType_, capFloorVolDisplacement_));
+            }
         }
     }
 }

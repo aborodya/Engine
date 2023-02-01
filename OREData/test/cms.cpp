@@ -46,7 +46,7 @@ namespace {
 
 class TestMarket : public MarketImpl {
 public:
-    TestMarket() {
+    TestMarket() : MarketImpl(false) {
         asof_ = Date(3, Feb, 2016);
 
         // build discount
@@ -60,24 +60,29 @@ public:
             "EUR-EURIBOR-6M", yieldCurves_[make_tuple(Market::defaultConfiguration, YieldCurveType::Discount, "EUR")]));
         iborIndices_[make_pair(Market::defaultConfiguration, "EUR-EURIBOR-6M")] = hEUR;
 
+        boost::shared_ptr<Conventions> conventions = boost::make_shared<Conventions>();
+        
         // add swap index
         boost::shared_ptr<ore::data::Convention> swapEURConv(new ore::data::IRSwapConvention(
             "EUR-6M-SWAP-CONVENTIONS", "TARGET", "Annual", "MF", "30/360", "EUR-EURIBOR-6M"));
-        conventions_.add(swapEURConv);
+        conventions->add(swapEURConv);
         boost::shared_ptr<ore::data::Convention> swapIndexEURLongConv(
             new ore::data::SwapIndexConvention("EUR-CMS-30Y", "EUR-6M-SWAP-CONVENTIONS"));
-        conventions_.add(swapIndexEURLongConv);
+        conventions->add(swapIndexEURLongConv);
+
+        InstrumentConventions::instance().setConventions(conventions);
+
         addSwapIndex("EUR-CMS-30Y", "EUR-EURIBOR-6M", Market::defaultConfiguration);
     }
 
 private:
     Handle<YieldTermStructure> flatRateYts(Real forward) {
-        boost::shared_ptr<YieldTermStructure> yts(new FlatForward(0, NullCalendar(), forward, ActualActual()));
+        boost::shared_ptr<YieldTermStructure> yts(new FlatForward(0, NullCalendar(), forward, ActualActual(ActualActual::ISDA)));
         return Handle<YieldTermStructure>(yts);
     }
     Handle<SwaptionVolatilityStructure> flatRateSvs(Volatility forward) {
         boost::shared_ptr<SwaptionVolatilityStructure> Svs(
-            new ConstantSwaptionVolatility(0, NullCalendar(), ModifiedFollowing, forward, ActualActual()));
+            new ConstantSwaptionVolatility(0, NullCalendar(), ModifiedFollowing, forward, ActualActual(ActualActual::ISDA)));
         return Handle<SwaptionVolatilityStructure>(Svs);
     }
 };
@@ -418,7 +423,7 @@ BOOST_AUTO_TEST_CASE(cmsCapFloor) {
     boost::shared_ptr<ore::data::CapFloor> floor = vars.makeFloor(floorLow);
     floor->build(engineFactory);
     Real floorNpv = floor->instrument()->NPV();
-    BOOST_TEST_MESSAGE("CMS Floor (Flooe of -100%) NPV is " << floorNpv);
+    BOOST_TEST_MESSAGE("CMS Floor (Floor of -100%) NPV is " << floorNpv);
     BOOST_CHECK_SMALL(floorNpv, 0.01);
 
     BOOST_TEST_MESSAGE("Checking CMS Cap + CMS Floor = Swap...");

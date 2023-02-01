@@ -39,11 +39,12 @@ public:
                const Period& tenor, // swap maturity
                const Handle<Quote>& oisSpread, const boost::shared_ptr<OvernightIndex>& overnightIndex,
                const boost::shared_ptr<IborIndex>& iborIndex,
-               const Handle<YieldTermStructure>& discount = Handle<YieldTermStructure>());
+               const Handle<YieldTermStructure>& discount = Handle<YieldTermStructure>(),
+               const bool telescopicValueDates = false);
     //! \name RateHelper interface
     //@{
-    Real impliedQuote() const;
-    void setTermStructure(YieldTermStructure*);
+    Real impliedQuote() const override;
+    void setTermStructure(YieldTermStructure*) override;
     //@}
     //! \name inspectors
     //@{
@@ -51,16 +52,17 @@ public:
     //@}
     //! \name Visitability
     //@{
-    void accept(AcyclicVisitor&);
+    void accept(AcyclicVisitor&) override;
     //@}
 protected:
-    void initializeDates();
+    void initializeDates() override;
 
     Natural settlementDays_;
     Period tenor_;
     boost::shared_ptr<OvernightIndex> overnightIndex_;
     boost::shared_ptr<IborIndex> iborIndex_;
     Handle<YieldTermStructure> discount_;
+    bool telescopicValueDates_;
 
     boost::shared_ptr<OvernightIndexedBasisSwap> swap_;
     RelinkableHandle<YieldTermStructure> termStructureHandle_;

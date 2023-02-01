@@ -47,10 +47,31 @@ public:
 
     virtual boost::shared_ptr<FXLinked> clone(boost::shared_ptr<FxIndex> fxIndex) = 0;
 
-private:
+protected:
     Date fxFixingDate_;
     Real foreignAmount_;
     boost::shared_ptr<FxIndex> fxIndex_;
+};
+
+class AverageFXLinked {
+public:
+    // if inverted = true, the arithmetic averaging is done over the inverted fixings and the reciprocal of the result
+    // is taken to compute the rate
+    AverageFXLinked(const std::vector<Date>& fixingDates, Real foreignAmount, boost::shared_ptr<FxIndex> fxIndex,
+                    const bool inverted = false);
+    virtual ~AverageFXLinked() {}
+    const std::vector<Date>& fxFixingDates() const { return fxFixingDates_; }
+    Real foreignAmount() const { return foreignAmount_; }
+    const boost::shared_ptr<FxIndex>& fxIndex() const { return fxIndex_; }
+    Real fxRate() const;
+
+    virtual boost::shared_ptr<AverageFXLinked> clone(boost::shared_ptr<FxIndex> fxIndex) = 0;
+
+protected:
+    std::vector<Date> fxFixingDates_;
+    Real foreignAmount_;
+    boost::shared_ptr<FxIndex> fxIndex_;
+    bool inverted_ = false;
 };
 
 //! FX Linked cash-flow
@@ -63,7 +84,7 @@ private:
  *
  * FXLinkedCashFlow checks the FX fixing date against the eval date
  *
- * For furure fixings (date > eval) this class calcualates the FX Fwd
+ * For future fixings (date > eval) this class calculates the FX Fwd
  * rate (using the provided FX Spot rate and FOR and DOM yield curves)
  *
  * For todays fixing (date = eval) this class converts the foreign
@@ -111,6 +132,59 @@ private:
 
 inline void FXLinkedCashFlow::accept(AcyclicVisitor& v) {
     Visitor<FXLinkedCashFlow>* v1 = dynamic_cast<Visitor<FXLinkedCashFlow>*>(&v);
+    if (v1 != 0)
+        v1->visit(*this);
+    else
+        CashFlow::accept(v);
+}
+
+//! Average FX Linked cash-flow
+/*!
+ * Cashflow of Domestic currency where the amount is fx linked
+ * to some fixed foreign amount.
+ *
+ * Difference to the FX Linked cash-flow: The FX rate is an 
+ * arithmetic average across observation dates.
+ *
+ * This is not a lazy object.
+
+ \ingroup cashflows
+ */
+class AverageFXLinkedCashFlow : public CashFlow, public AverageFXLinked, public Observer {
+public:
+    AverageFXLinkedCashFlow(const Date& cashFlowDate, const std::vector<Date>& fixingDates, Real foreignAmount,
+                            boost::shared_ptr<FxIndex> fxIndex, const bool inverted = false);
+
+    //! \name CashFlow interface
+    //@{
+    Date date() const override { return cashFlowDate_; }
+    Real amount() const override { return foreignAmount() * fxRate(); }
+    //@}
+
+    //! \name Visitability
+    //@{
+    void accept(AcyclicVisitor&) override;
+    //@}
+
+    //! \name Observer interface
+    //@{
+    void update() override { notifyObservers(); }
+    //@}
+
+    //! \name FXLinked interface
+    //@{
+    boost::shared_ptr<AverageFXLinked> clone(boost::shared_ptr<FxIndex> fxIndex) override;
+    //@}
+
+    // get single fixing dates and values
+    std::map<Date, Real> fixings() const;
+
+private:
+    Date cashFlowDate_;
+};
+
+inline void AverageFXLinkedCashFlow::accept(AcyclicVisitor& v) {
+    Visitor<AverageFXLinkedCashFlow>* v1 = dynamic_cast<Visitor<AverageFXLinkedCashFlow>*>(&v);
     if (v1 != 0)
         v1->visit(*this);
     else

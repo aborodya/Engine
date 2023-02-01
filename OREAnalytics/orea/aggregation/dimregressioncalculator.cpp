@@ -105,7 +105,7 @@ void RegressionDynamicInitialMarginCalculator::build() {
 
     Size polynomOrder = regressionOrder_;
     LOG("DIM regression polynom order = " << regressionOrder_);
-    LsmBasisSystem::PolynomType polynomType = LsmBasisSystem::Monomial;
+    LsmBasisSystem::PolynomialType polynomType = LsmBasisSystem::Monomial;
     Size regressionDimension = regressors_.empty() ? 1 : regressors_.size();
     LOG("DIM regression dimension = " << regressionDimension);
 #if QL_HEX_VERSION > 0x01150000
@@ -237,7 +237,7 @@ void RegressionDynamicInitialMarginCalculator::build() {
                     //    and to avoid a second regression for the conditional mean
                     // 2) In particular the linear regression function can yield negative variance values in
                     //    extreme scenarios where an exact analytical or delta VaR calculation would yield a
-                    //    variance aproaching zero. We correct this here by taking the positive part.
+                    //    variance approaching zero. We correct this here by taking the positive part.
                     Real std = sqrt(std::max(e, 0.0));
                     Real scalingFactor = horizonScaling * confidenceLevel * nettingSetDimScaling;
                     // Real dim = std * scalingFactor / num1;
@@ -261,7 +261,7 @@ void RegressionDynamicInitialMarginCalculator::build() {
     LOG("DIM by polynomial regression done");
 }
 
-Disposable<Array> RegressionDynamicInitialMarginCalculator::regressorArray(string nettingSet, Size dateIndex,
+Array RegressionDynamicInitialMarginCalculator::regressorArray(string nettingSet, Size dateIndex,
                                                                            Size sampleIndex) {
     Array a(regressors_.size());
     for (Size i = 0; i < regressors_.size(); ++i) {
@@ -391,7 +391,7 @@ void RegressionDynamicInitialMarginCalculator::exportDimEvolution(ore::data::Rep
             }
 
             Date defaultDate = dimCube_->dates()[i];
-            Time t = ActualActual().yearFraction(asof, defaultDate);
+            Time t = ActualActual(ActualActual::ISDA).yearFraction(asof, defaultDate);
             Size days = cubeInterpretation_->getMporCalendarDays(dimCube_, i);
             dimEvolutionReport.next()
                 .add(i)

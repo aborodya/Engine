@@ -22,6 +22,7 @@
 #include <orea/app/reportwriter.hpp>
 #include <orea/app/sensitivityrunner.hpp>
 #include <orea/app/structuredanalyticserror.hpp>
+#include <orea/app/structuredanalyticswarning.hpp>
 #include <orea/app/xvarunner.hpp>
 #include <orea/cube/cubeinterpretation.hpp>
 #include <orea/cube/cubewriter.hpp>
@@ -30,6 +31,8 @@
 #include <orea/cube/npvsensicube.hpp>
 #include <orea/cube/sensicube.hpp>
 #include <orea/cube/sensitivitycube.hpp>
+#include <orea/engine/amcvaluationengine.hpp>
+#include <orea/engine/bufferedsensitivitystream.hpp>
 #include <orea/engine/cptycalculator.hpp>
 #include <orea/engine/filteredsensitivitystream.hpp>
 #include <orea/engine/mporcalculator.hpp>
@@ -48,6 +51,7 @@
 #include <orea/engine/valuationcalculator.hpp>
 #include <orea/engine/valuationengine.hpp>
 #include <orea/scenario/aggregationscenariodata.hpp>
+#include <orea/scenario/clonedscenariogenerator.hpp>
 #include <orea/scenario/clonescenariofactory.hpp>
 #include <orea/scenario/crossassetmodelscenariogenerator.hpp>
 #include <orea/scenario/lgmscenariogenerator.hpp>

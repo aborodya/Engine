@@ -25,6 +25,7 @@
 #include <ored/portfolio/legdata.hpp>
 #include <ored/portfolio/referencedata.hpp>
 #include <ored/portfolio/trade.hpp>
+#include <utility>
 
 namespace ore {
 namespace data {
@@ -35,12 +36,13 @@ namespace data {
 class BondData : public XMLSerializable {
 public:
     //! Default Contructor
-    BondData() : hasCreditRisk_(true), faceAmount_(0.0), zeroBond_(false), bondNotional_(1.0), isPayer_(false) {}
+    BondData() : hasCreditRisk_(true),
+               faceAmount_(0.0), zeroBond_(false), bondNotional_(1.0), isPayer_(false), isInflationLinked_(false) {}
 
     //! Constructor to set up a bond from reference data
     BondData(string securityId, Real bondNotional, bool hasCreditRisk = true)
         : securityId_(securityId), hasCreditRisk_(hasCreditRisk), faceAmount_(0.0), zeroBond_(false),
-          bondNotional_(bondNotional), isPayer_(false) {}
+          bondNotional_(bondNotional), isPayer_(false), isInflationLinked_(false) {}
 
     //! Constructor for coupon bonds
     BondData(string issuerId, string creditCurveId, string securityId, string referenceCurveId, string settlementDays,
@@ -76,36 +78,38 @@ public:
     //! Inspectors
     const string& issuerId() const { return issuerId_; }
     const string& creditCurveId() const { return creditCurveId_; }
+    const string& creditGroup() const { return creditGroup_; }
     const string& securityId() const { return securityId_; }
     const string& referenceCurveId() const { return referenceCurveId_; }
-    const string& proxySecurityId() const { return proxySecurityId_; }
     const string& incomeCurveId() const { return incomeCurveId_; }
     const string& volatilityCurveId() const { return volatilityCurveId_; }
     const string& settlementDays() const { return settlementDays_; }
     const string& calendar() const { return calendar_; }
     const string& issueDate() const { return issueDate_; }
+    QuantExt::BondIndex::PriceQuoteMethod priceQuoteMethod() const;
+    Real priceQuoteBaseValue() const;
     const std::vector<LegData>& coupons() const { return coupons_; }
     const string& currency() const { return currency_; }
     Real bondNotional() const { return bondNotional_; }
     bool hasCreditRisk() const { return hasCreditRisk_; }
     bool isPayer() const { return isPayer_; }
     bool zeroBond() const { return zeroBond_; }
+    bool isInflationLinked() const { return isInflationLinked_; }
     // only used for zero bonds
     Real faceAmount() const { return faceAmount_; }
     const string& maturityDate() const { return maturityDate_; }
-
-    //! returns effective security id (if proxy is given, this is returned, otherwise the original id)
-    const string& effectiveSecurityId() const { return proxySecurityId_.empty() ? securityId_ : proxySecurityId_; }
 
     //! XMLSerializable interface
     virtual void fromXML(XMLNode* node) override;
     virtual XMLNode* toXML(XMLDocument& doc) override;
 
     //! populate data from reference datum and check data for completeness
-    void populateFromBondReferenceData(const boost::shared_ptr<BondReferenceDatum>& referenceDatum);
+    void populateFromBondReferenceData(const boost::shared_ptr<BondReferenceDatum>& referenceDatum,
+				       const std::string& startDate = "", const std::string& endDate = "");
 
     //! look up reference datum in ref data manager and populate, check data for completeness
-    void populateFromBondReferenceData(const boost::shared_ptr<ReferenceDataManager>& referenceData);
+    void populateFromBondReferenceData(const boost::shared_ptr<ReferenceDataManager>& referenceData,
+				       const std::string& startDate = "", const std::string& endDate = "");
 
     //! check data for completeness
     void checkData() const;
@@ -114,14 +118,16 @@ private:
     void initialise();
     string issuerId_;
     string creditCurveId_;
+    string creditGroup_;
     string securityId_;
     string referenceCurveId_;
-    string proxySecurityId_;
     string incomeCurveId_;     // only used for bond derivatives
     string volatilityCurveId_; // only used for bond derivatives
     string settlementDays_;
     string calendar_;
     string issueDate_;
+    string priceQuoteMethod_;
+    string priceQuoteBaseValue_;
     std::vector<LegData> coupons_;
     bool hasCreditRisk_;
     Real faceAmount_;     // only used for zero bonds
@@ -130,6 +136,7 @@ private:
     bool zeroBond_;
     Real bondNotional_;
     bool isPayer_;
+    bool isInflationLinked_;
 };
 
 //! Serializable Bond
@@ -138,20 +145,18 @@ private:
 */
 class Bond : public Trade {
 public:
-    //! Default Contructor
+    //! Default Constructor
     explicit Bond() : Trade("Bond") {}
 
     //! Constructor taking an envelope and bond data
-    Bond(Envelope env, const BondData& bondData) : Trade("Bond", env), bondData_(bondData) {}
+    Bond(Envelope env, const BondData& bondData)
+        : Trade("Bond", env), originalBondData_(bondData), bondData_(bondData) {}
 
     //! Trade interface
     virtual void build(const boost::shared_ptr<EngineFactory>&) override;
 
     //! inspectors
     const BondData& bondData() const { return bondData_; }
-    // FIXME can we remove the following inspectors and use bondData().XXX() instead?
-    const string& currency() const { return bondData_.currency(); }
-    const string& creditCurveId() const { return bondData_.creditCurveId(); }
 
     //! Add underlying Bond names
     std::map<AssetClass, std::set<std::string>>
@@ -162,25 +167,42 @@ public:
     virtual XMLNode* toXML(XMLDocument& doc) override;
 
 private:
-    BondData bondData_;
+    BondData originalBondData_, bondData_;
 };
 
 //! Bond Factory that builds bonds from reference data
 
 struct BondBuilder {
+    struct Result {
+        boost::shared_ptr<QuantLib::Bond> bond;
+        boost::shared_ptr<ore::data::ModelBuilder> modelBuilder; // might be nullptr
+
+        
+        bool isInflationLinked = false;
+        bool hasCreditRisk = true;
+        std::string currency;
+        std::string creditCurveId;
+        std::string securityId;
+        std::string creditGroup;
+        QuantExt::BondIndex::PriceQuoteMethod priceQuoteMethod = QuantExt::BondIndex::PriceQuoteMethod::PercentageOfPar;
+        double priceQuoteBaseValue = 1.0;
+
+        double inflationFactor() const;
+    };
     virtual ~BondBuilder() {}
-    virtual boost::shared_ptr<QuantLib::Bond> build(const boost::shared_ptr<EngineFactory>& engineFactory,
-                                                    const boost::shared_ptr<ReferenceDataManager>& referenceData,
-                                                    const std::string& securityId) const = 0;
+    virtual Result build(const boost::shared_ptr<EngineFactory>& engineFactory,
+                         const boost::shared_ptr<ReferenceDataManager>& referenceData,
+                         const std::string& securityId) const = 0;
 };
 
-class BondFactory : public QuantLib::Singleton<BondFactory> {
+class BondFactory : public QuantLib::Singleton<BondFactory, std::integral_constant<bool, true>> {
     map<std::string, boost::shared_ptr<BondBuilder>> builders_;
+    mutable boost::shared_mutex mutex_;
 
 public:
-    boost::shared_ptr<QuantLib::Bond> build(const boost::shared_ptr<EngineFactory>& engineFactory,
-                                            const boost::shared_ptr<ReferenceDataManager>& referenceData,
-                                            const std::string& securityId) const;
+    BondBuilder::Result build(const boost::shared_ptr<EngineFactory>& engineFactory,
+                              const boost::shared_ptr<ReferenceDataManager>& referenceData,
+                              const std::string& securityId) const;
     void addBuilder(const std::string& referenceDataType, const boost::shared_ptr<BondBuilder>& builder);
 };
 
@@ -192,9 +214,9 @@ template <typename T> struct BondBuilderRegister {
 
 struct VanillaBondBuilder : public BondBuilder {
     static BondBuilderRegister<VanillaBondBuilder> reg_;
-    boost::shared_ptr<QuantLib::Bond> build(const boost::shared_ptr<EngineFactory>& engineFactory,
-                                            const boost::shared_ptr<ReferenceDataManager>& referenceData,
-                                            const std::string& securityId) const override;
+    virtual Result build(const boost::shared_ptr<EngineFactory>& engineFactory,
+                         const boost::shared_ptr<ReferenceDataManager>& referenceData,
+                         const std::string& securityId) const override;
 };
 
 } // namespace data

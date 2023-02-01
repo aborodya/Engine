@@ -17,8 +17,9 @@
 */
 
 #include <ored/configuration/iborfallbackconfig.hpp>
-
 #include <ored/utilities/to_string.hpp>
+#include <ored/utilities/log.hpp>
+#include <ored/portfolio/structuredconfigurationwarning.hpp>
 
 namespace ore {
 namespace data {
@@ -99,7 +100,8 @@ XMLNode* IborFallbackConfig::toXML(XMLDocument& doc) {
 }
 
 IborFallbackConfig IborFallbackConfig::defaultConfig() {
-    // A switch date 1 Jan 2022 indicates that the cessation date is not yet known. Sources:
+    // A switch date 1 Jan 2100 indicates that the cessation date is not yet known.
+    // Sources:
     // [1] BBG ISDA IBOR Fallback Dashboard (Tenor Effective Date = switchDate, Spread Adjustment Today => spread)
     // [2] https://assets.bbhub.io/professional/sites/10/IBOR-Fallbacks-LIBOR-Cessation_Announcement_20210305.pdf
     // [3] https://www.isda.org/2021/03/05/isda-statement-on-uk-fca-libor-announcement/
@@ -116,6 +118,7 @@ IborFallbackConfig IborFallbackConfig::defaultConfig() {
                                     {"CHF-LIBOR-3M", FallbackData{"CHF-SARON", 0.000031, Date(1, Jan, 2022)}},
                                     {"CHF-LIBOR-6M", FallbackData{"CHF-SARON", 0.000741, Date(1, Jan, 2022)}},
                                     {"CHF-LIBOR-12M", FallbackData{"CHF-SARON", 0.002048, Date(1, Jan, 2022)}},
+                                    {"EUR-EONIA", FallbackData{"EUR-ESTER", 0.00085, Date(1, Jan, 2022)}},
                                     {"EUR-EURIBOR-1W", FallbackData{"EUR-ESTER", 0.000577, Date(1, Jan, 2100)}},
                                     {"EUR-EURIBOR-1M", FallbackData{"EUR-ESTER", 0.000738, Date(1, Jan, 2100)}},
                                     {"EUR-EURIBOR-3M", FallbackData{"EUR-ESTER", 0.001244, Date(1, Jan, 2100)}},
@@ -159,11 +162,11 @@ IborFallbackConfig IborFallbackConfig::defaultConfig() {
                                     {"HKD-HIBOR-3M", FallbackData{"HKD-HONIA", 0.0072642, Date(1, Jan, 2100)}},
                                     {"HKD-HIBOR-6M", FallbackData{"HKD-HONIA", 0.0093495, Date(1, Jan, 2100)}},
                                     {"HKD-HIBOR-12M", FallbackData{"HKD-HONIA", 0.0121231, Date(1, Jan, 2100)}},
-                                    {"CAD-CDOR-1M", FallbackData{"CAD-CORRA", 0.0033033, Date(1, Jan, 2100)}},
-                                    {"CAD-CDOR-2M", FallbackData{"CAD-CORRA", 0.0035822, Date(1, Jan, 2100)}},
-                                    {"CAD-CDOR-3M", FallbackData{"CAD-CORRA", 0.0037292, Date(1, Jan, 2100)}},
-                                    {"CAD-CDOR-6M", FallbackData{"CAD-CORRA", 0.0049323, Date(17, May, 2021)}},
-                                    {"CAD-CDOR-12M", FallbackData{"CAD-CORRA", 0.005479, Date(17, May, 2021)}},
+                                    {"CAD-CDOR-1M", FallbackData{"CAD-CORRA", 0.0029547, Date(1, July, 2024)}},
+                                    {"CAD-CDOR-2M", FallbackData{"CAD-CORRA", 0.0030190, Date(1, July, 2024)}},
+                                    {"CAD-CDOR-3M", FallbackData{"CAD-CORRA", 0.0032138, Date(1, July, 2024)}},
+                                    {"CAD-CDOR-6M", FallbackData{"CAD-CORRA", 0.0049375, Date(17, May, 2021)}},
+                                    {"CAD-CDOR-12M", FallbackData{"CAD-CORRA", 0.005482, Date(17, May, 2021)}},
                                     {"GBP-LIBOR-ON", FallbackData{"GBP-SONIA", -0.000024, Date(1, Jan, 2022)}},
                                     {"GBP-LIBOR-1W", FallbackData{"GBP-SONIA", 0.000168, Date(1, Jan, 2022)}},
                                     {"GBP-LIBOR-1M", FallbackData{"GBP-SONIA", 0.000326, Date(1, Jan, 2022)}},
@@ -177,8 +180,29 @@ IborFallbackConfig IborFallbackConfig::defaultConfig() {
                                     {"USD-LIBOR-2M", FallbackData{"USD-SOFR", 0.0018456, Date(1, Jan, 2023)}},
                                     {"USD-LIBOR-3M", FallbackData{"USD-SOFR", 0.0026161, Date(1, Jul, 2023)}},
                                     {"USD-LIBOR-6M", FallbackData{"USD-SOFR", 0.0042826, Date(1, Jul, 2023)}},
-                                    {"USD-LIBOR-12M", FallbackData{"USD-SOFR", 0.0071513, Date(1, Jul, 2023)}}}};
+                                    {"USD-LIBOR-12M", FallbackData{"USD-SOFR", 0.0071513, Date(1, Jul, 2023)}},
+                                    {"TRY-TRLIBOR-1M", FallbackData{"TRY-TLREF", 0.0100, Date(1, July, 2022)}},
+                                    {"TRY-TRLIBOR-3M", FallbackData{"TRY-TLREF", 0.0093, Date(1, July, 2022)}},
+                                    {"TRY-TRLIBOR-6M", FallbackData{"TRY-TLREF", 0.0058, Date(1, July, 2022)}}}};
     return c;
+}
+
+void IborFallbackConfig::updateSwitchDate(QuantLib::Date targetSwitchDate, const std::string& indexName) {
+    for (std::map<std::string, FallbackData>::iterator f = fallbacks_.begin(); f != fallbacks_.end(); f++) {
+        if ((f->first == indexName || indexName == "") && // selected index or all of them if indexName is left blank
+            f->second.switchDate > targetSwitchDate)  {   // skipping IBORs with switch dates before the target switch date
+            WLOG(StructuredConfigurationWarningMessage("IborFallbackConfig", f->first,
+                                                       "update switch date from " + to_string(f->second.switchDate) +
+                                                           " to " + to_string(targetSwitchDate)));
+            f->second.switchDate = targetSwitchDate;
+        }
+    }
+}
+
+void IborFallbackConfig::logSwitchDates() {
+    for (auto f : fallbacks_) {
+        DLOG("IBOR index " << f.first << " has fallback switch date " << to_string(f.second.switchDate));
+    }
 }
 
 } // namespace data

@@ -24,9 +24,9 @@
 #ifndef quantext_black_cds_option_engine_hpp
 #define quantext_black_cds_option_engine_hpp
 
-#include <qle/instruments/cdsoption.hpp>
 #include <ql/termstructures/yieldtermstructure.hpp>
-#include <ql/termstructures/volatility/equityfx/blackvoltermstructure.hpp>
+#include <qle/instruments/cdsoption.hpp>
+#include <qle/termstructures/creditvolcurve.hpp>
 
 namespace QuantExt {
 
@@ -36,7 +36,7 @@ namespace QuantExt {
     structure's strike dimension, if there is one, is in terms of spread also. This is the standard situation for 
     single name CDS options.
 
-    The valuation follows the approach outlined in <em>Modelling Single-name and Multi-name Credit Derivatives, 
+    The valuation follows the approach outlined in <em>Modeling Single-name and Multi-name Credit Derivatives, 
     Dominic O'Kane, 2008, Section 9.3.7</em>. This is also the approach in <em>A CDS Option Miscellany, Richard 
     J. Martin, 2019, Section 2.1 and 2.2</em>. If we need the approach in Section 2.4 of that paper, we would need 
     to make adjustments to the forward spread and RPV01 in our calculation which may in turn need access to the ISDA 
@@ -47,14 +47,14 @@ public:
     BlackCdsOptionEngine(const QuantLib::Handle<QuantLib::DefaultProbabilityTermStructure>& probability,
         QuantLib::Real recovery,
         const QuantLib::Handle<QuantLib::YieldTermStructure>& discount,
-        const QuantLib::Handle<QuantLib::BlackVolTermStructure>& volatility);
+        const QuantLib::Handle<QuantExt::CreditVolCurve>& volatility);
 
     //! \name Inspectors
     //@{
     const QuantLib::Handle<QuantLib::DefaultProbabilityTermStructure>& probability() const;
     QuantLib::Real recovery() const;
     const QuantLib::Handle<QuantLib::YieldTermStructure> discount() const;
-    const QuantLib::Handle<QuantLib::BlackVolTermStructure> volatility() const;
+    const QuantLib::Handle<QuantExt::CreditVolCurve> volatility() const;
     //@}
 
     //! \name Instrument interface
@@ -66,8 +66,7 @@ private:
     QuantLib::Handle<QuantLib::DefaultProbabilityTermStructure> probability_;
     QuantLib::Real recovery_;
     QuantLib::Handle<QuantLib::YieldTermStructure> discount_;
-    QuantLib::Handle<QuantLib::BlackVolTermStructure> volatility_;
-
+    QuantLib::Handle<QuantExt::CreditVolCurve> volatility_;
 };
 
 }

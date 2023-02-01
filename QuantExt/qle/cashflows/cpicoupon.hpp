@@ -35,15 +35,29 @@ class InflationCashFlowPricer;
 class CPICoupon : public QuantLib::CPICoupon {
 public:
     CPICoupon(Real baseCPI, // user provided, could be arbitrary
-              const Date& paymentDate, Real nominal, const Date& startDate, const Date& endDate, Natural fixingDays,
+              const Date& paymentDate, Real nominal, const Date& startDate, const Date& endDate,
               const ext::shared_ptr<ZeroInflationIndex>& index, const Period& observationLag,
               CPI::InterpolationType observationInterpolation, const DayCounter& dayCounter,
               Real fixedRate, // aka gearing
               Spread spread = 0.0, const Date& refPeriodStart = Date(), const Date& refPeriodEnd = Date(),
               const Date& exCouponDate = Date(), bool subtractInflationNominal = false)
-        : QuantLib::CPICoupon(baseCPI, paymentDate, nominal, startDate, endDate, fixingDays, index, observationLag,
+        : QuantLib::CPICoupon(baseCPI, paymentDate, nominal, startDate, endDate, index, observationLag,
                               observationInterpolation, dayCounter, fixedRate, spread, refPeriodStart,
                               refPeriodEnd, exCouponDate),
+          subtractInflationNominal_(subtractInflationNominal){};
+
+    CPICoupon(Real baseCPI,
+              const Date& baseDate, // user provided, could be arbitrary
+              const Date& paymentDate, Real nominal, const Date& startDate, const Date& endDate,
+              const ext::shared_ptr<ZeroInflationIndex>& index, const Period& observationLag,
+              CPI::InterpolationType observationInterpolation, const DayCounter& dayCounter,
+              Real fixedRate, // aka gearing
+              Spread spread = 0.0, const Date& refPeriodStart = Date(), const Date& refPeriodEnd = Date(),
+              const Date& exCouponDate = Date(), bool subtractInflationNominal = false)
+        : QuantLib::CPICoupon(baseCPI, baseDate, paymentDate, nominal, startDate, endDate, index,
+                              observationLag,
+                              observationInterpolation, dayCounter, fixedRate, spread, refPeriodStart, refPeriodEnd,
+                              exCouponDate),
           subtractInflationNominal_(subtractInflationNominal){};
 
     virtual Rate rate() const override;
@@ -62,7 +76,7 @@ public:
     CappedFlooredCPICashFlow(const ext::shared_ptr<CPICashFlow>& underlying, Date startDate = Date(),
                              Period observationLag = 0 * Days, Rate cap = Null<Rate>(), Rate floor = Null<Rate>());
 
-    virtual Real amount() const;
+    virtual Real amount() const override;
     void setPricer(const ext::shared_ptr<InflationCashFlowPricer>& pricer);
     bool isCapped() const { return isCapped_; }
     bool isFloored() const { return isFloored_; }
@@ -86,18 +100,18 @@ class CappedFlooredCPICoupon : public CPICoupon {
 public:
     CappedFlooredCPICoupon(const ext::shared_ptr<CPICoupon>& underlying, Date startDate = Date(),
                            Rate cap = Null<Rate>(), Rate floor = Null<Rate>());
-    virtual Rate rate() const;
+    virtual Rate rate() const override;
 
     ext::shared_ptr<CPICoupon> underlying() const { return underlying_; }
 
     //! \name Observer interface
     //@{
-    void update();
+    void update() override;
     //@}
 
     //! \name Visitability
     //@{
-    virtual void accept(AcyclicVisitor& v);
+    virtual void accept(AcyclicVisitor& v) override;
     //@}
 
     bool isCapped() const { return isCapped_; }
@@ -148,6 +162,7 @@ public:
     CPILeg& withStartDate(const Date& startDate);
     CPILeg& withObservationLag(const Period& observationLag);
     CPILeg& withSubtractInflationNominalAllCoupons(bool subtractInflationNominalAllCoupons);
+    CPILeg& withBaseDate(const Date& baseDate);
     operator Leg() const;
 
 private:
@@ -175,6 +190,9 @@ private:
 
     // Needed for pricing the embedded caps/floors
     Date startDate_;
+    // Needed if baseCPI is not given
+    Date baseDate_;
+    
 };
 
 } // namespace QuantExt

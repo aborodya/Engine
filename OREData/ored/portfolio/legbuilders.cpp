@@ -19,6 +19,7 @@
 #include <ored/portfolio/legbuilders.hpp>
 #include <ored/portfolio/legdata.hpp>
 #include <ored/portfolio/referencedata.hpp>
+#include <ored/utilities/marketdata.hpp>
 
 #include <qle/cashflows/floatingratefxlinkednotionalcoupon.hpp>
 
@@ -31,16 +32,19 @@ Leg FixedLegBuilder::buildLeg(const LegData& data, const boost::shared_ptr<Engin
                               RequiredFixings& requiredFixings, const string& configuration,
                               const QuantLib::Date& openEndDateReplacement) const {
     Leg leg = makeFixedLeg(data, openEndDateReplacement);
-    std::map<std::string, std::string> qlToOREIndexNames;
-    applyIndexing(leg, data, engineFactory, qlToOREIndexNames, requiredFixings, openEndDateReplacement);
-    addToRequiredFixings(leg, boost::make_shared<FixingDateGetter>(requiredFixings, qlToOREIndexNames));
+    applyIndexing(leg, data, engineFactory, requiredFixings, openEndDateReplacement);
+    addToRequiredFixings(leg, boost::make_shared<FixingDateGetter>(requiredFixings));
     return leg;
 }
 
 Leg ZeroCouponFixedLegBuilder::buildLeg(const LegData& data, const boost::shared_ptr<EngineFactory>& engineFactory,
                                         RequiredFixings& requiredFixings, const string& configuration,
                                         const QuantLib::Date& openEndDateReplacement) const {
-    return makeZCFixedLeg(data);
+    Leg leg = makeZCFixedLeg(data);
+    applyIndexing(leg, data, engineFactory, requiredFixings, openEndDateReplacement);
+    addToRequiredFixings(leg, boost::make_shared<FixingDateGetter>(requiredFixings));
+    return leg;
+
 }
 
 Leg FloatingLegBuilder::buildLeg(const LegData& data, const boost::shared_ptr<EngineFactory>& engineFactory,
@@ -61,23 +65,15 @@ Leg FloatingLegBuilder::buildLeg(const LegData& data, const boost::shared_ptr<En
         else
             result = makeIborLeg(data, index, engineFactory, true, openEndDateReplacement);
     }
-    std::map<std::string, std::string> qlToOREIndexNames;
-    applyIndexing(result, data, engineFactory, qlToOREIndexNames, requiredFixings, openEndDateReplacement);
-    qlToOREIndexNames[index->name()] = indexName;
-    if (engineFactory->iborFallbackConfig().isIndexReplaced(indexName)) {
-        auto rfrName = engineFactory->iborFallbackConfig().fallbackData(indexName).rfrIndex;
-        // we don't support convention based rfr fallback indices, with ore ticket 1758 this might change
-        qlToOREIndexNames[parseIborIndex(rfrName)->name()] = rfrName;
-    }
-
-    addToRequiredFixings(result, boost::make_shared<FixingDateGetter>(requiredFixings, qlToOREIndexNames));
+    applyIndexing(result, data, engineFactory, requiredFixings, openEndDateReplacement);
+    addToRequiredFixings(result, boost::make_shared<FixingDateGetter>(requiredFixings));
 
     // handle fx resetting Ibor leg
 
     if (data.legType() == "Floating" && !data.isNotResetXCCY()) {
         QL_REQUIRE(!data.fxIndex().empty(), "FloatingRateLegBuilder: need fx index for fx resetting leg");
         auto fxIndex = buildFxIndex(data.fxIndex(), data.currency(), data.foreignCurrency(), engineFactory->market(),
-                                    configuration, data.fixingCalendar(), data.fixingDays(), true);
+                                    configuration, true);       
 
         // If the domestic notional value is not specified, i.e. there are no notionals specified in the leg
         // data, then all coupons including the first will be FX linked. If the first coupon's FX fixing date
@@ -97,13 +93,13 @@ Leg FloatingLegBuilder::buildLeg(const LegData& data, const boost::shared_ptr<En
 
         // Make the necessary FX linked floating rate coupons
         for (; j < result.size(); ++j) {
-            boost::shared_ptr<FloatingRateCoupon> coupon = boost::dynamic_pointer_cast<FloatingRateCoupon>(result[j]);
-
+            boost::shared_ptr<FloatingRateCoupon> coupon =
+                boost::dynamic_pointer_cast<FloatingRateCoupon>(result[j]);            
             Date fixingDate = fxIndex->fixingCalendar().advance(coupon->accrualStartDate(),
                                                                 -static_cast<Integer>(fxIndex->fixingDays()), Days);
             boost::shared_ptr<FloatingRateFXLinkedNotionalCoupon> fxLinkedCoupon =
-                boost::make_shared<FloatingRateFXLinkedNotionalCoupon>(fixingDate, data.foreignAmount(), fxIndex,
-                                                                       coupon);
+                boost::make_shared<FloatingRateFXLinkedNotionalCoupon>(fixingDate, data.foreignAmount(), 
+                    fxIndex, coupon);
             // set the same pricer
             fxLinkedCoupon->setPricer(coupon->pricer());
             result[j] = fxLinkedCoupon;
@@ -130,8 +126,8 @@ Leg CPILegBuilder::buildLeg(const LegData& data, const boost::shared_ptr<EngineF
     string inflationIndexName = cpiData->index();
     auto index = *engineFactory->market()->zeroInflationIndex(inflationIndexName, configuration);
     Leg result = makeCPILeg(data, index, engineFactory, openEndDateReplacement);
-    addToRequiredFixings(result, boost::make_shared<FixingDateGetter>(
-                                     requiredFixings, std::map<string, string>{{index->name(), inflationIndexName}}));
+    applyIndexing(result, data, engineFactory, requiredFixings, openEndDateReplacement);
+    addToRequiredFixings(result, boost::make_shared<FixingDateGetter>(requiredFixings));
     return result;
 }
 
@@ -146,15 +142,14 @@ Leg YYLegBuilder::buildLeg(const LegData& data, const boost::shared_ptr<EngineFa
     if (!irregularYoY) {
         auto index = *engineFactory->market()->yoyInflationIndex(inflationIndexName, configuration);
         result = makeYoYLeg(data, index, engineFactory, openEndDateReplacement);
+        applyIndexing(result, data, engineFactory, requiredFixings, openEndDateReplacement);
         addToRequiredFixings(result,
-                             boost::make_shared<FixingDateGetter>(
-                                 requiredFixings, std::map<string, string>{{index->name(), inflationIndexName}}));
+                             boost::make_shared<FixingDateGetter>(requiredFixings));
     } else {
         auto index = *engineFactory->market()->zeroInflationIndex(inflationIndexName, configuration);
         result = makeYoYLeg(data, index, engineFactory, openEndDateReplacement);
-        addToRequiredFixings(result,
-                             boost::make_shared<FixingDateGetter>(
-                                 requiredFixings, std::map<string, string>{{index->name(), inflationIndexName}}));
+        applyIndexing(result, data, engineFactory, requiredFixings, openEndDateReplacement);
+        addToRequiredFixings(result, boost::make_shared<FixingDateGetter>(requiredFixings));
     }
     return result;
 }
@@ -166,11 +161,22 @@ Leg CMSLegBuilder::buildLeg(const LegData& data, const boost::shared_ptr<EngineF
     QL_REQUIRE(cmsData, "Wrong LegType, expected CMS");
     string swapIndexName = cmsData->swapIndex();
     auto index = *engineFactory->market()->swapIndex(swapIndexName, configuration);
-    Leg result = makeCMSLeg(data, index, engineFactory, {}, {}, true, openEndDateReplacement);
-    std::map<std::string, std::string> qlToOREIndexNames;
-    applyIndexing(result, data, engineFactory, qlToOREIndexNames, requiredFixings, openEndDateReplacement);
-    qlToOREIndexNames[index->name()] = swapIndexName;
-    addToRequiredFixings(result, boost::make_shared<FixingDateGetter>(requiredFixings, qlToOREIndexNames));
+    Leg result = makeCMSLeg(data, index, engineFactory, true, openEndDateReplacement);
+    applyIndexing(result, data, engineFactory, requiredFixings, openEndDateReplacement);
+    addToRequiredFixings(result, boost::make_shared<FixingDateGetter>(requiredFixings));
+    return result;
+}
+
+Leg CMBLegBuilder::buildLeg(const LegData& data, const boost::shared_ptr<EngineFactory>& engineFactory,
+                            RequiredFixings& requiredFixings, const string& configuration,
+                            const QuantLib::Date& openEndDateReplacement) const {
+    auto cmbData = boost::dynamic_pointer_cast<CMBLegData>(data.concreteLegData());
+    QL_REQUIRE(cmbData, "Wrong LegType, expected CMB");
+    string indexName = cmbData->genericBond();
+    auto index = parseConstantMaturityBondIndex(indexName);
+    Leg result = makeCMBLeg(data, engineFactory, true, openEndDateReplacement);
+    applyIndexing(result, data, engineFactory, requiredFixings, openEndDateReplacement);
+    addToRequiredFixings(result, boost::make_shared<FixingDateGetter>(requiredFixings));
     return result;
 }
 
@@ -186,10 +192,8 @@ Leg DigitalCMSLegBuilder::buildLeg(const LegData& data, const boost::shared_ptr<
     string swapIndexName = digitalCmsData->underlying()->swapIndex();
     auto index = *engineFactory->market()->swapIndex(swapIndexName, configuration);
     Leg result = makeDigitalCMSLeg(data, index, engineFactory, true, openEndDateReplacement);
-    std::map<std::string, std::string> qlToOREIndexNames;
-    applyIndexing(result, data, engineFactory, qlToOREIndexNames, requiredFixings);
-    qlToOREIndexNames[index->name()] = swapIndexName;
-    addToRequiredFixings(result, boost::make_shared<FixingDateGetter>(requiredFixings, qlToOREIndexNames));
+    applyIndexing(result, data, engineFactory, requiredFixings);
+    addToRequiredFixings(result, boost::make_shared<FixingDateGetter>(requiredFixings));
     return result;
 }
 
@@ -204,11 +208,8 @@ Leg CMSSpreadLegBuilder::buildLeg(const LegData& data, const boost::shared_ptr<E
                                   boost::make_shared<QuantLib::SwapSpreadIndex>(
                                       "CMSSpread_" + index1->familyName() + "_" + index2->familyName(), index1, index2),
                                   engineFactory, true, openEndDateReplacement);
-    std::map<std::string, std::string> qlToOREIndexNames;
-    applyIndexing(result, data, engineFactory, qlToOREIndexNames, requiredFixings, openEndDateReplacement);
-    qlToOREIndexNames[index1->name()] = cmsSpreadData->swapIndex1();
-    qlToOREIndexNames[index2->name()] = cmsSpreadData->swapIndex2();
-    addToRequiredFixings(result, boost::make_shared<FixingDateGetter>(requiredFixings, qlToOREIndexNames));
+    applyIndexing(result, data, engineFactory, requiredFixings, openEndDateReplacement);
+    addToRequiredFixings(result, boost::make_shared<FixingDateGetter>(requiredFixings));
     return result;
 }
 
@@ -229,11 +230,8 @@ Leg DigitalCMSSpreadLegBuilder::buildLeg(const LegData& data, const boost::share
                                 boost::make_shared<QuantLib::SwapSpreadIndex>(
                                     "CMSSpread_" + index1->familyName() + "_" + index2->familyName(), index1, index2),
                                 engineFactory, openEndDateReplacement);
-    std::map<std::string, std::string> qlToOREIndexNames;
-    applyIndexing(result, data, engineFactory, qlToOREIndexNames, requiredFixings, openEndDateReplacement);
-    qlToOREIndexNames[index1->name()] = cmsSpreadData->swapIndex1();
-    qlToOREIndexNames[index2->name()] = cmsSpreadData->swapIndex2();
-    addToRequiredFixings(result, boost::make_shared<FixingDateGetter>(requiredFixings, qlToOREIndexNames));
+    applyIndexing(result, data, engineFactory, requiredFixings, openEndDateReplacement);
+    addToRequiredFixings(result, boost::make_shared<FixingDateGetter>(requiredFixings));
     return result;
 }
 
@@ -244,6 +242,13 @@ Leg EquityLegBuilder::buildLeg(const LegData& data, const boost::shared_ptr<Engi
     QL_REQUIRE(eqData, "Wrong LegType, expected Equity");
     string eqName = eqData->eqName();
     auto eqCurve = *engineFactory->market()->equityCurve(eqName, configuration);
+
+    // A little hacky but ensures for a dividend swap the swap value doesn't move equity price
+    if (eqData->returnType() == EquityReturnType::Dividend) {
+        Real spotVal = eqCurve->equitySpot()->value();
+        Handle<Quote> divSpot = Handle<Quote>(boost::make_shared<SimpleQuote>(spotVal));
+        eqCurve = eqCurve->clone(divSpot, eqCurve->equityForecastCurve(), eqCurve->equityDividendCurve());
+    }
 
     Currency dataCurrency = parseCurrencyWithMinors(data.currency());
     Currency eqCurrency;
@@ -276,15 +281,12 @@ Leg EquityLegBuilder::buildLeg(const LegData& data, const boost::shared_ptr<Engi
         }
 
         fxIndex = buildFxIndex(eqData->fxIndex(), data.currency(), eqCurrency.code(), engineFactory->market(),
-                               configuration, eqData->fxIndexCalendar(), eqData->fxIndexFixingDays());
+                               configuration);
+
     }
 
     Leg result = makeEquityLeg(data, eqCurve, fxIndex, openEndDateReplacement);
-    addToRequiredFixings(
-        result, boost::make_shared<FixingDateGetter>(
-                    requiredFixings,
-                    std::map<string, string>{{eqCurve->name(), "EQ-" + eqName},
-                                             {fxIndex != nullptr ? fxIndex->name() : "na", eqData->fxIndex()}}));
+    addToRequiredFixings(result, boost::make_shared<FixingDateGetter>(requiredFixings));
     return result;
 }
 

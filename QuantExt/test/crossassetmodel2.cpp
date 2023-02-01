@@ -65,8 +65,7 @@
 #include <qle/pricingengines/discountingfxforwardengine.hpp>
 #include <qle/pricingengines/discountingriskybondengine.hpp>
 #include <qle/pricingengines/discountingswapenginemulticurve.hpp>
-#include <qle/pricingengines/midpointcdsengine.hpp>
-#include <qle/pricingengines/numericlgmswaptionengine.hpp>
+#include <qle/pricingengines/numericlgmmultilegoptionengine.hpp>
 #include <qle/pricingengines/oiccbasisswapengine.hpp>
 #include <qle/pricingengines/paymentdiscountingengine.hpp>
 
@@ -107,7 +106,9 @@ using namespace boost::accumulators;
 namespace {
 
 struct Lgm31fTestData {
-    Lgm31fTestData() : refDate(18, Dec, 2015), yts(boost::make_shared<FlatForward>(refDate, 0.02, ActualActual())) {
+    Lgm31fTestData()
+        : refDate(18, Dec, 2015),
+          yts(boost::make_shared<FlatForward>(refDate, 0.02, ActualActual(ActualActual::ISDA))) {
 
         Settings::instance().evaluationDate() = refDate;
         Size tmp[31] = { 0,  1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 12, 16, 17, 18,
@@ -645,7 +646,7 @@ struct Lgm31fTestData {
 
         Array irTimes(LENGTH(irTen));
         for (Size i = 0; i < LENGTH(irTen); ++i) {
-            irTimes[i] = ActualActual().yearFraction(refDate, TARGET().advance(refDate, irTen[i]));
+            irTimes[i] = ActualActual(ActualActual::ISDA).yearFraction(refDate, TARGET().advance(refDate, irTen[i]));
         }
         // for parametrization set up (without last time)
         Array irTimes2(irTimes.begin(), irTimes.end() - 1);
@@ -654,7 +655,8 @@ struct Lgm31fTestData {
 
         // dummy yts (we check covariances here for which the yts does not
         // matter)
-        Handle<YieldTermStructure> yts(boost::make_shared<FlatForward>(refDate, 0.02, ActualActual()));
+        Handle<YieldTermStructure> yts(
+            boost::make_shared<FlatForward>(refDate, 0.02, ActualActual(ActualActual::ISDA)));
 
         Array alpha(LENGTH(irTen)), lambda(LENGTH(irTen));
 
@@ -828,7 +830,7 @@ struct Lgm31fTestData {
 
         Array inflTimes(LENGTH(inflTen));
         for (Size i = 0; i < LENGTH(inflTen); ++i) {
-            inflTimes[i] = ActualActual().yearFraction(refDate, TARGET().advance(refDate, inflTen[i]));
+            inflTimes[i] = ActualActual(ActualActual::ISDA).yearFraction(refDate, TARGET().advance(refDate, inflTen[i]));
         }
         // for parametrization set up (without last time)
         Array inflTimes2(inflTimes.begin(), inflTimes.end() - 1);
@@ -882,7 +884,7 @@ struct Lgm31fTestData {
 
         Array fxTimes(LENGTH(fxTen));
         for (Size i = 0; i < LENGTH(fxTen); ++i) {
-            fxTimes[i] = ActualActual().yearFraction(refDate, TARGET().advance(refDate, fxTen[i]));
+            fxTimes[i] = ActualActual(ActualActual::ISDA).yearFraction(refDate, TARGET().advance(refDate, fxTen[i]));
         }
         // for parametrization set up (without last time)
         Array fxTimes2(fxTimes.begin(), fxTimes.end() - 1);
@@ -1023,7 +1025,12 @@ struct Lgm31fTestData {
         // CrossAsset model
         // =========================================
 
-        xmodel = boost::make_shared<CrossAssetModel>(parametrizations, rho, SalvagingAlgorithm::None);
+        xmodelExact =
+            boost::make_shared<CrossAssetModel>(parametrizations, rho, SalvagingAlgorithm::None, IrModel::Measure::LGM,
+                                                CrossAssetModel::Discretization::Exact);
+        xmodelEuler =
+            boost::make_shared<CrossAssetModel>(parametrizations, rho, SalvagingAlgorithm::None, IrModel::Measure::LGM,
+                                                CrossAssetModel::Discretization::Euler);
     }
 
     SavedSettings backup;
@@ -1033,7 +1040,7 @@ struct Lgm31fTestData {
     Matrix rho;
     Handle<YieldTermStructure> yts;
     std::vector<boost::shared_ptr<Parametrization> > parametrizations;
-    boost::shared_ptr<CrossAssetModel> xmodel;
+    boost::shared_ptr<CrossAssetModel> xmodelExact, xmodelEuler;
 };
 
 } // namespace
@@ -1067,23 +1074,23 @@ BOOST_AUTO_TEST_CASE(testLgm31fPositiveCovariance) {
     simTimes_.push_back(0.0);
     for (Size i = 1; i <= 118; ++i) {
         Date tmp = TARGET().advance(d.refDate, i * Months);
-        simTimes_.push_back(ActualActual().yearFraction(d.refDate, tmp));
+        simTimes_.push_back(ActualActual(ActualActual::ISDA).yearFraction(d.refDate, tmp));
     }
     for (Size i = 1; i <= 40; ++i) {
         Date tmp = TARGET().advance(d.refDate, (117 + 3 * i) * Months);
-        simTimes_.push_back(ActualActual().yearFraction(d.refDate, tmp));
+        simTimes_.push_back(ActualActual(ActualActual::ISDA).yearFraction(d.refDate, tmp));
     }
     for (Size i = 1; i <= 31; ++i) {
         Date tmp = TARGET().advance(d.refDate, (19 + i) * Years);
-        simTimes_.push_back(ActualActual().yearFraction(d.refDate, tmp));
+        simTimes_.push_back(ActualActual(ActualActual::ISDA).yearFraction(d.refDate, tmp));
     }
     for (Size i = 1; i <= 10; ++i) {
         Date tmp = TARGET().advance(d.refDate, (50 + i * 5) * Years);
-        simTimes_.push_back(ActualActual().yearFraction(d.refDate, tmp));
+        simTimes_.push_back(ActualActual(ActualActual::ISDA).yearFraction(d.refDate, tmp));
     }
 
-    boost::shared_ptr<StochasticProcess> p_exact = d.xmodel->stateProcess(CrossAssetStateProcess::exact);
-    boost::shared_ptr<StochasticProcess> p_euler = d.xmodel->stateProcess(CrossAssetStateProcess::euler);
+    boost::shared_ptr<StochasticProcess> p_exact = d.xmodelExact->stateProcess();
+    boost::shared_ptr<StochasticProcess> p_euler = d.xmodelEuler->stateProcess();
 
     // check that covariance matrices are positive semidefinite
 
@@ -1119,13 +1126,13 @@ BOOST_AUTO_TEST_CASE(testLgm31fMoments) {
 
     Lgm31fTestData d;
 
-    boost::shared_ptr<StochasticProcess> p_exact = d.xmodel->stateProcess(CrossAssetStateProcess::exact);
-    boost::shared_ptr<StochasticProcess> p_euler = d.xmodel->stateProcess(CrossAssetStateProcess::euler);
+    boost::shared_ptr<StochasticProcess> p_exact = d.xmodelExact->stateProcess();
+    boost::shared_ptr<StochasticProcess> p_euler = d.xmodelEuler->stateProcess();
 
     Array x0 = p_exact->initialValues();
 
     // check the expectation and covariance over 0...T against euler
-    Real T = 10.0;
+    Real T = 2.0;
     Size steps = static_cast<Size>(T * 10.0);
     Size paths = 25000;
     Size seed = 42;
@@ -1241,10 +1248,10 @@ BOOST_AUTO_TEST_CASE(testLgm31fMartingaleProperty) {
 
     Lgm31fTestData d;
 
-    boost::shared_ptr<StochasticProcess> p_exact = d.xmodel->stateProcess(CrossAssetStateProcess::exact);
-    boost::shared_ptr<StochasticProcess> p_euler = d.xmodel->stateProcess(CrossAssetStateProcess::euler);
+    boost::shared_ptr<StochasticProcess> p_exact = d.xmodelExact->stateProcess();
+    boost::shared_ptr<StochasticProcess> p_euler = d.xmodelEuler->stateProcess();
 
-    Real T = 10.0;
+    Real T = 2.0;
     Size steps = static_cast<Size>(T * 10.0);
     Size paths = 25000;
     Size seed = 42;
@@ -1262,11 +1269,11 @@ BOOST_AUTO_TEST_CASE(testLgm31fMartingaleProperty) {
         for (Size ii = 0; ii < nIr; ++ii) {
             if (ii == 0) {
                 // domestic currency
-                e_eu2[ii](1.0 / d.xmodel->numeraire(0, T, path.value[0].back()));
+                e_eu2[ii](1.0 / d.xmodelExact->numeraire(0, T, path.value[0].back()));
             } else {
                 // foreign currencies
                 e_eu2[ii](std::exp(path.value[nIr + (ii - 1)].back()) /
-                          d.xmodel->numeraire(0, T, path.value[0].back()));
+                          d.xmodelExact->numeraire(0, T, path.value[0].back()));
             }
         }
     }

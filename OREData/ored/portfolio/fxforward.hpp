@@ -79,9 +79,6 @@ private:
     string payDate_;
     string payLag_;
     string payCalendar_;
-    string payConvention_;
-    Natural fxIndexDays_ = 0;
-    string fxIndexCalendar_ = "";
-};
+    string payConvention_;};
 } // namespace data
 } // namespace ore

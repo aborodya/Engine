@@ -44,7 +44,7 @@ namespace QuantExt {
     its Handle is empty) or both.
 
     The currencies are deduced from the ibor indexes. The spotFx
-    be be quoted with either of these currencies, this is determined
+    to be quoted with either of these currencies, this is determined
     by the invertFxIndex flag. The settlement date of the spot is
     assumed to be equal to the settlement date of the swap itself.
 
@@ -66,12 +66,12 @@ public:
         bool resetsOnFloatLeg = true);
     //! \name RateHelper interface
     //@{
-    Real impliedQuote() const;
-    void setTermStructure(YieldTermStructure*);
+    Real impliedQuote() const override;
+    void setTermStructure(YieldTermStructure*) override;
     //@}
     //! \name Observer interface
     //@{
-    void update();
+    void update() override;
     //@}
     //! \name inspectors
     //@{
@@ -79,11 +79,11 @@ public:
     //@}
     //! \name Visitability
     //@{
-    void accept(AcyclicVisitor&);
+    void accept(AcyclicVisitor&) override;
     //@}
 
 protected:
-    void initializeDates();
+    void initializeDates() override;
 
     QuantLib::Handle<QuantLib::Quote> spotFx_;
     QuantLib::Natural settlementDays_;

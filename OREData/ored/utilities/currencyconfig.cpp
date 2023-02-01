@@ -17,11 +17,13 @@
 */
 
 #include <ored/utilities/currencyconfig.hpp>
+#include <ored/utilities/currencyparser.hpp>
 #include <ored/utilities/parsers.hpp>
 #include <ored/utilities/to_string.hpp>
 #include <ql/currency.hpp>
 #include <qle/currencies/configurablecurrency.hpp>
 #include <string>
+
 namespace ore {
 namespace data {
 
@@ -34,52 +36,32 @@ void CurrencyConfig::fromXML(XMLNode* baseNode) {
     for (auto node : XMLUtils::getChildrenNodes(baseNode, "Currency")) {
         string name = XMLUtils::getChildValue(node, "Name", false);
         string isoCode = XMLUtils::getChildValue(node, "ISOCode", false);
-	DLOG("Loading external currency configuration for " << isoCode);
-        Integer numericCode = parseInteger(XMLUtils::getChildValue(node, "NumericCode", false));
-        string symbol = XMLUtils::getChildValue(node, "Symbol", false);
-        string fractionSymbol = XMLUtils::getChildValue(node, "Symbol", false);
-        Integer fractionsPerUnit = parseInteger(XMLUtils::getChildValue(node, "FractionsPerUnit", false));
-        Rounding::Type roundingType = parseRoundingType(XMLUtils::getChildValue(node, "RoundingType", false));
-        Integer precision = parseInteger(XMLUtils::getChildValue(node, "RoundingPrecision", false));
-        // the digit where we switch form roundng down to rounding up, typically 5 and used across all
-        // Integer digit = parseInteger(XMLUtils::getChildValue(node, "Digit", false));
-        string format = XMLUtils::getChildValue(node, "Format", false);
-        Rounding rounding;
-        switch (roundingType) {
-        case Rounding::Type::Up: {
-            rounding = UpRounding(precision);
-            break;
-        }
-        case Rounding::Type::Down: {
-            rounding = DownRounding(precision);
-            break;
-        }
-        case Rounding::Type::Closest: {
-            rounding = ClosestRounding(precision);
-            break;
-        }
-        case Rounding::Type::Floor: {
-            rounding = FloorTruncation(precision);
-            break;
-        }
-        case Rounding::Type::Ceiling: {
-            rounding = CeilingTruncation(precision);
-            break;
-        }
-        default: {
-            ALOG("Rounding type not recognized, falling back on 'Closest'");
-            rounding = ClosestRounding(precision);
-        }
-        }
+	auto tmp = parseListOfValues(XMLUtils::getChildValue(node, "MinorUnitCodes", false));
+        std::set<std::string> minorUnitCodes(tmp.begin(), tmp.end());
+        try {
+            DLOG("Loading external currency configuration for " << isoCode);
+            Integer numericCode = parseInteger(XMLUtils::getChildValue(node, "NumericCode", false));
+            string symbol = XMLUtils::getChildValue(node, "Symbol", false);
+            string fractionSymbol = XMLUtils::getChildValue(node, "Symbol", false);
+            Integer fractionsPerUnit = parseInteger(XMLUtils::getChildValue(node, "FractionsPerUnit", false));
+            Rounding::Type roundingType = parseRoundingType(XMLUtils::getChildValue(node, "RoundingType", false));
+            Integer precision = parseInteger(XMLUtils::getChildValue(node, "RoundingPrecision", false));
+            // the digit where we switch form roundng down to rounding up, typically 5 and used across all
+            // Integer digit = parseInteger(XMLUtils::getChildValue(node, "Digit", false));
+            string format = XMLUtils::getChildValue(node, "Format", false);
+            Rounding rounding(precision, roundingType);
 
-        QuantExt::ConfigurableCurrency c(name, isoCode, numericCode, symbol, fractionSymbol, fractionsPerUnit, rounding,
-                                         format);
-        currencies_.push_back(c);
+            QuantExt::ConfigurableCurrency c(name, isoCode, numericCode, symbol, fractionSymbol, fractionsPerUnit,
+                                             rounding, format, minorUnitCodes);
+            currencies_.push_back(c);
 
-        DLOG("loading configuration for currency code " << isoCode);
+            DLOG("loading configuration for currency code " << isoCode);
 
-        // this pushes any additional currency into the parser's static map
-        parseCurrency(c.code(), c);
+            CurrencyParser::instance().addCurrency(c.code(), c);
+
+        } catch (std::exception&) {
+            ALOG("error loading currency config for name " << name << " iso code " << isoCode);
+        }
     }
 }
 
@@ -89,6 +71,9 @@ XMLNode* CurrencyConfig::toXML(XMLDocument& doc) {
         XMLNode* ccyNode = XMLUtils::addChild(doc, node, "Currency");
         XMLUtils::addChild(doc, ccyNode, "Name", ccy.name());
         XMLUtils::addChild(doc, ccyNode, "ISOCode", ccy.code());
+        XMLUtils::addGenericChildAsList(
+            doc, ccyNode, "MinorUnitCodes",
+            std::vector<std::string>(ccy.minorUnitCodes().begin(), ccy.minorUnitCodes().end()));
         XMLUtils::addChild(doc, ccyNode, "NumericCode", to_string(ccy.numericCode()));
         XMLUtils::addChild(doc, ccyNode, "Symbol", ccy.symbol());
         XMLUtils::addChild(doc, ccyNode, "FractionSymbol", ccy.fractionSymbol());

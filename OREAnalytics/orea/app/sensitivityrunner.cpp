@@ -42,9 +42,9 @@ vector<string> getFilenames(const string& fileString, const string& path) {
 namespace ore {
 namespace analytics {
 
-void SensitivityRunner::runSensitivityAnalysis(boost::shared_ptr<Market> market, Conventions& conventions,
-                                               const CurveConfigurations& curveConfigs,
-                                               const TodaysMarketParameters& todaysMarketParams) {
+void SensitivityRunner::runSensitivityAnalysis(boost::shared_ptr<Market> market,
+                                               const boost::shared_ptr<CurveConfigurations>& curveConfigs,
+                                               const boost::shared_ptr<TodaysMarketParameters>& todaysMarketParams) {
 
     MEM_LOG;
     LOG("Running sensitivity analysis");
@@ -66,9 +66,9 @@ void SensitivityRunner::runSensitivityAnalysis(boost::shared_ptr<Market> market,
     }
 
     boost::shared_ptr<SensitivityAnalysis> sensiAnalysis = boost::make_shared<SensitivityAnalysis>(
-        sensiPortfolio, market, marketConfiguration, engineData, simMarketData, sensiData_, conventions,
-        recalibrateModels, curveConfigs, todaysMarketParams, false, extraEngineBuilders_, extraLegBuilders_,
-        referenceData_, iborFallbackConfig_, continueOnError_, false, analyticFxSensis);
+        sensiPortfolio, market, marketConfiguration, engineData, simMarketData, sensiData_, recalibrateModels,
+        curveConfigs, todaysMarketParams, false, extraEngineBuilders_, extraLegBuilders_, referenceData_,
+        iborFallbackConfig_, continueOnError_, analyticFxSensis);
     sensiAnalysis->generateSensitivities();
 
     simMarket_ = sensiAnalysis->simMarket();
@@ -131,6 +131,9 @@ void SensitivityRunner::sensiOutputReports(const boost::shared_ptr<SensitivityAn
     outputFile = outputPath + "/" + params_->get("sensitivity", "sensitivityOutputFile");
     CSVFileReport sensiReport(outputFile);
     ReportWriter().writeSensitivityReport(sensiReport, ss, sensiThreshold, outputPrecision);
+
+    CSVFileReport pricingStatsReport(params_->get("setup", "outputPath") + "/pricingstats_sensi.csv");
+    ore::analytics::ReportWriter().writePricingStats(pricingStatsReport, sensiAnalysis->portfolio());
 }
 
 } // namespace analytics

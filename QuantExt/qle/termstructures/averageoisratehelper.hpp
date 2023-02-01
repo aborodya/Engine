@@ -48,12 +48,13 @@ public:
                          const boost::shared_ptr<OvernightIndex>& overnightIndex, const Period& onTenor,
                          const Handle<Quote>& onSpread, Natural rateCutoff,
                          // Exogenous discount curve
-                         const Handle<YieldTermStructure>& discountCurve = Handle<YieldTermStructure>());
+                         const Handle<YieldTermStructure>& discountCurve = Handle<YieldTermStructure>(),
+                         const bool telescopicValueDates = false);
 
     //! \name RateHelper interface
     //@{
-    Real impliedQuote() const;
-    void setTermStructure(YieldTermStructure*);
+    Real impliedQuote() const override;
+    void setTermStructure(YieldTermStructure*) override;
     //@}
     //! \name AverageOISRateHelper inspectors
     //@{
@@ -62,10 +63,10 @@ public:
     //@}
     //! \name Visitability
     //@{
-    void accept(AcyclicVisitor&);
+    void accept(AcyclicVisitor&) override;
     //@}
 protected:
-    void initializeDates();
+    void initializeDates() override;
     boost::shared_ptr<AverageOIS> averageOIS_;
     // Swap
     Period spotLagTenor_;
@@ -85,6 +86,7 @@ protected:
     RelinkableHandle<YieldTermStructure> termStructureHandle_;
     Handle<YieldTermStructure> discountHandle_;
     RelinkableHandle<YieldTermStructure> discountRelinkableHandle_;
+    bool telescopicValueDates_;
 };
 } // namespace QuantExt
 

@@ -28,10 +28,13 @@
 #include <ored/portfolio/swap.hpp>
 #include <ored/utilities/indexparser.hpp>
 #include <ored/utilities/log.hpp>
+#include <ored/utilities/to_string.hpp>
 #include <ored/utilities/parsers.hpp>
+#include <ql/cashflows/cpicoupon.hpp>
 #include <ql/cashflows/simplecashflow.hpp>
 #include <ql/instruments/bond.hpp>
 #include <ql/instruments/bonds/zerocouponbond.hpp>
+#include <qle/utilities/inflation.hpp>
 
 using namespace QuantLib;
 using namespace QuantExt;
@@ -39,29 +42,49 @@ using namespace QuantExt;
 namespace ore {
 namespace data {
 
+QuantExt::BondIndex::PriceQuoteMethod BondData::priceQuoteMethod() const {
+    return priceQuoteMethod_.empty() ? QuantExt::BondIndex::PriceQuoteMethod::PercentageOfPar
+                                     : parsePriceQuoteMethod(priceQuoteMethod_);
+}
+
+Real BondData::priceQuoteBaseValue() const {
+    if (priceQuoteBaseValue_.empty())
+        return 1.0;
+    Real result;
+    if (tryParseReal(priceQuoteBaseValue_, result))
+        return result;
+    QL_FAIL("invalid PriceQuoteBaseValue '" << priceQuoteBaseValue_ << "'");
+}
+
 void BondData::fromXML(XMLNode* node) {
     XMLUtils::checkNode(node, "BondData");
     QL_REQUIRE(node, "No BondData Node");
     issuerId_ = XMLUtils::getChildValue(node, "IssuerId", false);
     creditCurveId_ = XMLUtils::getChildValue(node, "CreditCurveId", false);
+    creditGroup_ = XMLUtils::getChildValue(node, "CreditGroup", false);
     securityId_ = XMLUtils::getChildValue(node, "SecurityId", true);
     referenceCurveId_ = XMLUtils::getChildValue(node, "ReferenceCurveId", false);
-    proxySecurityId_ = XMLUtils::getChildValue(node, "ProxySecurityId", false);
     incomeCurveId_ = XMLUtils::getChildValue(node, "IncomeCurveId", false);
     volatilityCurveId_ = XMLUtils::getChildValue(node, "VolatilityCurveId", false);
     settlementDays_ = XMLUtils::getChildValue(node, "SettlementDays", false);
     calendar_ = XMLUtils::getChildValue(node, "Calendar", false);
     issueDate_ = XMLUtils::getChildValue(node, "IssueDate", false);
+    priceQuoteMethod_ = XMLUtils::getChildValue(node, "PriceQuoteMethod", false);
+    priceQuoteBaseValue_ = XMLUtils::getChildValue(node, "PriceQuoteBaseValue", false);
     if (auto n = XMLUtils::getChildNode(node, "BondNotional")) {
         bondNotional_ = parseReal(XMLUtils::getNodeValue(n));
     } else {
         bondNotional_ = 1.0;
     }
     XMLNode* legNode = XMLUtils::getChildNode(node, "LegData");
+    isInflationLinked_ = false;
     while (legNode != nullptr) {
         LegData ld;
         ld.fromXML(legNode);
         coupons_.push_back(ld);
+        if (ld.concreteLegData()->legType() == "CPI") {
+            isInflationLinked_ = true;
+        }
         legNode = XMLUtils::getNextSibling(legNode, "LegData");
     }
     hasCreditRisk_ = XMLUtils::getChildValueAsBool(node, "CreditRisk", false, true);
@@ -70,19 +93,29 @@ void BondData::fromXML(XMLNode* node) {
 
 XMLNode* BondData::toXML(XMLDocument& doc) {
     XMLNode* bondNode = doc.allocNode("BondData");
-    XMLUtils::addChild(doc, bondNode, "IssuerId", issuerId_);
-    XMLUtils::addChild(doc, bondNode, "CreditCurveId", creditCurveId_);
+    if (!issuerId_.empty())
+        XMLUtils::addChild(doc, bondNode, "IssuerId", issuerId_);
+    if (!creditCurveId_.empty())
+        XMLUtils::addChild(doc, bondNode, "CreditCurveId", creditCurveId_);
+    if (!creditGroup_.empty())
+        XMLUtils::addChild(doc, bondNode, "CreditGroup", creditGroup_);
     XMLUtils::addChild(doc, bondNode, "SecurityId", securityId_);
-    XMLUtils::addChild(doc, bondNode, "ReferenceCurveId", referenceCurveId_);
-    if (!proxySecurityId_.empty())
-        XMLUtils::addChild(doc, bondNode, "ProxySecurityId", proxySecurityId_);
+    if (!referenceCurveId_.empty())
+        XMLUtils::addChild(doc, bondNode, "ReferenceCurveId", referenceCurveId_);
     if (!incomeCurveId_.empty())
         XMLUtils::addChild(doc, bondNode, "IncomeCurveId", incomeCurveId_);
     if (!volatilityCurveId_.empty())
         XMLUtils::addChild(doc, bondNode, "VolatilityCurveId", volatilityCurveId_);
-    XMLUtils::addChild(doc, bondNode, "SettlementDays", settlementDays_);
-    XMLUtils::addChild(doc, bondNode, "Calendar", calendar_);
-    XMLUtils::addChild(doc, bondNode, "IssueDate", issueDate_);
+    if (!settlementDays_.empty())
+        XMLUtils::addChild(doc, bondNode, "SettlementDays", settlementDays_);
+    if (!calendar_.empty())
+        XMLUtils::addChild(doc, bondNode, "Calendar", calendar_);
+    if (!issueDate_.empty())
+        XMLUtils::addChild(doc, bondNode, "IssueDate", issueDate_);
+    if(!priceQuoteMethod_.empty())
+	XMLUtils::addChild(doc, bondNode, "PriceQuoteMethod", priceQuoteMethod_);
+    if(!priceQuoteBaseValue_.empty())
+	XMLUtils::addChild(doc, bondNode, "PriceQuoteBaseValue", priceQuoteBaseValue_);
     XMLUtils::addChild(doc, bondNode, "BondNotional", bondNotional_);
     for (auto& c : coupons_)
         XMLUtils::appendNode(bondNode, c.toXML(doc));
@@ -94,11 +127,7 @@ XMLNode* BondData::toXML(XMLDocument& doc) {
 void BondData::initialise() {
 
     isPayer_ = false;
-
-    if (!hasCreditRisk() && !creditCurveId().empty()) {
-        WLOG("BondData: CreditCurveId provided, but CreditRisk set to False, continuing without CreditRisk");
-        creditCurveId_ = "";
-    }
+    isInflationLinked_ = false;
 
     if (!zeroBond()) {
 
@@ -125,19 +154,34 @@ void BondData::initialise() {
                                         << ") not equal to leg #0 isPayer (" << coupons()[0].isPayer());
             }
         }
+
+        // fill isInflationLinked
+        for (Size i = 0; i < coupons().size(); ++i) {
+            if (i == 0)
+                isInflationLinked_ = coupons()[i].concreteLegData()->legType() == "CPI";
+            else {
+                bool isIthCouponInflationLinked = coupons()[i].concreteLegData()->legType() == "CPI";
+                QL_REQUIRE(isInflationLinked_ == isIthCouponInflationLinked,
+                           "bond leg #" << i << " isInflationLinked (" << std::boolalpha << isIthCouponInflationLinked
+                                        << ") not equal to leg #0 isInflationLinked (" << isInflationLinked_);
+            }
+        }
     }
 }
 
-void BondData::populateFromBondReferenceData(const boost::shared_ptr<BondReferenceDatum>& referenceDatum) {
+void BondData::populateFromBondReferenceData(const boost::shared_ptr<BondReferenceDatum>& referenceDatum,
+					       const std::string& startDate, const std::string& endDate) {
     DLOG("Got BondReferenceDatum for name " << securityId_ << " overwrite empty elements in trade");
-    ore::data::populateFromBondReferenceData(issuerId_, settlementDays_, calendar_, issueDate_, creditCurveId_,
-                                             referenceCurveId_, proxySecurityId_, incomeCurveId_, volatilityCurveId_,
-                                             coupons_, securityId_, referenceDatum);
+    ore::data::populateFromBondReferenceData(issuerId_, settlementDays_, calendar_, issueDate_, priceQuoteMethod_,
+                                             priceQuoteBaseValue_, creditCurveId_, creditGroup_, referenceCurveId_,
+                                             incomeCurveId_, volatilityCurveId_, coupons_, securityId_, referenceDatum,
+                                             startDate, endDate);
     initialise();
     checkData();
 }
 
-void BondData::populateFromBondReferenceData(const boost::shared_ptr<ReferenceDataManager>& referenceData) {
+void BondData::populateFromBondReferenceData(const boost::shared_ptr<ReferenceDataManager>& referenceData,
+					     const std::string& startDate, const std::string& endDate) {
     QL_REQUIRE(!securityId_.empty(), "BondData::populateFromBondReferenceData(): no security id given");
     if (!referenceData || !referenceData->hasData(BondReferenceDatum::TYPE, securityId_)) {
         DLOG("could not get BondReferenceDatum for name " << securityId_ << " leave data in trade unchanged");
@@ -147,7 +191,7 @@ void BondData::populateFromBondReferenceData(const boost::shared_ptr<ReferenceDa
         auto bondRefData = boost::dynamic_pointer_cast<BondReferenceDatum>(
             referenceData->getData(BondReferenceDatum::TYPE, securityId_));
         QL_REQUIRE(bondRefData, "could not cast to BondReferenceDatum, this is unexpected");
-        populateFromBondReferenceData(bondRefData);
+        populateFromBondReferenceData(bondRefData, startDate, endDate);
     }
 }
 
@@ -170,6 +214,7 @@ void Bond::build(const boost::shared_ptr<EngineFactory>& engineFactory) {
     boost::shared_ptr<EngineBuilder> builder = engineFactory->builder("Bond");
     QL_REQUIRE(builder, "Bond::build(): internal error, builder is null");
 
+    bondData_ = originalBondData_;
     bondData_.populateFromBondReferenceData(engineFactory->referenceData());
 
     Date issueDate = parseDate(bondData_.issueDate());
@@ -180,7 +225,7 @@ void Bond::build(const boost::shared_ptr<EngineFactory>& engineFactory) {
     Natural settlementDays = parseInteger(bondData_.settlementDays());
     boost::shared_ptr<QuantLib::Bond> bond;
 
-    std::string openEndDateStr = builder->modelParameter("OpenEndDateReplacement", "", false, "");
+    std::string openEndDateStr = builder->modelParameter("OpenEndDateReplacement", {}, false, "");
     Date openEndDateReplacement = getOpenEndDateReplacement(openEndDateStr, calendar);
     Real mult = bondData_.bondNotional() * (bondData_.isPayer() ? -1.0 : 1.0);
     std::vector<Leg> separateLegs;
@@ -203,8 +248,8 @@ void Bond::build(const boost::shared_ptr<EngineFactory>& engineFactory) {
     Currency currency = parseCurrency(bondData_.currency());
     boost::shared_ptr<BondEngineBuilder> bondBuilder = boost::dynamic_pointer_cast<BondEngineBuilder>(builder);
     QL_REQUIRE(bondBuilder, "No Builder found for Bond: " << id());
-    bond->setPricingEngine(
-        bondBuilder->engine(currency, bondData_.creditCurveId(), bondData_.securityId(), bondData_.referenceCurveId()));
+    bond->setPricingEngine(bondBuilder->engine(currency, bondData_.creditCurveId(), bondData_.hasCreditRisk(),
+                                               bondData_.securityId(), bondData_.referenceCurveId()));
     instrument_.reset(new VanillaInstrument(bond, mult));
 
     npvCurrency_ = bondData_.currency();
@@ -216,16 +261,19 @@ void Bond::build(const boost::shared_ptr<EngineFactory>& engineFactory) {
     legs_ = {bond->cashflows()};
     legCurrencies_ = {npvCurrency_};
     legPayers_ = {bondData_.isPayer()};
+
+    DLOG("Bond::build() finished for trade " << id());
 }
 
 void Bond::fromXML(XMLNode* node) {
     Trade::fromXML(node);
-    bondData_.fromXML(XMLUtils::getChildNode(node, "BondData"));
+    originalBondData_.fromXML(XMLUtils::getChildNode(node, "BondData"));
+    bondData_ = originalBondData_;
 }
 
 XMLNode* Bond::toXML(XMLDocument& doc) {
     XMLNode* node = Trade::toXML(doc);
-    XMLUtils::appendNode(node, bondData_.toXML(doc));
+    XMLUtils::appendNode(node, originalBondData_.toXML(doc));
     return node;
 }
 
@@ -236,12 +284,30 @@ Bond::underlyingIndices(const boost::shared_ptr<ReferenceDataManager>& reference
     return result;
 }
 
-boost::shared_ptr<QuantLib::Bond> BondFactory::build(const boost::shared_ptr<EngineFactory>& engineFactory,
-                                                     const boost::shared_ptr<ReferenceDataManager>& referenceData,
-                                                     const std::string& securityId) const {
+double BondBuilder::Result::inflationFactor() const {
+    if (!isInflationLinked) {
+        return 1.0;
+    } else {
+        QL_REQUIRE(bond, "need to set the bond before calling inflationFactor()");
+        double factor = 1.0;
+        try {
+            factor = QuantExt::inflationLinkedBondQuoteFactor(bond);
+        } catch (const std::exception& e) {
+            ALOG("Failed to compute the inflation price factor for the bond "
+                 << securityId << ", fallback to use factor 1, got " << e.what());
+        }
+        return factor;
+    }
+}
+
+BondBuilder::Result BondFactory::build(const boost::shared_ptr<EngineFactory>& engineFactory,
+                                       const boost::shared_ptr<ReferenceDataManager>& referenceData,
+                                       const std::string& securityId) const {
+    boost::shared_lock<boost::shared_mutex> lock(mutex_);
     for (auto const& b : builders_) {
-        if (referenceData->hasData(b.first, securityId))
+        if (referenceData->hasData(b.first, securityId)) {
             return b.second->build(engineFactory, referenceData, securityId);
+        }
     }
 
     QL_FAIL("BondFactory: could not build bond '"
@@ -251,15 +317,15 @@ boost::shared_ptr<QuantLib::Bond> BondFactory::build(const boost::shared_ptr<Eng
 }
 
 void BondFactory::addBuilder(const std::string& referenceDataType, const boost::shared_ptr<BondBuilder>& builder) {
+    boost::unique_lock<boost::shared_mutex> lock(mutex_);
     builders_[referenceDataType] = builder;
 }
 
 BondBuilderRegister<VanillaBondBuilder> VanillaBondBuilder::reg_("Bond");
 
-boost::shared_ptr<QuantLib::Bond>
-VanillaBondBuilder::build(const boost::shared_ptr<EngineFactory>& engineFactory,
-                          const boost::shared_ptr<ReferenceDataManager>& referenceData,
-                          const std::string& securityId) const {
+BondBuilder::Result VanillaBondBuilder::build(const boost::shared_ptr<EngineFactory>& engineFactory,
+                                              const boost::shared_ptr<ReferenceDataManager>& referenceData,
+                                              const std::string& securityId) const {
     BondData data(securityId, 1.0);
     data.populateFromBondReferenceData(referenceData);
     ore::data::Bond bond(Envelope(), data);
@@ -273,7 +339,20 @@ VanillaBondBuilder::build(const boost::shared_ptr<EngineFactory>& engineFactory,
                "VanillaBondBuilder: constructed bond trade does not provide a valid ql instrument, this is unexpected "
                "(either the instrument wrapper or the ql instrument is null)");
 
-    return qlBond;
+    Result res;
+    res.bond = qlBond;
+
+    if (data.isInflationLinked()) {
+        res.isInflationLinked = true;       
+    }
+    res.hasCreditRisk = data.hasCreditRisk() && !data.creditCurveId().empty();
+    res.currency = data.currency();
+    res.creditCurveId = data.creditCurveId();
+    res.securityId = data.securityId();
+    res.creditGroup = data.creditGroup();
+    res.priceQuoteMethod = data.priceQuoteMethod();
+    res.priceQuoteBaseValue = data.priceQuoteBaseValue();
+    return res;
 }
 
 } // namespace data

@@ -19,40 +19,47 @@
 #include <ored/model/irlgmdata.hpp>
 #include <ored/utilities/log.hpp>
 #include <ored/utilities/parsers.hpp>
+#include <ored/utilities/indexparser.hpp>
 
 namespace ore {
 namespace data {
 
 void IrLgmData::fromXML(XMLNode* node) {
-    qualifier_ = XMLUtils::getAttribute(node, "ccy");
-    LOG("LGM with attribute (ccy) = " << qualifier_);
+    qualifier_ = XMLUtils::getAttribute(node, "key");
+    if(qualifier_.empty()) {
+	std::string ccy = XMLUtils::getAttribute(node, "ccy");
+	if(!ccy.empty()) {
+	    qualifier_ = ccy;
+	    WLOG("IrLgmData: attribute ccy is deprecated, use key instead.");
+	}
+    }
+    LOG("LGM with attribute (key) = " << qualifier_);
 
     // Calibration Swaptions
 
-    XMLNode* optionsNode = XMLUtils::getChildNode(node, "CalibrationSwaptions");
+    if (XMLNode* optionsNode = XMLUtils::getChildNode(node, "CalibrationSwaptions")) {
+        optionExpiries() = XMLUtils::getChildrenValuesAsStrings(optionsNode, "Expiries", false);
+        optionTerms() = XMLUtils::getChildrenValuesAsStrings(optionsNode, "Terms", false);
+        QL_REQUIRE(optionExpiries().size() == optionTerms().size(),
+                   "vector size mismatch in swaption expiries/terms for ccy " << qualifier_);
+        optionStrikes() = XMLUtils::getChildrenValuesAsStrings(optionsNode, "Strikes", false);
+        if (optionStrikes().size() > 0) {
+            QL_REQUIRE(optionStrikes().size() == optionExpiries().size(),
+                       "vector size mismatch in swaption expiries/strikes for ccy " << qualifier_);
+        } else // Default: ATM
+            optionStrikes().resize(optionExpiries().size(), "ATM");
 
-    optionExpiries() = XMLUtils::getChildrenValuesAsStrings(optionsNode, "Expiries", false);
-    optionTerms() = XMLUtils::getChildrenValuesAsStrings(optionsNode, "Terms", false);
-    QL_REQUIRE(optionExpiries().size() == optionTerms().size(),
-               "vector size mismatch in swaption expiries/terms for ccy " << qualifier_);
-    optionStrikes() = XMLUtils::getChildrenValuesAsStrings(optionsNode, "Strikes", false);
-    if (optionStrikes().size() > 0) {
-        QL_REQUIRE(optionStrikes().size() == optionExpiries().size(),
-                   "vector size mismatch in swaption expiries/strikes for ccy " << qualifier_);
-    } else // Default: ATM
-        optionStrikes().resize(optionExpiries().size(), "ATM");
-
-    for (Size i = 0; i < optionExpiries().size(); i++) {
-        LOG("LGM calibration swaption " << optionExpiries()[i] << " x " << optionTerms()[i] << " "
-                                        << optionStrikes()[i]);
+        for (Size i = 0; i < optionExpiries().size(); i++) {
+            LOG("LGM calibration swaption " << optionExpiries()[i] << " x " << optionTerms()[i] << " "
+                                            << optionStrikes()[i]);
+        }
     }
-
     LgmData::fromXML(node);
 }
 
 XMLNode* IrLgmData::toXML(XMLDocument& doc) {
     XMLNode* node = LgmData::toXML(doc);
-    XMLUtils::addAttribute(doc, node, "ccy", qualifier_);
+    XMLUtils::addAttribute(doc, node, "key", qualifier_);
 
     // swaption calibration
     XMLNode* calibrationSwaptionsNode = XMLUtils::addChild(doc, node, "CalibrationSwaptions");
@@ -62,5 +69,6 @@ XMLNode* IrLgmData::toXML(XMLDocument& doc) {
 
     return node;
 }
+
 } // namespace data
 } // namespace ore

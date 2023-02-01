@@ -8,11 +8,14 @@ The short version is shown in listing \ref{lst:bonddata_refdata}. The details of
 bond are read from the reference data in this case using the SecurityId as a key. The bond trade is fully specified by
 
 \begin{itemize}
-\item SecurityId: The id identifying the bond\\
+\item SecurityId: The id identifying the bond.
+
   Allowable Values: A valid bond identifier, typically the ISIN of the reference bond with the ISIN: prefix, e.g.: \verb+ISIN:XXNNNNNNNNNN+
-\item BondNotional: The notional of the position in the reference bond, expressed in the currency of the bond\\
+\item BondNotional: The notional of the position in the reference bond, expressed in the currency of the bond.
+
   Allowable Values: Any non-negative real number
-\item CreditRisk [Optional] Boolean flag indicating whether to show Credit Risk on the Bond product. If set to \emph{false}, the product class will  not be set to \emph{Credit}, and there will be no credit sensitivities. \\
+\item CreditRisk [Optional] Boolean flag indicating whether to show Credit Risk on the Bond product. If set to \emph{false}, the product class will  not be set to \emph{Credit}, and there will be no credit sensitivities. However, if the underlying bond reference is set up without a CreditCurveId - typically for some highly rated government bonds -  the CreditRisk flag will have no impact on the product class and no credit sensitivities will be shown even if CreditRisk is set to \emph{true}. 
+
   Allowable Values: \emph{true} or \emph{false} Defaults to \emph{true} if left blank or omitted.
 \end{itemize}
 
@@ -49,14 +52,6 @@ Allowable values: A valid bond identifier, typically the ISIN of the reference b
 \item SecurityId: The unique identifier of the bond.  This defines the security specific spread to be used for pricing.
 
 Allowable values: A valid bond identifier, typically the ISIN of the reference bond with the ISIN: prefix, e.g.: \verb+ISIN:XXNNNNNNNNNN+
-
-\item ProxySecurityId [Optional]: Only applicable to exotic bonds, which have the BondData block embedded as one of the
-  components typically. An identifier of a proxy security. If given, the security curve configuration, i.e. the security
-  spread and recovery rate of the proxy security will be used for the pricing of the exotic bond. Typically the ISIN of
-  a liquid vanilla bond of the same issuer and with comparable maturity as the convertible bond. The proxy security must
-  be a vanilla bond.
-  
-  Allowable values: A valid bond identifier, typically the ISIN of the reference bond with the ISIN: prefix, e.g.: \verb+ISIN:XXNNNNNNNNNN+
   
 \item ReferenceCurveId: The benchmark curve to be used for pricing. This is typically the main ibor index for the currency of the bond, and if no ibor index is available for the currency in question, a currency-specific benchmark curve can be used.
 
@@ -81,6 +76,18 @@ Allowable values: See Table \ref{tab:calendar} Calendar.
 
 See \lstinline!Date! in Table \ref{tab:allow_stand_data}.
 
+\item PriceQuoteMethod [Optional]: The quote method of the bond. Bond price quotes and historical bond prices (stored as
+  ``fixings'') follow this method. Also, the initial price for bond total return swaps follows this method. Defaults to
+  PerentageOfPar.
+
+  Allowable values: PercentageOfPar or CurrencyPerUnit
+
+\item PriceQuoteBaseValue [Optional]: The base value for quote method = CurrencyPerUnit. Bond price quotes, historical
+  bond prices stored as fixings and initial prices in bond total return swaps are divided by this value. Defaults to
+  1.0.
+
+  Allowable values: Any real number.
+
 \end{itemize}
 
 A LegData block then defines the cashflow structure of the bond, this can be of type fixed, floating etc. Note that a LegData block should only be included in the long version. 
@@ -92,11 +99,12 @@ A LegData block then defines the cashflow structure of the bond, this can be of 
         <IssuerId>Ineos Group Holdings SA</IssuerId>
         <CreditCurveId>ISIN:XS0982710740</CreditCurveId>
         <SecurityId>ISIN:XS0982710740</SecurityId>
-        <ProxySecurityId>ISIN:XS2000000000</ProxySecurityId>
         <ReferenceCurveId>EUR-EURIBOR-6M</ReferenceCurveId>
         <SettlementDays>2</SettlementDays>
         <Calendar>TARGET</Calendar>
         <IssueDate>20160203</IssueDate>
+        <PriceQuoteMethod>PercentageOfPar</PriceQuoteMethod>
+        <PriceQuoteBaseValue>1.0</PriceQuoteBaseValue>
         <LegData>
             <LegType>Fixed</LegType>
             <Payer>false</Payer>

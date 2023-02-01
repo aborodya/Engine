@@ -117,9 +117,9 @@ public:
 
     //! \name Inspectors
     //@{
-    CurveType baseType() const { return CurveType::Yield; }
+    CurveType baseType() const override { return CurveType::Yield; }
     const string& ccy() const { return ccy_; }
-    string subName() const { return ccy_ + "/" + curveConfigID(); }
+    string subName() const override { return ccy_ + "/" + curveConfigID(); }
     //@}
 
 protected:
@@ -141,9 +141,9 @@ public:
 
     //! \name Inspectors
     //@{
-    CurveType baseType() const { return CurveType::Default; }
+    CurveType baseType() const override { return CurveType::Default; }
     const string& ccy() const { return ccy_; }
-    string subName() const { return ccy_ + "/" + curveConfigID(); }
+    string subName() const override { return ccy_ + "/" + curveConfigID(); }
     //@}
 
 private:
@@ -165,8 +165,8 @@ public:
 
     //! \name Inspectors
     //@{
-    CurveType baseType() const { return CurveType::CDSVolatility; }
-    string subName() const { return curveConfigID(); }
+    CurveType baseType() const override { return CurveType::CDSVolatility; }
+    string subName() const override { return curveConfigID(); }
     //@}
 private:
     string ccy_;
@@ -188,8 +188,8 @@ public:
 
     //! \name Inspectors
     //@{
-    CurveType baseType() const { return CurveType::BaseCorrelation; }
-    string subName() const { return curveConfigID(); }
+    CurveType baseType() const override { return CurveType::BaseCorrelation; }
+    string subName() const override { return curveConfigID(); }
     //@}
 };
 
@@ -203,17 +203,17 @@ public:
     //! Default constructor
     SwaptionVolatilityCurveSpec() {}
     //! Detailed constructor
-    SwaptionVolatilityCurveSpec(const string& ccy, const string& curveConfigID) : CurveSpec(curveConfigID), ccy_(ccy) {}
+    SwaptionVolatilityCurveSpec(const string& key, const string& curveConfigID) : CurveSpec(curveConfigID), key_(key) {}
     //@}
 
     //! \name Inspectors
     //@{
-    CurveType baseType() const { return CurveType::SwaptionVolatility; }
-    const string& ccy() const { return ccy_; }
-    string subName() const { return ccy() + "/" + curveConfigID(); }
+    CurveType baseType() const override { return CurveType::SwaptionVolatility; }
+    const string& key() const { return key_; }
+    string subName() const override { return key() + "/" + curveConfigID(); }
     //@}
 private:
-    string ccy_;
+    string key_;
 };
 
 //! Yield volatility curve description
@@ -230,8 +230,8 @@ public:
     //@}
     //! \name Inspectors
     //@{
-    CurveType baseType() const { return CurveType::YieldVolatility; }
-    string subName() const { return curveConfigID(); }
+    CurveType baseType() const override { return CurveType::YieldVolatility; }
+    string subName() const override { return curveConfigID(); }
     //@}
 };
 
@@ -239,21 +239,22 @@ public:
 class CapFloorVolatilityCurveSpec : public CurveSpec {
 public:
     CapFloorVolatilityCurveSpec() {}
-    CapFloorVolatilityCurveSpec(const string& ccy, const string& curveConfigID) : CurveSpec(curveConfigID), ccy_(ccy) {}
+    // key is an index name (Ibor, OIS) or a currency
+    CapFloorVolatilityCurveSpec(const string& key, const string& curveConfigID) : CurveSpec(curveConfigID), key_(key) {}
 
     //! \name CurveSpec interface
     //@{
-    CurveType baseType() const { return CurveType::CapFloorVolatility; }
-    string subName() const { return ccy() + "/" + curveConfigID(); }
+    CurveType baseType() const override { return CurveType::CapFloorVolatility; }
+    string subName() const override { return key() + "/" + curveConfigID(); }
     //@}
 
     //! \name Inspectors
     //@{
-    const string& ccy() const { return ccy_; }
+    const string& key() const { return key_; }
     //@}
 
 private:
-    string ccy_;
+    string key_;
 };
 
 //! FX Spot description
@@ -271,10 +272,10 @@ public:
 
     //! \name Inspectors
     //@{
-    CurveType baseType() const { return CurveType::FX; }
+    CurveType baseType() const override { return CurveType::FX; }
     const string& unitCcy() const { return unitCcy_; }
     const string& ccy() const { return ccy_; }
-    string subName() const { return unitCcy() + "/" + ccy(); }
+    string subName() const override { return unitCcy() + "/" + ccy(); }
     //@}
 private:
     string unitCcy_;
@@ -297,10 +298,10 @@ public:
 
     //! \name Inspectors
     //@{
-    CurveType baseType() const { return CurveType::FXVolatility; }
+    CurveType baseType() const override { return CurveType::FXVolatility; }
     const string& unitCcy() const { return unitCcy_; }
     const string& ccy() const { return ccy_; }
-    string subName() const { return unitCcy() + "/" + ccy() + "/" + curveConfigID(); }
+    string subName() const override { return unitCcy() + "/" + ccy() + "/" + curveConfigID(); }
     //@}
 private:
     string unitCcy_;
@@ -315,10 +316,10 @@ public:
     InflationCurveSpec() {}
     InflationCurveSpec(const string& index, const string& curveConfigID) : CurveSpec(curveConfigID), index_(index) {}
 
-    CurveType baseType() const { return CurveType::Inflation; }
+    CurveType baseType() const override { return CurveType::Inflation; }
     const string& index() const { return index_; }
 
-    string subName() const { return index() + "/" + curveConfigID(); }
+    string subName() const override { return index() + "/" + curveConfigID(); }
 
 private:
     string index_;
@@ -333,10 +334,10 @@ public:
     InflationCapFloorVolatilityCurveSpec(const string& index, const string& curveConfigID)
         : CurveSpec(curveConfigID), index_(index) {}
 
-    CurveType baseType() const { return CurveType::InflationCapFloorVolatility; }
+    CurveType baseType() const override { return CurveType::InflationCapFloorVolatility; }
     const string& index() const { return index_; }
 
-    string subName() const { return index() + "/" + curveConfigID(); }
+    string subName() const override { return index() + "/" + curveConfigID(); }
 
 private:
     string index_;
@@ -359,9 +360,9 @@ public:
 
     //! \name Inspectors
     //@{
-    CurveType baseType() const { return CurveType::Equity; }
+    CurveType baseType() const override { return CurveType::Equity; }
     const string& ccy() const { return ccy_; }
-    string subName() const { return ccy_ + "/" + curveConfigID(); }
+    string subName() const override { return ccy_ + "/" + curveConfigID(); }
     //@}
 
 private:
@@ -383,9 +384,9 @@ public:
 
     //! \name Inspectors
     //@{
-    CurveType baseType() const { return CurveType::EquityVolatility; }
+    CurveType baseType() const override { return CurveType::EquityVolatility; }
     const string& ccy() const { return ccy_; }
-    string subName() const { return ccy() + "/" + curveConfigID(); }
+    string subName() const override { return ccy() + "/" + curveConfigID(); }
     //@}
 private:
     string ccy_;
@@ -397,8 +398,8 @@ public:
     SecuritySpec(const string& securityID) : CurveSpec(securityID), securityID_(securityID) {}
     //! Default constructor
     SecuritySpec() {}
-    CurveType baseType() const { return CurveType::Security; }
-    string subName() const { return securityID_; }
+    CurveType baseType() const override { return CurveType::Security; }
+    string subName() const override { return securityID_; }
     const string& securityID() const { return securityID_; }
     //@}
 
@@ -424,9 +425,9 @@ public:
 
     //! \name Inspectors
     //@{
-    CurveType baseType() const { return CurveType::Commodity; }
+    CurveType baseType() const override { return CurveType::Commodity; }
     const std::string& currency() const { return currency_; }
-    std::string subName() const { return currency_ + "/" + curveConfigID(); }
+    std::string subName() const override { return currency_ + "/" + curveConfigID(); }
     //@}
 
 private:
@@ -450,9 +451,9 @@ public:
 
     //! \name Inspectors
     //@{
-    CurveType baseType() const { return CurveType::CommodityVolatility; }
+    CurveType baseType() const override { return CurveType::CommodityVolatility; }
     const std::string& currency() const { return currency_; }
-    std::string subName() const { return currency_ + "/" + curveConfigID(); }
+    std::string subName() const override { return currency_ + "/" + curveConfigID(); }
     //@}
 
 private:
@@ -475,8 +476,8 @@ public:
 
     //! \name Inspectors
     //@{
-    CurveType baseType() const { return CurveType::Correlation; }
-    string subName() const { return curveConfigID(); }
+    CurveType baseType() const override { return CurveType::Correlation; }
+    string subName() const override { return curveConfigID(); }
     //@}
 private:
 };

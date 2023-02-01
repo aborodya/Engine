@@ -125,6 +125,8 @@ public:
     static void addChildAsCdata(XMLDocument& doc, XMLNode* n, const string& name, const string& value);
     static void addChild(XMLDocument& doc, XMLNode* n, const string& name, const string& value, const string& attrName,
                          const string& attr);
+    static void addChild(XMLDocument& doc, XMLNode* n, const string& name, const string& value,
+                         const vector<string>& attrNames, const vector<string>& attrs);
     static void addChild(XMLDocument& doc, XMLNode* n, const string& name, const char* value);
     static void addChild(XMLDocument& doc, XMLNode* n, const string& name, Real value);
     static void addChild(XMLDocument& doc, XMLNode* n, const string& name, int value);
@@ -180,7 +182,7 @@ public:
                             const string& firstName, const string& secondName, const map<string, string>& values);
 
     // If mandatory == true, we throw if the node is not present, otherwise we return a default vale.
-    static string getChildValue(XMLNode* node, const string& name, bool mandatory = false);
+    static string getChildValue(XMLNode* node, const string& name, bool mandatory = false, const string& defaultValue = string());
     static Real getChildValueAsDouble(XMLNode* node, const string& name, bool mandatory = false, double defaultValue = 0.0);
     static int getChildValueAsInt(XMLNode* node, const string& name, bool mandatory = false, int defaultValue = 0);
     static bool getChildValueAsBool(XMLNode* node, const string& name, bool mandatory = false, bool defaultValue = true);

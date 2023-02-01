@@ -34,6 +34,7 @@ void OptionData::fromXML(XMLNode* node) {
     longShort_ = XMLUtils::getChildValue(node, "LongShort", true);
     callPut_ = XMLUtils::getChildValue(node, "OptionType", false);
     payoffType_ = XMLUtils::getChildValue(node, "PayoffType", false);
+    payoffType2_ = XMLUtils::getChildValue(node, "PayoffType2", false);
     style_ = XMLUtils::getChildValue(node, "Style", false);
     noticePeriod_ = XMLUtils::getChildValue(node, "NoticePeriod", false);
     noticeCalendar_ = XMLUtils::getChildValue(node, "NoticeCalendar", false);
@@ -79,6 +80,8 @@ XMLNode* OptionData::toXML(XMLDocument& doc) {
         XMLUtils::addChild(doc, node, "OptionType", callPut_);
     if (payoffType_ != "")
         XMLUtils::addChild(doc, node, "PayoffType", payoffType_);
+    if (payoffType2_ != "")
+        XMLUtils::addChild(doc, node, "PayoffType2", payoffType_);
     if (style_ != "")
         XMLUtils::addChild(doc, node, "Style", style_);
     XMLUtils::addChild(doc, node, "NoticePeriod", noticePeriod_);
@@ -132,7 +135,7 @@ ExerciseBuilder::ExerciseBuilder(const OptionData& optionData, const std::vector
         }
     }
 
-    // get notiice period, calendar, bdc
+    // get notice period, calendar, bdc
 
     Period noticePeriod = optionData.noticePeriod().empty() ? 0 * Days : parsePeriod(optionData.noticePeriod());
     Calendar noticeCal =
@@ -147,7 +150,7 @@ ExerciseBuilder::ExerciseBuilder(const OptionData& optionData, const std::vector
         sortedExerciseDates.push_back(parseDate(d));
     std::sort(sortedExerciseDates.begin(), sortedExerciseDates.end());
 
-    // build vector of alive exercise dates and corresponding notive dates
+    // build vector of alive exercise dates and corresponding native dates
 
     std::vector<bool> isExerciseDateAlive(sortedExerciseDates.size(), false);
 
@@ -174,9 +177,13 @@ ExerciseBuilder::ExerciseBuilder(const OptionData& optionData, const std::vector
 
     // build exercise instance
 
-    exercise_ = boost::make_shared<BermudanExercise>(noticeDates_);
+    if (optionData.style() == "European")
+        exercise_ = boost::make_shared<EuropeanExercise>(sortedExerciseDates.back());
+    else 
+        exercise_ = boost::make_shared<BermudanExercise>(noticeDates_);
 
-    // build feee and rebated exercise instance, if any fees are present
+
+    // build fee and rebated exercise instance, if any fees are present
 
     if (!optionData.exerciseFees().empty()) {
 
@@ -230,7 +237,7 @@ ExerciseBuilder::ExerciseBuilder(const OptionData& optionData, const std::vector
                 else {
                     Real feeNotional = notionals.begin()->second;
                     DLOG("Convert percentage rebate "
-                         << rebates[i] << " to absolute reabte " << rebates[i] * feeNotional << " using nominal "
+                         << rebates[i] << " to absolute rebate " << rebates[i] * feeNotional << " using nominal "
                          << feeNotional << " for exercise date " << QuantLib::io::iso_date(exerciseDates_[i]));
                     rebates[i] *= feeNotional; // multiply percentage fee by relevant notional
                 }

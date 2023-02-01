@@ -53,6 +53,9 @@
 #include <ql/patterns/singleton.hpp>
 #include <sstream>
 
+#include <boost/thread/shared_mutex.hpp>
+#include <boost/thread/lock_types.hpp>
+
 namespace ore {
 namespace data {
 using std::string;
@@ -60,13 +63,13 @@ using std::string;
 //! The Base Custom Log Handler class
 /*!
   This base log handler class can be used to define your own custom handler and then registered with the Log class.
-  Once registered it will recieve all log messages as soon as they occur via it's log() method
+  Once registered it will receive all log messages as soon as they occur via it's log() method
   \ingroup utilities
   \see Log
  */
 class Logger {
 public:
-    //! Desctructor
+    //! Destructor
     virtual ~Logger() {}
 
     //! The Log call back function
@@ -108,10 +111,10 @@ public:
       If alertOnly is set to true, it will only write alerts.
      */
     StderrLogger(bool alertOnly = false) : Logger(name), alertOnly_(alertOnly) {}
-    //! Desctructor
+    //! Destructor
     virtual ~StderrLogger() {}
     //! The log callback that writes to stderr
-    virtual void log(unsigned l, const string& s) {
+    virtual void log(unsigned l, const string& s) override {
         if (!alertOnly_ || l == ORE_ALERT)
             std::cerr << s << std::endl;
     }
@@ -138,10 +141,10 @@ public:
       \param filename the log filename
      */
     FileLogger(const string& filename);
-    //! Desctructor
+    //! Destructor
     virtual ~FileLogger();
     //! The log callback
-    virtual void log(unsigned, const string&);
+    virtual void log(unsigned, const string&) override;
 
 private:
     string filename_;
@@ -168,19 +171,19 @@ public:
     static const string name;
     //! Constructor
     BufferLogger(unsigned minLevel = ORE_DATA) : Logger(name), minLevel_(minLevel) {}
-    //! Desctructor
+    //! Destructor
     virtual ~BufferLogger() {}
     //! The log callback
-    virtual void log(unsigned, const string&);
+    virtual void log(unsigned, const string&) override;
 
     //! Checks if Logger has new messages
     /*!
       \return True if this BufferLogger has any new log messages
      */
     bool hasNext();
-    //! Retreive new messages
+    //! Retrieve new messages
     /*!
-      Retreive the next new message from the buffer, this will throw if the buffer is empty.
+      Retrieve the next new message from the buffer, this will throw if the buffer is empty.
       Messages are returned in a FIFO order. Messages are deleted from the buffer once returned.
       \return The next message
      */
@@ -193,9 +196,9 @@ private:
 
 //! Global static Log class
 /*!
-  The Global Log class gets registered with individual loggers and recieves application log messages.
-  Once a message is recieved, it is imediatly dispatched to each of the registered loggers, the order in which
-  the loggers are called is not guarenteed.
+  The Global Log class gets registered with individual loggers and receives application log messages.
+  Once a message is received, it is immediately dispatched to each of the registered loggers, the order in which
+  the loggers are called is not guaranteed.
 
   Logging is done by the calling thread and the LOG call blocks until all the loggers have returned.
 
@@ -212,7 +215,7 @@ private:
       Log::instance().removeAllLoggers();
       Log::instance().registerLogger(boost::shared_ptr<Logger>(new BufferLogger));
   </pre>
-  and then to retreive log messages from the buffer and print them to stdout the user must call:
+  and then to retrieve log messages from the buffer and print them to stdout the user must call:
   <pre>
       std::cout << "Begin Log Messages:" << std::endl;
 
@@ -225,8 +228,9 @@ private:
   </pre>
   \ingroup utilities
  */
-class Log : public QuantLib::Singleton<Log> {
-    friend class QuantLib::Singleton<Log>;
+class Log : public QuantLib::Singleton<Log, std::integral_constant<bool, true>> {
+
+    friend class QuantLib::Singleton<Log, std::integral_constant<bool, true>>;
 
 public:
     //! Add a new Logger.
@@ -252,7 +256,7 @@ public:
     void removeLogger(const string& name);
     //! Remove all loggers
     /*!
-      Removes all loggers. If called, all subsiquent log messages will be ignored.
+      Removes all loggers. If called, all subsequent log messages will be ignored.
      */
     void removeAllLoggers();
 
@@ -263,14 +267,35 @@ public:
     //! macro utility function - do not use directly
     void log(unsigned m);
 
-    // Avoid a large number of warnings in VS by adding 0 !=
-    bool filter(unsigned mask) { return 0 != (mask & mask_); }
-    unsigned mask() { return mask_; }
-    void setMask(unsigned mask) { mask_ = mask; }
+    //! mutex to acquire locks
+    boost::shared_mutex& mutex() { return mutex_; }
 
-    bool enabled() { return enabled_; }
-    void switchOn() { enabled_ = true; }
-    void switchOff() { enabled_ = false; }
+    // Avoid a large number of warnings in VS by adding 0 !=
+    bool filter(unsigned mask) {
+        boost::shared_lock<boost::shared_mutex> lock(mutex());
+        return 0 != (mask & mask_);
+    }
+    unsigned mask() {
+        boost::shared_lock<boost::shared_mutex> lock(mutex());
+        return mask_;
+    }
+    void setMask(unsigned mask) {
+        boost::unique_lock<boost::shared_mutex> lock(mutex());
+        mask_ = mask;
+    }
+
+    bool enabled() {
+        boost::shared_lock<boost::shared_mutex> lock(mutex());
+        return enabled_;
+    }
+    void switchOn() {
+        boost::unique_lock<boost::shared_mutex> lock(mutex());
+        enabled_ = true;
+    }
+    void switchOff() {
+        boost::unique_lock<boost::shared_mutex> lock(mutex());
+        enabled_ = false;
+    }
 
     //! if a PID is set for the logger, messages are tagged with [1234] if pid = 1234
     void setPid(const int pid) { pid_ = pid; }
@@ -283,17 +308,30 @@ private:
     unsigned mask_;
     std::ostringstream ls_;
 
+    std::size_t sameSourceLocationSince_ = 0;
+    bool writeSuppressedMessagesHint_ = true;
+    std::size_t sameSourceLocationCutoff_ = 1000;
+    string lastFileName_;
+    int lastLineNo_ = 0;
+
     int pid_ = 0;
+
+    mutable boost::shared_mutex mutex_;
 };
 
 /*!
   Main Logging macro, do not use this directly, use on of the below 6 macros instead
  */
 #define MLOG(mask, text)                                                                                               \
-    if (ore::data::Log::instance().enabled() && ore::data::Log::instance().filter(mask)) {                             \
-        ore::data::Log::instance().header(mask, __FILE__, __LINE__);                                                   \
-        ore::data::Log::instance().logStream() << text;                                                                \
-        ore::data::Log::instance().log(mask);                                                                          \
+    {                                                                                                                  \
+        if (ore::data::Log::instance().enabled() && ore::data::Log::instance().filter(mask)) {                         \
+            std::ostringstream __ore_mlog_tmp_stringstream__;                                                          \
+            __ore_mlog_tmp_stringstream__ << text;                                                                     \
+            boost::unique_lock<boost::shared_mutex> lock(ore::data::Log::instance().mutex());                          \
+            ore::data::Log::instance().header(mask, __FILE__, __LINE__);                                               \
+            ore::data::Log::instance().logStream() << __ore_mlog_tmp_stringstream__.str();                             \
+            ore::data::Log::instance().log(mask);                                                                      \
+        }                                                                                                              \
     }
 
 //! Logging Macro (Level = Alert)
@@ -315,25 +353,28 @@ private:
 #define MEM_LOG MEM_LOG_USING_LEVEL(ORE_MEMORY)
 
 #define MEM_LOG_USING_LEVEL(LEVEL)                                                                                     \
-    if (ore::data::Log::instance().enabled() && ore::data::Log::instance().filter(LEVEL)) {                            \
-        ore::data::Log::instance().header(LEVEL, __FILE__, __LINE__);                                                  \
-        ore::data::Log::instance().logStream() << std::to_string(ore::data::os::getPeakMemoryUsageBytes()) << "|";     \
-        ore::data::Log::instance().logStream() << std::to_string(ore::data::os::getMemoryUsageBytes());                \
-        ore::data::Log::instance().log(LEVEL);                                                                         \
+    {                                                                                                                  \
+        if (ore::data::Log::instance().enabled() && ore::data::Log::instance().filter(LEVEL)) {                        \
+            boost::unique_lock<boost::shared_mutex> lock(ore::data::Log::instance().mutex());                          \
+            ore::data::Log::instance().header(LEVEL, __FILE__, __LINE__);                                              \
+            ore::data::Log::instance().logStream() << std::to_string(ore::data::os::getPeakMemoryUsageBytes()) << "|"; \
+            ore::data::Log::instance().logStream() << std::to_string(ore::data::os::getMemoryUsageBytes());            \
+            ore::data::Log::instance().log(LEVEL);                                                                     \
+        }                                                                                                              \
     }
 
-//! LoggerStream class that is a std::ostream replacment that will log each line
+//! LoggerStream class that is a std::ostream replacement that will log each line
 /*! LoggerStream is a simple wrapper around a string stream, it has an explicit
     cast std::ostream& method so it can be used in place of any std::ostream, this
     can be used with QuantExt methods that take a std::ostream& for logging purposes.
 
-    Once the stream falls out of focus, it's desstructor will take the buffered log
+    Once the stream falls out of focus, it's destructor will take the buffered log
     messages and pass them the main ore::data::Log::instance().
 
     Note the following
     - The timestamps for each log message will correspond to when the LoggerStream
-      desstructor has been called, this may not correspond to the actual time the event
-      occured.
+      destructor has been called, this may not correspond to the actual time the event
+      occurred.
     - The filename and linenumber in the ore::data::Log() have to be explicitly passed to
       the LoggerStream, as such the log messages will not correspond to any references
       in QuantExt (or any other library).
@@ -372,38 +413,70 @@ private:
     std::stringstream ss_;
 };
 
-#define ALOGGERSTREAM ((std::ostream&)ore::data::LoggerStream(ORE_ALERT, __FILE__, __LINE__))
-#define CLOGGERSTREAM ((std::ostream&)ore::data::LoggerStream(ORE_CRITICAL, __FILE__, __LINE__))
-#define ELOGGERSTREAM ((std::ostream&)ore::data::LoggerStream(ORE_ERROR, __FILE__, __LINE__))
-#define WLOGGERSTREAM ((std::ostream&)ore::data::LoggerStream(ORE_WARNING, __FILE__, __LINE__))
-#define LOGGERSTREAM ((std::ostream&)ore::data::LoggerStream(ORE_NOTICE, __FILE__, __LINE__))
-#define DLOGGERSTREAM ((std::ostream&)ore::data::LoggerStream(ORE_DEBUG, __FILE__, __LINE__))
-#define TLOGGERSTREAM ((std::ostream&)ore::data::LoggerStream(ORE_DATA, __FILE__, __LINE__))
+#define CHECKED_LOGGERSTREAM(LEVEL, text)                                                                              \
+    if (ore::data::Log::instance().enabled() && ore::data::Log::instance().filter(LEVEL)) {                            \
+        (std::ostream&)ore::data::LoggerStream(LEVEL, __FILE__, __LINE__) << text;                              \
+    }
 
-//! Utility class for having structured Error messages
+#define ALOGGERSTREAM(text) CHECKED_LOGGERSTREAM(ORE_ALERT, text)
+#define CLOGGERSTREAM(text) CHECKED_LOGGERSTREAM(ORE_CRITICAL, text)
+#define ELOGGERSTREAM(text) CHECKED_LOGGERSTREAM(ORE_ERROR, text)
+#define WLOGGERSTREAM(text) CHECKED_LOGGERSTREAM(ORE_WARNING, text)
+#define LOGGERSTREAM(text) CHECKED_LOGGERSTREAM(ORE_NOTICE, text)
+#define DLOGGERSTREAM(text) CHECKED_LOGGERSTREAM(ORE_DEBUG, text)
+#define TLOGGERSTREAM(text) CHECKED_LOGGERSTREAM(ORE_DATA, text)
+
 // This can be used directly in log messages, e.g.
 // ALOG(StructuredTradeErrorMessage(trade->id(), trade->tradeType(), "Error Parsing Trade", "Invalid XML Node foo"));
 // And in the log file you will get
 //
-// .... StructuredErrorMessage { "errorType":"Trade", "tradeId":"foo", "tradeType":"SWAP" }
-class StructuredErrorMessage {
+// .... StructuredMessage {
+//    "category": "Error",
+//    "group": "Trade",
+//    "message": "Invalid XML Node foo",
+//    "subFields": [
+//        {
+//            "fieldName": "exceptionType",
+//            "fieldValue": "Error Parsing Trade"
+//        },
+//        {
+//            "fieldName": "tradeId",
+//            "fieldValue": "foo"
+//        },
+//        {
+//            "fieldName": "tradeType",
+//            "fieldValue": "Swap"
+//        }
+//    ]
+//}
+class StructuredMessage {
 public:
-    virtual ~StructuredErrorMessage() {}
-    static constexpr const char* name = "StructuredErrorMessage";
+    StructuredMessage(const string& category, const string& group, const string& message,
+                      const std::map<string, string>& subFields = std::map<string, string>())
+        : category_(category), group_(group), message_(message), subFields_(subFields) {}
+
+    StructuredMessage(const string& category, const string& group, const string& message,
+                      const std::pair<string, string>& subField = std::pair<string, string>())
+        : StructuredMessage(category, group, message, std::map<string, string>({subField})) {}
+
+    virtual ~StructuredMessage() {}
+
+    static constexpr const char* name = "StructuredMessage";
 
     //! return a string for the log file
-    std::string msg() const { return string(name) + string(" ") + json(); }
+    string msg() const { return string(name) + string(" ") + json(); }
 
-protected:
-    // This should return a structured string, ideally in JSON, and should contain a field
-    // errorType
-    virtual std::string json() const = 0;
+    string json() const;
 
+private:
     // utility function to delimate string for json, handles \" and \\ and control characters
-    std::string jsonify(const std::string& s) const;
+    string jsonify(const string& s) const;
+
+    string category_, group_, message_;
+    std::map<string, string> subFields_;
 };
 
-inline std::ostream& operator<<(std::ostream& out, const StructuredErrorMessage& sem) { return out << sem.msg(); }
+inline std::ostream& operator<<(std::ostream& out, const StructuredMessage& sm) { return out << sm.msg(); }
 
 } // namespace data
 } // namespace ore

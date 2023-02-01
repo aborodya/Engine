@@ -17,7 +17,6 @@
 */
 
 #include <ored/portfolio/trade.hpp>
-#include <ored/utilities/currencycheck.hpp>
 #include <qle/instruments/payment.hpp>
 #include <qle/pricingengines/paymentdiscountingengine.hpp>
 
@@ -50,10 +49,12 @@ XMLNode* Trade::toXML(XMLDocument& doc) {
     return node;
 }
 
-void Trade::addPremiums(std::vector<boost::shared_ptr<Instrument>>& addInstruments, std::vector<Real>& addMultipliers,
+Date Trade::addPremiums(std::vector<boost::shared_ptr<Instrument>>& addInstruments, std::vector<Real>& addMultipliers,
                         const Real tradeMultiplier, const PremiumData& premiumData, const Real premiumMultiplier,
                         const Currency& tradeCurrency, const boost::shared_ptr<EngineFactory>& factory,
                         const string& configuration) {
+
+    Date latestPremiumPayDate = Date::minDate();
 
     for (auto const& d : premiumData.premiumData()) {
         QL_REQUIRE(d.amount != Null<Real>(), "Trade contains invalid premium data.");
@@ -67,7 +68,7 @@ void Trade::addPremiums(std::vector<boost::shared_ptr<Instrument>>& addInstrumen
         Handle<YieldTermStructure> yts = factory->market()->discountCurve(d.ccy, configuration);
         Handle<Quote> fx;
         if (tradeCurrency.code() != d.ccy) {
-            fx = factory->market()->fxSpot(d.ccy + tradeCurrency.code(), configuration);
+            fx = factory->market()->fxRate(d.ccy + tradeCurrency.code(), configuration);
         }
         boost::shared_ptr<PricingEngine> discountingEngine(new QuantExt::PaymentDiscountingEngine(yts, fx));
         fee->setPricingEngine(discountingEngine);
@@ -85,8 +86,13 @@ void Trade::addPremiums(std::vector<boost::shared_ptr<Instrument>>& addInstrumen
         // premium * premiumMultiplier reflects the correct pay direction, set payer to false therefore
         legPayers_.push_back(false);
 
+	// update latest premium pay date
+        latestPremiumPayDate = std::max(latestPremiumPayDate, d.payDate);
+
         DLOG("added fee " << d.amount << " " << d.ccy << " payable on " << d.payDate << " to trade");
     }
+
+    return latestPremiumPayDate;
 }
 
 void Trade::validate() const {
@@ -108,6 +114,12 @@ void Trade::validate() const {
 }
 
 void Trade::reset() {
+    // save accumulated timings from wrapper to trade before resetting
+    if (instrument_ != nullptr) {
+        savedNumberOfPricings_ += instrument_->getNumberOfPricings();
+        savedCumulativePricingTime_ += instrument_->getCumulativePricingTime();
+    }
+    // reset members
     instrument_ = boost::shared_ptr<InstrumentWrapper>();
     legs_.clear();
     legCurrencies_.clear();
@@ -118,7 +130,7 @@ void Trade::reset() {
     maturity_ = Date();
     requiredFixings_.clear();
 }
-
+    
 const std::map<std::string, boost::any>& Trade::additionalData() const { return additionalData_; }
 
 } // namespace data

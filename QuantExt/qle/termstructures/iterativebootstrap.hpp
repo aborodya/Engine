@@ -44,22 +44,20 @@ QuantLib::Real dontThrowFallback(const QuantLib::BootstrapError<Curve>& error, Q
 
     QL_REQUIRE(xMin < xMax, "Expected xMin to be less than xMax");
 
-    // Set the initial value of the result to xMin and store the absolute bootstrap error at xMin
     QuantLib::Real result = xMin;
-    QuantLib::Real absError = std::abs(error(xMin));
-    QuantLib::Real minError = absError;
-
-    // Step out to xMax
+    QuantLib::Real minError = QL_MAX_REAL;
     QuantLib::Real stepSize = (xMax - xMin) / steps;
-    for (QuantLib::Size i = 0; i < steps; i++) {
 
-        // Get absolute bootstrap error at updated x value
-        xMin += stepSize;
-        absError = std::abs(error(xMin));
+    for (QuantLib::Size i = 0; i <= steps; ++i) {
+        Real x = xMin + stepSize * static_cast<double>(i);
+        Real absError = QL_MAX_REAL;
+        try {
+            absError = std::abs(error(x));
+        } catch (...) {
+        }
 
-        // If this absolute bootstrap error is less than the minimum, update result and minError
         if (absError < minError) {
-            result = xMin;
+            result = x;
             minError = absError;
         }
     }
@@ -132,7 +130,7 @@ IterativeBootstrap<Curve>::IterativeBootstrap(QuantLib::Real accuracy, QuantLib:
 template <class Curve> void IterativeBootstrap<Curve>::setup(Curve* ts) {
     ts_ = ts;
     n_ = ts_->instruments_.size();
-    QL_REQUIRE(n_ > 0, "no bootstrap helpers given")
+    QL_REQUIRE(n_ > 0, "no bootstrap helpers given");
     for (QuantLib::Size j = 0; j < n_; ++j)
         ts_->registerWith(ts_->instruments_[j]);
 }
@@ -274,7 +272,7 @@ template <class Curve> void IterativeBootstrap<Curve>::calculate() const {
             // extend interpolation if needed
             if (!validData) {
                 try { // extend interpolation a point at a time
-                      // including the pillar to be boostrapped
+                      // including the pillar to be bootstrapped
                     ts_->interpolation_ =
                         ts_->interpolator_.interpolate(times.begin(), times.begin() + i + 1, data.begin());
                 } catch (...) {

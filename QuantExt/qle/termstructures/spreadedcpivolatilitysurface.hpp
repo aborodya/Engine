@@ -17,7 +17,7 @@
 */
 
 /*! \file spreadedoptionletvolatility2.hpp
-    \brief Optionlet volaility with overlayed bilinearly interpolated spread surface
+    \brief Optionlet volatility with overlayed bilinearly interpolated spread surface
     \ingroup termstructures
 */
 
@@ -33,7 +33,7 @@
 namespace QuantExt {
 using namespace QuantLib;
 
-class SpreadedCPIVolatilitySurface : public CPIVolatilitySurface, public LazyObject {
+class SpreadedCPIVolatilitySurface : public QuantLib::CPIVolatilitySurface, public LazyObject {
 public:
     // warning we assume that volatilities are retrieved with obLag = -1D, i.e. using the standard lag from the ts
     SpreadedCPIVolatilitySurface(const Handle<CPIVolatilitySurface>& baseVol, const std::vector<Date>& optionDates,

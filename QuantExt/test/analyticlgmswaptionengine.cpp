@@ -65,8 +65,7 @@
 #include <qle/pricingengines/discountingfxforwardengine.hpp>
 #include <qle/pricingengines/discountingriskybondengine.hpp>
 #include <qle/pricingengines/discountingswapenginemulticurve.hpp>
-#include <qle/pricingengines/midpointcdsengine.hpp>
-#include <qle/pricingengines/numericlgmswaptionengine.hpp>
+#include <qle/pricingengines/numericlgmmultilegoptionengine.hpp>
 #include <qle/pricingengines/oiccbasisswapengine.hpp>
 #include <qle/pricingengines/paymentdiscountingengine.hpp>
 
@@ -79,6 +78,7 @@
 #include <ql/pricingengines/swap/discountingswapengine.hpp>
 #include <ql/pricingengines/swaption/fdhullwhiteswaptionengine.hpp>
 #include <ql/pricingengines/swaption/gaussian1dswaptionengine.hpp>
+#include <ql/pricingengines/credit/midpointcdsengine.hpp>
 #include <ql/quotes/simplequote.hpp>
 #include <ql/termstructures/yield/flatforward.hpp>
 #include <ql/time/calendars/nullcalendar.hpp>
@@ -334,10 +334,10 @@ BOOST_AUTO_TEST_CASE(testAgainstOtherEngines) {
 
     Size no = 0;
 
-    // tolerance for comparision fd engine vs integral engines
+    // tolerance for comparison FD engine vs integral engines
     Real tol1 = 3.0E-4;
 
-    // tolerance for comparision of integral engines based
+    // tolerance for comparison of integral engines based
     // on GSR and LGM model
     Real tol2 = 1.0E-4;
 

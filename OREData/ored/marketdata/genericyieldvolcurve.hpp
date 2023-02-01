@@ -24,9 +24,11 @@
 #pragma once
 
 #include <ored/configuration/conventions.hpp>
+#include <ored/configuration/curveconfigurations.hpp>
 #include <ored/configuration/genericyieldvolcurveconfig.hpp>
 #include <ored/marketdata/curvespec.hpp>
 #include <ored/marketdata/loader.hpp>
+#include <ored/marketdata/todaysmarketcalibrationinfo.hpp>
 #include <ql/termstructures/volatility/swaption/swaptionvolstructure.hpp>
 
 namespace ore {
@@ -48,22 +50,27 @@ public:
     virtual ~GenericYieldVolCurve() {}
     //! Detailed constructor
     GenericYieldVolCurve(
-        const Date& asof, const Loader& loader, const boost::shared_ptr<GenericYieldVolatilityCurveConfig>& config,
+        const Date& asof, const Loader& loader, const CurveConfigurations& curveConfigs,
+        const boost::shared_ptr<GenericYieldVolatilityCurveConfig>& config,
         const map<string, boost::shared_ptr<SwapIndex>>& requiredSwapIndices,
+        const map<string, boost::shared_ptr<GenericYieldVolCurve>>& requiredVolCurves,
         const std::function<bool(const boost::shared_ptr<MarketDatum>& md, Period& expiry, Period& term)>&
             matchAtmQuote,
         const std::function<bool(const boost::shared_ptr<MarketDatum>& md, Period& expiry, Period& term, Real& strike)>&
             matchSmileQuote,
-        const std::function<bool(const boost::shared_ptr<MarketDatum>& md, Period& term)>& matchShiftQuote);
+        const std::function<bool(const boost::shared_ptr<MarketDatum>& md, Period& term)>& matchShiftQuote,
+        const bool buildCalibrationInfo);
     //@}
 
     //! \name Inspectors
     //@{
     const boost::shared_ptr<SwaptionVolatilityStructure>& volTermStructure() { return vol_; }
+    boost::shared_ptr<IrVolCalibrationInfo> calibrationInfo() const { return calibrationInfo_; }
     //@}
 
 private:
     boost::shared_ptr<SwaptionVolatilityStructure> vol_;
+    boost::shared_ptr<IrVolCalibrationInfo> calibrationInfo_;
 };
 } // namespace data
 } // namespace ore

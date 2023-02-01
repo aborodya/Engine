@@ -95,17 +95,17 @@ public:
     SegmentIDGetter(const string& curveID, map<CurveSpec::CurveType, set<string>>& requiredCurveIds)
         : curveID_(curveID), requiredCurveIds_(requiredCurveIds) {}
 
-    void visit(YieldCurveSegment&);
-    void visit(SimpleYieldCurveSegment& s);
-    void visit(AverageOISYieldCurveSegment& s);
-    void visit(TenorBasisYieldCurveSegment& s);
-    void visit(CrossCcyYieldCurveSegment& s);
-    void visit(ZeroSpreadedYieldCurveSegment& s);
-    void visit(DiscountRatioYieldCurveSegment& s);
-    void visit(FittedBondYieldCurveSegment& s);
-    void visit(WeightedAverageYieldCurveSegment& s);
-    void visit(YieldPlusDefaultYieldCurveSegment& s);
-    void visit(IborFallbackCurveSegment& s);
+    void visit(YieldCurveSegment&) override;
+    void visit(SimpleYieldCurveSegment& s) override;
+    void visit(AverageOISYieldCurveSegment& s) override;
+    void visit(TenorBasisYieldCurveSegment& s) override;
+    void visit(CrossCcyYieldCurveSegment& s) override;
+    void visit(ZeroSpreadedYieldCurveSegment& s) override;
+    void visit(DiscountRatioYieldCurveSegment& s) override;
+    void visit(FittedBondYieldCurveSegment& s) override;
+    void visit(WeightedAverageYieldCurveSegment& s) override;
+    void visit(YieldPlusDefaultYieldCurveSegment& s) override;
+    void visit(IborFallbackCurveSegment& s) override;
 
 private:
     string curveID_;
@@ -278,11 +278,12 @@ void YieldCurveConfig::fromXML(XMLNode* node) {
                 try {
                     segment->fromXML(child);
                 } catch (std::exception& ex) {
-                    ALOG("Exception parsing yield curve segment XML Node, name = " << childName << " and curveID = "
-                                                                                   << curveID_ << " : " << ex.what());
+                    QL_FAIL("Exception parsing yield curve segment XML Node, name = "
+                            << childName << " and curveID = " << curveID_ << " : " << ex.what());
                 }
             } else {
-                LOG("Unable to build yield curve segment for name = " << childName << " and curveID = " << curveID_);
+                QL_FAIL("Unable to build yield curve segment for name = " << childName
+                                                                          << " and curveID = " << curveID_);
             }
             curveSegments_.push_back(segment);
         }
@@ -437,7 +438,7 @@ XMLNode* YieldCurveSegment::toXML(XMLDocument& doc) {
         // Special case handling for AverageOIS where the quotes are stored as pairs
         // Spread and Rate.
         if (type_ == YieldCurveSegment::Type::AverageOIS) {
-            QL_REQUIRE(quotes_.size() % 2 == 0, "Invalid quotes vector should be even")
+            QL_REQUIRE(quotes_.size() % 2 == 0, "Invalid quotes vector should be even");
             for (Size i = 0; i < quotes_.size(); i = i + 2) {
                 string rateQuote = quotes_[i].first;
                 string spreadQuote = quotes_[i + 1].first;
@@ -696,9 +697,8 @@ void DiscountRatioYieldCurveSegment::accept(AcyclicVisitor& v) {
 
 FittedBondYieldCurveSegment::FittedBondYieldCurveSegment(const string& typeID, const vector<string>& quotes,
                                                          const map<string, string>& iborIndexCurves,
-                                                         const bool extrapolateFlat, const Size calibrationTrials)
-    : YieldCurveSegment(typeID, "", quotes), iborIndexCurves_(iborIndexCurves), extrapolateFlat_(extrapolateFlat),
-      calibrationTrials_(calibrationTrials) {}
+                                                         const bool extrapolateFlat)
+    : YieldCurveSegment(typeID, "", quotes), iborIndexCurves_(iborIndexCurves), extrapolateFlat_(extrapolateFlat) {}
 
 void FittedBondYieldCurveSegment::fromXML(XMLNode* node) {
     XMLUtils::checkNode(node, "FittedBond");
@@ -732,7 +732,6 @@ XMLNode* FittedBondYieldCurveSegment::toXML(XMLDocument& doc) {
                                         iborIndexNames);
 
     XMLUtils::addChild(doc, node, "ExtrapolateFlat", extrapolateFlat_);
-    XMLUtils::addChild(doc, node, "CalibrationTrials", static_cast<int>(calibrationTrials_));
     return node;
 }
 

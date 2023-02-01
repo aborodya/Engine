@@ -17,7 +17,7 @@
 */
 
 /*! \file qle/pricingengines/discountingforwardbondengine.hpp
-    \brief Engine to value a Forwadr Bond contract
+    \brief Engine to value a Forward Bond contract
 
     \ingroup engines
 */
@@ -49,7 +49,7 @@ public:
                                  boost::optional<bool> includeSettlementDateFlows = boost::none,
                                  const Date& settlementDate = Date(), const Date& npvDate = Date());
 
-    void calculate() const;
+    void calculate() const override;
     Real calculateBondNpv(Date, Date) const;
     boost::tuple<Real, Real> calculateForwardContractPresentValue(Real spotValue, Real cmpPayment, Date npvDate,
                                                                   Date computeDate, Date settlementDate,

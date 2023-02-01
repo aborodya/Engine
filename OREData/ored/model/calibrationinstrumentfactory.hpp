@@ -40,7 +40,7 @@ namespace data {
 /*! Function that is used to build instances of CalibrationInstrument
 
     The template parameter is simply a particular instance of a \c CalibrationInstrument class that is default
-    constructable. The function returns the default constructed CalibrationInstrument object. A simple example is the
+    constructible. The function returns the default constructed CalibrationInstrument object. A simple example is the
     function to build an instance of \c CpiCapFloor would be called via \c createLegData<CpiCapFloor>().
 
     \ingroup models
@@ -64,21 +64,22 @@ boost::shared_ptr<CalibrationInstrument> createCalibrationInstrument() { return 
 
     \ingroup models
 */
-class CalibrationInstrumentFactory : public QuantLib::Singleton<CalibrationInstrumentFactory> {
+class CalibrationInstrumentFactory
+    : public QuantLib::Singleton<CalibrationInstrumentFactory, std::integral_constant<bool, true>> {
 
-    friend class QuantLib::Singleton<CalibrationInstrumentFactory>;
+    friend class QuantLib::Singleton<CalibrationInstrumentFactory, std::integral_constant<bool, true>>;
 
 public:
-    /*! The container type used to store the calibration instrument type key and the function that will be used to 
+    /*! The container type used to store the calibration instrument type key and the function that will be used to
         build a default instance of that calibration instrument type.
     */
     typedef std::map<std::string, std::function<boost::shared_ptr<CalibrationInstrument>()>> map_type;
 
-    /*! A call to \c build should return an instance of \c CalibrationInstrument corresponding to the required 
-        \p instrumentType. For example, a call to <code>build("CpiCapFloor")</code> should return a \c CpiCapFloor 
+    /*! A call to \c build should return an instance of \c CalibrationInstrument corresponding to the required
+        \p instrumentType. For example, a call to <code>build("CpiCapFloor")</code> should return a \c CpiCapFloor
         instance.
 
-        \warning If the \p instrumentType has not been added to the factory then a call to this method for that 
+        \warning If the \p instrumentType has not been added to the factory then a call to this method for that
                  \p instrumentType will return a \c nullptr
     */
     boost::shared_ptr<CalibrationInstrument> build(const std::string& instrumentType);
@@ -86,9 +87,10 @@ public:
     /*! Add a builder function \p builder for a given \p instrumentType
      */
     void addBuilder(const std::string& instrumentType,
-        std::function<boost::shared_ptr<CalibrationInstrument>()> builder);
+                    std::function<boost::shared_ptr<CalibrationInstrument>()> builder);
 
 private:
+    boost::shared_mutex mutex_;
     map_type map_;
 };
 

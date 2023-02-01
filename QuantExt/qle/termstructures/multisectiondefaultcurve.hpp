@@ -31,7 +31,7 @@ using namespace QuantLib;
 
 //! multi section default ts
 /*! the instantaneous hazard rate is defined by the ith source curve for dates before the ith switch date and after
- the (i-1)th switch date; all source curves must be conssitently floating or fixed and have the same reference date
+ the (i-1)th switch date; all source curves must be consistently floating or fixed and have the same reference date
  always; the day counter of all source curves should coincide with the dc of this curve
 */
 class MultiSectionDefaultCurve : public SurvivalProbabilityStructure {
@@ -68,7 +68,7 @@ public:
 protected:
     Real survivalProbabilityImpl(Time t) const override {
         Size idx = std::lower_bound(switchTimes_.begin(), switchTimes_.end(), t,
-                                    [](const Real s, const Real t) { return s < t && !close_enough(s, t); }) -
+                                    [](const Real s, const Real t) { return s < t && !QuantLib::close_enough(s, t); }) -
                    switchTimes_.begin();
         QL_REQUIRE(idx < sourceCurves_.size(), "internal error: source curve index is "
                                                    << idx << ", number of source curves is " << sourceCurves_.size());

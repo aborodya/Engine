@@ -24,6 +24,7 @@
 #pragma once
 
 #include <ored/configuration/curveconfig.hpp>
+#include <ored/configuration/reportconfig.hpp>
 #include <ql/time/calendar.hpp>
 #include <ql/time/daycounter.hpp>
 #include <ql/time/period.hpp>
@@ -55,25 +56,38 @@ public:
     //@{
     //! Default constructor
     GenericYieldVolatilityCurveConfig(const std::string& underlyingLabel, const std::string& rootNodeLabel,
-                                      const std::string& marketDatumInstrumentLabel, const std::string& qualifierLabel,
-                                      const bool allowSmile, const bool requireSwapIndexBases)
-        : underlyingLabel_(underlyingLabel), rootNodeLabel_(rootNodeLabel),
-          marketDatumInstrumentLabel_(marketDatumInstrumentLabel), qualifierLabel_(qualifierLabel),
-          allowSmile_(allowSmile), requireSwapIndexBases_(requireSwapIndexBases) {}
+				      const std::string& marketDatumInstrumentLabel, const std::string& qualifierLabel,
+				      const bool allowSmile, const bool requireSwapIndexBases,
+				      const std::string& smileDynamics = "")
+	: underlyingLabel_(underlyingLabel), rootNodeLabel_(rootNodeLabel),
+	  marketDatumInstrumentLabel_(marketDatumInstrumentLabel), qualifierLabel_(qualifierLabel),
+	  allowSmile_(allowSmile), requireSwapIndexBases_(requireSwapIndexBases), smileDynamics_(smileDynamics) {}
     //! Detailed constructor
     GenericYieldVolatilityCurveConfig(const std::string& underlyingLabel, const std::string& rootNodeLabel,
-                                      const std::string& marketDatumInstrumentLabel, const std::string& qualifierLabel,
-                                      const string& curveID, const string& curveDescription, const string& qualifier,
-                                      const Dimension& dimension, const VolatilityType& volatilityType,
-                                      const bool extrapolate, const bool flatExtrapolation,
-                                      const vector<string>& optionTenors, const vector<string>& underlyingTenors,
-                                      const DayCounter& dayCounter, const Calendar& calendar,
-                                      const BusinessDayConvention& businessDayConvention,
-                                      const string& shortSwapIndexBase = "", const string& swapIndexBase = "",
-                                      // Only required for smile
-                                      const vector<string>& smileOptionTenors = vector<string>(),
-                                      const vector<string>& smileUnderlyingTenors = vector<string>(),
-                                      const vector<string>& smileSpreads = vector<string>());
+				      const std::string& marketDatumInstrumentLabel, const std::string& qualifierLabel,
+				      const string& curveID, const string& curveDescription, const string& qualifier,
+				      const Dimension& dimension, const VolatilityType& volatilityType,
+				      const bool extrapolate, const bool flatExtrapolation,
+				      const vector<string>& optionTenors, const vector<string>& underlyingTenors,
+				      const DayCounter& dayCounter, const Calendar& calendar,
+				      const BusinessDayConvention& businessDayConvention,
+				      const string& shortSwapIndexBase = "", const string& swapIndexBase = "",
+				      // Only required for smile
+				      const vector<string>& smileOptionTenors = vector<string>(),
+				      const vector<string>& smileUnderlyingTenors = vector<string>(),
+				      const vector<string>& smileSpreads = vector<string>(),
+				      const std::string& smileDynamics = "");
+    //! Detailed contructor for proxy config
+    GenericYieldVolatilityCurveConfig(const std::string& underlyingLabel, const std::string& rootNodeLabel,
+				      const std::string& qualifierLabel, const string& curveID,
+				      const string& curveDescription, const string& qualifier,
+				      const std::string& proxySourceCurveId,
+				      const std::string& proxySourceShortSwapIndexBase,
+				      const std::string& proxySourceSwapIndexBase,
+				      const std::string& proxyTargetShortSwapIndexBase,
+				      const std::string& proxyTargetSwapIndexBase,
+				      const std::string& smileDynamics = "");
+
     //@}
 
     //! \name Serialisation
@@ -99,7 +113,17 @@ public:
     const vector<string>& smileOptionTenors() const { return smileOptionTenors_; }
     const vector<string>& smileUnderlyingTenors() const { return smileUnderlyingTenors_; }
     const vector<string>& smileSpreads() const { return smileSpreads_; }
+    const string& quoteTag() const { return quoteTag_; }
     const vector<string>& quotes() override;
+    const std::string& smileDynamics() const { return smileDynamics_; }
+     //
+    const std::string& proxySourceCurveId() const { return proxySourceCurveId_; }
+    const std::string& proxySourceShortSwapIndexBase() const { return proxySourceShortSwapIndexBase_; }
+    const std::string& proxySourceSwapIndexBase() const { return proxySourceSwapIndexBase_; }
+    const std::string& proxyTargetShortSwapIndexBase() const { return proxyTargetShortSwapIndexBase_; }
+    const std::string& proxyTargetSwapIndexBase() const { return proxyTargetSwapIndexBase_; }
+    //
+    const ReportConfig& reportConfig() const { return reportConfig_; }
     //@}
 
     //! \name Setters
@@ -119,18 +143,21 @@ public:
     vector<string>& smileOptionTenors() { return smileOptionTenors_; }
     vector<string>& smileUnderlyingTenors() { return smileUnderlyingTenors_; }
     vector<string>& smileSpreads() { return smileSpreads_; }
-    //@}
+    string& quoteTag() { return quoteTag_; }
+    string& smileDynamics() { return smileDynamics_; }
+     //@}
 
 private:
-    string ccyFromSwapIndexBase();
+    void populateRequiredCurveIds();
+    string ccyFromSwapIndexBase(const std::string& swapIndexBase);
     //
     const string underlyingLabel_, rootNodeLabel_, marketDatumInstrumentLabel_, qualifierLabel_;
     const bool allowSmile_, requireSwapIndexBases_;
     //
     string qualifier_;
-    Dimension dimension_;
-    VolatilityType volatilityType_;
-    bool extrapolate_, flatExtrapolation_;
+    Dimension dimension_ = Dimension::Smile;
+    VolatilityType volatilityType_ = VolatilityType::Normal;
+    bool extrapolate_ = true, flatExtrapolation_ = true;
     vector<string> optionTenors_, underlyingTenors_;
     DayCounter dayCounter_;
     Calendar calendar_;
@@ -139,6 +166,16 @@ private:
     vector<string> smileOptionTenors_;
     vector<string> smileUnderlyingTenors_;
     vector<string> smileSpreads_;
+    string quoteTag_;
+    string smileDynamics_;
+  
+    string proxySourceCurveId_;
+    string proxySourceShortSwapIndexBase_;
+    string proxySourceSwapIndexBase_;
+    string proxyTargetShortSwapIndexBase_;
+    string proxyTargetSwapIndexBase_;
+
+    ReportConfig reportConfig_;
 };
 
 std::ostream& operator<<(std::ostream& out, GenericYieldVolatilityCurveConfig::VolatilityType t);

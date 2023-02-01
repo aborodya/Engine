@@ -60,13 +60,13 @@ in section \ref{sec:bootstrap_config} are used.
 
 \begin{table}[h]
 \centering
-  \begin{tabular}{|l|l|}
+  \begin{tabular}{|l|l|} 
     \hline
     {\bfseries Variable} & {\bfseries Description} \\
     \hline
     Zero & The continuously compounded zero rate \\ \hline
     Discount & The discount factor \\ \hline
-    Forward & The instantaneous forward rate \\ \hline 
+    Forward & The instantaneous forward rate \\ \hline
   \end{tabular}
   \caption{Allowable interpolation variables.}
   \label{tab:allow_interp_variables}
@@ -74,7 +74,7 @@ in section \ref{sec:bootstrap_config} are used.
 
 \begin{table}[h]
 \centering
-  \begin{tabular} {|l|p{10cm}|}
+\begin{tabular}{|l|p{11cm}|} 
     \hline
     {\bfseries Method} & {\bfseries Description} \\
     \hline
@@ -357,11 +357,11 @@ The \lstinline!BootstrapConfig! has the following interpretation for a fitted bo
   where 0.01 = 1 bp. Once this accuracy is reached in a calibration trial, the fit is accepted, no further calibration
   trials re run. In general, this parameter should be set to a higher than the default value for fitted bond curves.
 \item GlobalAccuracy [Optional]: the acceptable accuracy. If the Accuracy is not reached in any calibration trial, but
-  the GloablAccuracy is met, the best fit among the calibration trials is selected as a result of the calibration. If
+  the GlobalAccuracy is met, the best fit among the calibration trials is selected as a result of the calibration. If
   not given, the best calibration trial is compared to the Accuracy parameter instead.
 \item DontThrow [Optional, defaults to false]: If true, the best calibration is always accepted as a result, i.e. no
   error is thrown even if the GlobalAccuracy is breached.
-\item MaxAttempts [Optional, defaults to 5]: The maximum number of calibration trials. Each calibration trial is run with a random calibratio
+\item MaxAttempts [Optional, defaults to 5]: The maximum number of calibration trials. Each calibration trial is run with a random calibration
   seed. Random calibration seeds are currently only supported for the NelsonSiegel interpolation method.
 \end{itemize}
 
@@ -531,7 +531,7 @@ build a projection curve for an Ibor index based on a risk free rate and a sprea
       <Type>Ibor Fallback</Type>
       <IborIndex>USD-LIBOR-3M</IborIndex>
       <RfrCurve>Yield/USD/USD-SOFR</RfrCurve>
-      <!-- optional, if not given the rfr index and sprad are read from the ibor
+      <!-- optional, if not given the rfr index and spread are read from the ibor
            fallback configuration -->
       <RfrIndex>USD-SOFR</RfrIndex>
       <Spread>0.0026161</Spread>
@@ -542,3 +542,84 @@ build a projection curve for an Ibor index based on a risk free rate and a sprea
 \caption{Ibor fallback segment}
 \label{lst:ibor_fallback_segment}
 \end{listing}
+
+\subsubsection*{Discount Ratio Segment}
+\label{sec:dicount_ratio_segment}
+
+When the node name is \lstinline!DiscountRatio!, the \lstinline!Type! node has the only allowable value \emph{Dicount
+Ratio} and the node has the structure shown in Listing \ref{lst:discount_ratio_segment}. This segment is used to build a
+curve with discount factors $P(0,t)$ from three input curves with discount factors $P_b(0,t)$, $P_n(0,t)$ and $P_d(0,t)$
+(``base'', ``numerator'', ``denominator'' curves) following the equation
+
+\begin{equation}\label{discount_ratio_df}
+  P(0,t) = P_b(0,t) \frac{P_n(0,t)}{P_d(0,t)}
+\end{equation}
+
+The main use case of this segment is to build a discount curve ``CCY1-IN-CCY2'' for cashflows in CCY1 collateralized in
+CCY2 when curves ``CCY1-IN-BASE'' and ``CCY2-IN-BASE'' are known for a common base currency BASE:
+
+For a maturity $t$ denote the zero rate on a curve ``X'' by $r_X(t)$ and the correpsonding discount factor by
+$P_X(0,t)$. Furthermore, write ``CCY'' as shorthand for ``CCY-IN-CCY'', i.e. for the discount curve for cashflows in the
+same currency as the collateral currency ``CCY''. We write the desired zero rate as
+
+\begin{equation}\label{discount_ratio_rates}
+  \begin{split}
+    r_{\text{CCY1-IN-CCY2}} = r_{\text{CCY2}} + & ( r_{\text{BASE-IN-CCY2}} - r_{\text{CCY2}} ) + \\
+                               & (r_{\text{CCY1-IN-CCY2}} - r_{\text{BASE-IN-CCY2}})
+  \end{split}
+\end{equation}
+
+We now assume that these two rate differentials stay the same when we switch from collateral currency ``CCY2'' to
+``BASE'', i.e.
+
+\begin{eqnarray}
+r_{\text{BASE-IN-CCY2}} - r_{\text{CCY2}} &\approx& r_{\text{BASE}} - r_{\text{CCY2-IN-BASE}} \label{discount_ratio_rate1} \\
+r_{\text{CCY1-IN-CCY2}} - r_{\text{BASE-IN-CCY2}} &\approx& r_{\text{CCY1-IN-BASE}} - r_{\text{BASE}}  \label{discount_ratio_rate2}
+\end{eqnarray}
+
+In less technical terms we assume that FX Forward Quotes CCY2 / BASE and CCY1 / BASE stay constant when the collateral
+currency changes, which seems reasonable, if no further market information is available.
+
+The discount factors associated to the RHS of \ref{discount_ratio_rate1} and \ref{discount_ratio_rate2} can be written
+
+\begin{eqnarray}
+  P_{\text{BASE}}(0,t) / P_{\text{CCY2-IN-BASE}}(0,t) \\
+  P_{\text{CCY1-IN-BASE}}(0,t) / P_{\text{BASE}}(0,t)
+\end{eqnarray}
+
+and so \ref{discount_ratio_df} can be written
+
+\begin{equation}\label{discount_ratio_df2}
+  P_{\text{CCY1-IN-CCY2}}(0,t) = \frac{P_{\text{CCY2}}(0,t) P_{\text{CCY1-IN-BASE}}(0,t)}{P_{\text{CCY2-IN-BASE}}(0,t)}
+\end{equation}
+
+so the following choice of curves will result in the desired ``CCY1-IN-CCY2'' curve:
+
+\begin{itemize}
+\item base curve = ``CCY2-IN-CCY2''
+\item numerator curve = ``CCY1-IN-BASE''
+\item denominator curve = ``CCY2-IN-BASE''
+\end{itemize}
+
+\begin{listing}[H]
+%\hrule\medskip
+\begin{minted}[fontsize=\footnotesize]{xml}
+<YieldCurve>
+  <CurveId>GBP-IN-EUR</CurveId>
+  <CurveDescription>GBP collateralized in EUR discount curve</CurveDescription>
+  <Currency>GBP</Currency>
+  <DiscountCurve/>
+  <Segments>
+    <DiscountRatio>
+      <Type>Discount Ratio</Type>
+      <BaseCurve currency="EUR">EUR1D</BaseCurve>
+      <NumeratorCurve currency="GBP">GBP-IN-USD</NumeratorCurve>
+      <DenominatorCurve currency="EUR">EUR-IN-USD</DenominatorCurve>
+    </DiscountRatio>
+  </Segments>
+</YieldCurve>
+\end{minted}
+\caption{Discount Ratio segment}
+\label{lst:discount_ratio_segment}
+\end{listing}
+

@@ -57,17 +57,17 @@ public:
         registerWith(fixedTargetTermStructure);
     }
 
-    Date maxDate() const { return x_->maxDate(); }
-    void update() {}
-    const Date& referenceDate() const { return x_->referenceDate(); }
+    Date maxDate() const override { return x_->maxDate(); }
+    void update() override {}
+    const Date& referenceDate() const override { return x_->referenceDate(); }
 
-    Calendar calendar() const { return x_->calendar(); }
-    Natural settlementDays() const { return x_->settlementDays(); }
+    Calendar calendar() const override { return x_->calendar(); }
+    Natural settlementDays() const override { return x_->settlementDays(); }
 
     void flushCache() { cache_c_.clear(); }
 
 protected:
-    Real discountImpl(Time t) const;
+    Real discountImpl(Time t) const override;
 
 private:
     // FIXME: remove cache
@@ -76,7 +76,7 @@ private:
         double t0, t;
         bool operator==(const cache_key& o) const { return (t0 == o.t0) && (t == o.t); }
     };
-    struct cache_hasher : std::unary_function<cache_key, std::size_t> {
+    struct cache_hasher {
         std::size_t operator()(cache_key const& x) const {
             std::size_t seed = 0;
             boost::hash_combine(seed, x.t0);

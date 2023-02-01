@@ -50,10 +50,10 @@ namespace ore {
 namespace analytics {
 
 StressTest::StressTest(const boost::shared_ptr<ore::data::Portfolio>& portfolio,
-                       boost::shared_ptr<ore::data::Market>& market, const string& marketConfiguration,
+                       const boost::shared_ptr<ore::data::Market>& market, const string& marketConfiguration,
                        const boost::shared_ptr<ore::data::EngineData>& engineData,
                        boost::shared_ptr<ScenarioSimMarketParameters>& simMarketData,
-                       const boost::shared_ptr<StressTestScenarioData>& stressData, const Conventions& conventions,
+                       const boost::shared_ptr<StressTestScenarioData>& stressData, 
                        const CurveConfigurations& curveConfigs, const TodaysMarketParameters& todaysMarketParams,
                        boost::shared_ptr<ScenarioFactory> scenarioFactory,
                        std::vector<boost::shared_ptr<ore::data::EngineBuilder>> extraEngineBuilders,
@@ -63,7 +63,7 @@ StressTest::StressTest(const boost::shared_ptr<ore::data::Portfolio>& portfolio,
 
     LOG("Build Simulation Market");
     boost::shared_ptr<ScenarioSimMarket> simMarket = boost::make_shared<ScenarioSimMarket>(
-        market, simMarketData, conventions, Market::defaultConfiguration, curveConfigs, todaysMarketParams,
+        market, simMarketData, Market::defaultConfiguration, curveConfigs, todaysMarketParams,
         continueOnError, false, false, false, iborFallbackConfig);
 
     LOG("Build Stress Scenario Generator");
@@ -77,13 +77,14 @@ StressTest::StressTest(const boost::shared_ptr<ore::data::Portfolio>& portfolio,
     LOG("Build Engine Factory");
     map<MarketContext, string> configurations;
     configurations[MarketContext::pricing] = marketConfiguration;
-    boost::shared_ptr<EngineFactory> factory =
-        boost::make_shared<EngineFactory>(engineData, simMarket, configurations, extraEngineBuilders, extraLegBuilders,
-                                          referenceData, iborFallbackConfig);
+    auto ed = boost::make_shared<EngineData>(*engineData);
+    ed->globalParameters()["RunType"] = "Stress";
+    boost::shared_ptr<EngineFactory> factory = boost::make_shared<EngineFactory>(
+        ed, simMarket, configurations, extraEngineBuilders, extraLegBuilders, referenceData, iborFallbackConfig);
 
     LOG("Reset and Build Portfolio");
     portfolio->reset();
-    portfolio->build(factory);
+    portfolio->build(factory, "stress analysis");
 
     LOG("Build the cube object to store sensitivities");
     boost::shared_ptr<NPVCube> cube = boost::make_shared<DoublePrecisionInMemoryCube>(

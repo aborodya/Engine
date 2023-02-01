@@ -57,7 +57,7 @@ private:
 };
 
 //! Black averaged overnight coupon pricer
-/* The methods that are implemented here to price capped / floored avergad ON coupons are
+/* The methods that are implemented here to price capped / floored average ON coupons are
    highly experimental and ad-hoc. As soon as a market best practice has evolved, the pricer
    should be revised. */
 class BlackAverageONIndexedCouponPricer : public CapFlooredAverageONIndexedCouponPricer {
@@ -77,7 +77,7 @@ private:
 
     Real gearing_;
     ext::shared_ptr<IborIndex> index_;
-    Real swapletRate_;
+    Real swapletRate_, forwardRate_;
 
     const CappedFlooredAverageONIndexedCoupon* coupon_;
 };

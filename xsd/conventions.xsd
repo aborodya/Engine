@@ -27,6 +27,7 @@
       <xs:element type="commodityFutureType" name="CommodityFuture"/>
       <xs:element type="fxOption" name="FxOption"/>
       <xs:element type="zeroInflationIndexType" name="ZeroInflationIndex"/>
+      <xs:element type="bondYield" name="BondYield"/>
     </xs:choice>
   </xs:complexType>
 
@@ -128,6 +129,7 @@
       <xs:element type="xs:string" name="FixedCalendar" minOccurs="1" maxOccurs="1"/>
       <xs:element type="businessDayConvention" name="FixedConvention" minOccurs="1" maxOccurs="1"/>
       <xs:element type="businessDayConvention" name="FixedPaymentConvention" minOccurs="1" maxOccurs="1"/>
+      <xs:element type="frequencyType" name="FixedFrequency" minOccurs="0" maxOccurs="1"/>
       <xs:element type="xs:string" name="Index" minOccurs="1" maxOccurs="1"/>
       <xs:element type="xs:string" name="OnTenor" minOccurs="1" maxOccurs="1"/>
       <xs:element type="xs:string" name="RateCutoff" minOccurs="1" maxOccurs="1"/>
@@ -179,7 +181,8 @@
       <xs:element type="xs:decimal" name="PointsFactor" minOccurs="1" maxOccurs="1"/>
       <xs:element type="xs:string" name="AdvanceCalendar" minOccurs="0" maxOccurs="1"/>
       <xs:element type="bool" name="SpotRelative" minOccurs="0" maxOccurs="1"/>
-      <xs:element type="xs:string" name="AdditionalSettleCalendar" minOccurs="0" maxOccurs="1"/>
+      <xs:element type="bool" name="EOM" minOccurs="0"/>
+      <xs:element type="businessDayConvention" name="Convention" minOccurs="0"/>
     </xs:all>
   </xs:complexType>
 
@@ -196,6 +199,18 @@
       <xs:element type="bool" name="FlatIndexIsResettable" minOccurs="0" maxOccurs="1"/>
       <xs:element type="xs:string" name="FlatTenor" minOccurs="0" maxOccurs="1"/>
       <xs:element type="xs:string" name="SpreadTenor" minOccurs="0" maxOccurs="1"/>
+      <xs:element type="xs:integer" name="SpreadPaymentLag" minOccurs="0" maxOccurs="1"/>
+      <xs:element type="xs:integer" name="FlatPaymentLag" minOccurs="0" maxOccurs="1"/>
+      <xs:element type="bool" name="SpreadIncludeSpread" minOccurs="0" maxOccurs="1"/>
+      <xs:element type="xs:string" name="SpreadLookback" minOccurs="0" maxOccurs="1"/>
+      <xs:element type="xs:integer" name="SpreadFixingDays" minOccurs="0" maxOccurs="1"/>
+      <xs:element type="xs:integer" name="SpreadRateCutoff" minOccurs="0" maxOccurs="1"/>
+      <xs:element type="bool" name="SpreadIsAveraged" minOccurs="0" maxOccurs="1"/>
+      <xs:element type="bool" name="FlatIncludeSpread" minOccurs="0" maxOccurs="1"/>
+      <xs:element type="xs:string" name="FlatLookback" minOccurs="0" maxOccurs="1"/>
+      <xs:element type="xs:integer" name="FlatFixingDays" minOccurs="0" maxOccurs="1"/>
+      <xs:element type="xs:integer" name="FlatRateCutoff" minOccurs="0" maxOccurs="1"/>
+      <xs:element type="bool" name="FlatIsAveraged" minOccurs="0" maxOccurs="1"/>
     </xs:all>
   </xs:complexType>
 
@@ -394,6 +409,9 @@
             <xs:element type="nthWeekdayType" name="NthWeekday"/>
             <xs:element type="dayOfMonth" name="DayOfMonth"/>
             <xs:element type="xs:nonNegativeInteger" name="CalendarDaysBefore"/>
+            <xs:element type="weekdayType" name="LastWeekday"/>
+            <xs:element type="weekdayType" name="WeeklyDayOfTheWeek"/>
+            <xs:element type="xs:integer" name="BusinessDaysAfter"/>
           </xs:choice>
         </xs:complexType>
       </xs:element>
@@ -406,10 +424,14 @@
       <xs:element type="businessDayConvention" name="BusinessDayConvention" minOccurs="0" maxOccurs="1"/>
       <xs:element type="bool" name="AdjustBeforeOffset" minOccurs="0" maxOccurs="1"/>
       <xs:element type="bool" name="IsAveraging" minOccurs="0" maxOccurs="1"/>
-      <xs:element type="xs:nonNegativeInteger" name="OptionExpiryOffset" minOccurs="0" maxOccurs="1"/>
       <xs:element type="prohibitedExpiriesType" name="ProhibitedExpiries" minOccurs="0" maxOccurs="1"/>
       <xs:element type="xs:integer" name="OptionExpiryMonthLag" minOccurs="0" maxOccurs="1"/>
+      <xs:element type="frequencyType" name="OptionContractFrequency" minOccurs="0" maxOccurs="1"/>
+      <xs:element type="xs:nonNegativeInteger" name="OptionExpiryOffset" minOccurs="0" maxOccurs="1"/>
       <xs:element type="dayOfMonth" name="OptionExpiryDay" minOccurs="0" maxOccurs="1"/>
+      <xs:element type="nthWeekdayType" name="OptionNthWeekday" minOccurs="0" maxOccurs="1"/>
+      <xs:element type="weekdayType" name="OptionExpiryLastWeekdayOfMonth" minOccurs="0" maxOccurs="1"/>
+      <xs:element type="weekdayType" name="OptionExpiryWeeklyDayOfTheWeek" minOccurs="0" maxOccurs="1"/>
       <xs:element type="businessDayConvention" name="OptionBusinessDayConvention" minOccurs="0" maxOccurs="1"/>
       <xs:element type="continuationMappingsType" name="FutureContinuationMappings" minOccurs="0" maxOccurs="1"/>
       <xs:element type="continuationMappingsType" name="OptionContinuationMappings" minOccurs="0" maxOccurs="1"/>
@@ -417,6 +439,7 @@
       <xs:element type="xs:nonNegativeInteger" name="HoursPerDay" minOccurs="0" maxOccurs="1"/>
       <xs:element type="offPeakPowerIndexDataType" name="OffPeakPowerIndexData" minOccurs="0" maxOccurs="1"/>
       <xs:element type="xs:string" name="IndexName" minOccurs="0" maxOccurs="1"/>
+      <xs:element type="xs:string" name="SavingsTime" minOccurs="0" maxOccurs="1"/>
     </xs:all>
   </xs:complexType>
 
@@ -443,6 +466,18 @@
       <xs:element type="frequencyType" name="Frequency" minOccurs="1" maxOccurs="1"/>
       <xs:element type="xs:string" name="AvailabilityLag" minOccurs="1" maxOccurs="1"/>
       <xs:element type="currencyCode" name="Currency" minOccurs="1" maxOccurs="1"/>
+    </xs:all>
+  </xs:complexType>
+
+  <xs:complexType name="bondYield">
+    <xs:all>
+      <xs:element type="xs:string" name="Id" minOccurs="1" maxOccurs="1"/>
+      <xs:element type="xs:string" name="Compounding" minOccurs="1" maxOccurs="1"/>
+      <xs:element type="frequencyType" name="Frequency" minOccurs="0" maxOccurs="1"/>
+      <xs:element type="xs:string" name="PriceType" minOccurs="0" maxOccurs="1"/>
+      <xs:element type="xs:float" name="Accuracy" minOccurs="0" maxOccurs="1"/>
+      <xs:element type="xs:integer" name="MaxEvaluations" minOccurs="0" maxOccurs="1"/>
+      <xs:element type="xs:float" name="Guess" minOccurs="0" maxOccurs="1"/>
     </xs:all>
   </xs:complexType>
 

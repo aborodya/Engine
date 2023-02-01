@@ -17,7 +17,7 @@
 */
 
 /*! \file blackvariancecurve3.hpp
-    \brief Black volatility curve modelled as variance curve
+    \brief Black volatility curve modeled as variance curve
     \ingroup termstructures
 */
 
@@ -32,7 +32,7 @@
 namespace QuantExt {
 using namespace QuantLib;
 
-//! Black volatility curve modelled as variance curve
+//! Black volatility curve modeled as variance curve
 /*! This class calculates time-dependent Black volatilities using
     as input a vector of (ATM) Black volatilities observed in the
     market.
@@ -52,27 +52,27 @@ public:
                         bool requireMonotoneVariance = true);
     //! \name TermStructure interface
     //@{
-    Date maxDate() const;
+    Date maxDate() const override;
     //@}
     //! \name VolatilityTermStructure interface
     //@{
-    Real minStrike() const;
-    Real maxStrike() const;
+    Real minStrike() const override;
+    Real maxStrike() const override;
     //@}
     //! \name Observer interface
     //@{
-    void update();
+    void update() override;
     //@}
     //! \name LazyObject interface
     //@{
-    void performCalculations() const;
+    void performCalculations() const override;
     //@}
     //! \name Visitability
     //@{
-    virtual void accept(AcyclicVisitor&);
+    virtual void accept(AcyclicVisitor&) override;
     //@}
 protected:
-    virtual Real blackVarianceImpl(Time t, Real) const;
+    virtual Real blackVarianceImpl(Time t, Real) const override;
 
 private:
     std::vector<Time> times_;

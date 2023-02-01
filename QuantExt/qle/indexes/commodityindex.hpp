@@ -26,9 +26,9 @@
 
 #include <ql/currency.hpp>
 #include <ql/handle.hpp>
-#include <ql/index.hpp>
 #include <ql/termstructures/yieldtermstructure.hpp>
 #include <ql/time/calendar.hpp>
+#include <qle/indexes/eqfxindexbase.hpp>
 #include <qle/termstructures/pricetermstructure.hpp>
 
 namespace QuantExt {
@@ -50,7 +50,7 @@ using namespace QuantLib;
 
     \ingroup indexes
 */
-class CommodityIndex : public Index, public Observer {
+class CommodityIndex : public EqFxIndexBase {
 public:
     /*! spot quote is interpreted as of today */
     CommodityIndex(const std::string& underlyingName, const QuantLib::Date& expiryDate, const Calendar& fixingCalendar,
@@ -59,14 +59,14 @@ public:
         bool keepDays, const Handle<QuantExt::PriceTermStructure>& priceCurve = Handle<QuantExt::PriceTermStructure>());
     //! \name Index interface
     //@{
-    std::string name() const { return name_; }
-    Calendar fixingCalendar() const { return fixingCalendar_; }
-    bool isValidFixingDate(const Date& fixingDate) const { return fixingCalendar().isBusinessDay(fixingDate); }
-    Real fixing(const Date& fixingDate, bool forecastTodaysFixing = false) const;
+    std::string name() const override { return name_; }
+    Calendar fixingCalendar() const override { return fixingCalendar_; }
+    bool isValidFixingDate(const Date& fixingDate) const override { return fixingCalendar_.isBusinessDay(fixingDate); }
+    Real fixing(const Date& fixingDate, bool forecastTodaysFixing = false) const override;
     //@}
     //! \name Observer interface
     //@{
-    void update() { notifyObservers(); }
+    void update() override { notifyObservers(); }
     //@}
     //! \name Inspectors
     //@{
@@ -79,7 +79,8 @@ public:
     //! \name Fixing calculations
     //@{
     virtual Real forecastFixing(const Date& fixingDate) const;
-    virtual Real pastFixing(const Date& fixingDate) const;
+    virtual Real forecastFixing(const Time& fixingTime) const override;
+    virtual Real pastFixing(const Date& fixingDate) const override;
     // @}
 
     /*! Returns a copy of itself with a potentially different expiry date and pricing curve.
@@ -138,7 +139,6 @@ public:
     //! Implement the base clone.
     boost::shared_ptr<CommodityIndex> clone(const QuantLib::Date& expiryDate = QuantLib::Date(),
         const boost::optional<QuantLib::Handle<PriceTermStructure>>& ts = boost::none) const override;
-
 };
 
 } // namespace QuantExt

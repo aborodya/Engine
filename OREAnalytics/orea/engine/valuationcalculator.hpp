@@ -71,6 +71,12 @@ public:
         boost::shared_ptr<NPVCube>& outputCube,
         //! The cube
         boost::shared_ptr<NPVCube>& outputCubeNettingSet) = 0;
+
+    // called once before the valuation engine run
+    virtual void init(const boost::shared_ptr<Portfolio>& portfolio, const boost::shared_ptr<SimMarket>& simMarket) = 0;
+
+    // called after each scenario update before the calculators are run
+    virtual void initScenario() = 0;
 };
 
 //! NPVCalculator
@@ -86,17 +92,25 @@ public:
     virtual void calculate(const boost::shared_ptr<Trade>& trade, Size tradeIndex,
                            const boost::shared_ptr<SimMarket>& simMarket, boost::shared_ptr<NPVCube>& outputCube,
                            boost::shared_ptr<NPVCube>& outputCubeNettingSet, const Date& date, Size dateIndex,
-                           Size sample, bool isCloseOut = false);
+                           Size sample, bool isCloseOut = false) override;
 
     virtual void calculateT0(const boost::shared_ptr<Trade>& trade, Size tradeIndex,
                              const boost::shared_ptr<SimMarket>& simMarket, boost::shared_ptr<NPVCube>& outputCube,
-                             boost::shared_ptr<NPVCube>& outputCubeNettingSet);
+                             boost::shared_ptr<NPVCube>& outputCubeNettingSet) override;
 
-    virtual Real npv(const boost::shared_ptr<Trade>& trade, const boost::shared_ptr<SimMarket>& simMarket);
+    virtual Real npv(Size tradeIndex, const boost::shared_ptr<Trade>& trade,
+                     const boost::shared_ptr<SimMarket>& simMarket);
+
+    void init(const boost::shared_ptr<Portfolio>& portfolio, const boost::shared_ptr<SimMarket>& simMarket) override;
+    void initScenario() override;
 
 protected:
     std::string baseCcyCode_;
     Size index_;
+
+    std::vector<Handle<Quote>> ccyQuotes_;
+    std::vector<double> fxRates_;
+    std::vector<Size> tradeCcyIndex_;
 };
 
 //! CashflowCalculator
@@ -114,17 +128,24 @@ public:
     virtual void calculate(const boost::shared_ptr<Trade>& trade, Size tradeIndex,
                            const boost::shared_ptr<SimMarket>& simMarket, boost::shared_ptr<NPVCube>& outputCube,
                            boost::shared_ptr<NPVCube>& outputCubeNettingSet, const Date& date, Size dateIndex,
-                           Size sample, bool isCloseOut = false);
+                           Size sample, bool isCloseOut = false) override;
 
     virtual void calculateT0(const boost::shared_ptr<Trade>& trade, Size tradeIndex,
                              const boost::shared_ptr<SimMarket>& simMarket, boost::shared_ptr<NPVCube>& outputCube,
-                             boost::shared_ptr<NPVCube>& outputCubeNettingSet) {}
+                             boost::shared_ptr<NPVCube>& outputCubeNettingSet) override {}
+
+    void init(const boost::shared_ptr<Portfolio>& portfolio, const boost::shared_ptr<SimMarket>& simMarket) override;
+    void initScenario() override;
 
 private:
     std::string baseCcyCode_;
     Date t0Date_;
     boost::shared_ptr<DateGrid> dateGrid_;
     Size index_;
+
+    std::vector<Handle<Quote>> ccyQuotes_;
+    std::vector<double> fxRates_;
+    std::vector<std::vector<Size>> tradeAndLegCcyIndex_;
 };
 
 //! NPVCalculatorFXT0
@@ -143,18 +164,25 @@ public:
     virtual void calculate(const boost::shared_ptr<Trade>& trade, Size tradeIndex,
                            const boost::shared_ptr<SimMarket>& simMarket, boost::shared_ptr<NPVCube>& outputCube,
                            boost::shared_ptr<NPVCube>& outputCubeNettingSet, const Date& date, Size dateIndex,
-                           Size sample, bool isCloseOut = false);
+                           Size sample, bool isCloseOut = false) override;
 
     virtual void calculateT0(const boost::shared_ptr<Trade>& trade, Size tradeIndex,
                              const boost::shared_ptr<SimMarket>& simMarket, boost::shared_ptr<NPVCube>& outputCube,
-                             boost::shared_ptr<NPVCube>& outputCubeNettingSet);
+                             boost::shared_ptr<NPVCube>& outputCubeNettingSet) override;
 
-    Real npv(const boost::shared_ptr<Trade>& trade, const boost::shared_ptr<SimMarket>& simMarket);
+    Real npv(Size tradeIndex, const boost::shared_ptr<Trade>& trade, const boost::shared_ptr<SimMarket>& simMarket);
+
+    void init(const boost::shared_ptr<Portfolio>& portfolio, const boost::shared_ptr<SimMarket>& simMarket) override;
+    void initScenario() override {}
 
 private:
     std::string baseCcyCode_;
     boost::shared_ptr<Market> t0Market_;
     Size index_;
+
+    std::vector<double> fxRates_;
+    std::vector<Size> tradeCcyIndex_;
 };
+
 } // namespace analytics
 } // namespace ore

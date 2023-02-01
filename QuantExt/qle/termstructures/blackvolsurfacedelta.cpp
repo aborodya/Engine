@@ -1,5 +1,6 @@
 /*
  Copyright (C) 2019 Quaternion Risk Management Ltd
+ Copyright (C) 2022 Skandinaviska Enskilda Banken AB (publ)
  All rights reserved.
 
  This file is part of ORE, a free-software/open-source library
@@ -42,6 +43,8 @@ InterpolatedSmileSection::InterpolatedSmileSection(Real spot, Real rd, Real rf, 
         interpolator_ = Cubic(CubicInterpolation::Kruger, true, CubicInterpolation::SecondDerivative, 0.0,
                               CubicInterpolation::FirstDerivative)
                             .interpolate(strikes_.begin(), strikes_.end(), vols_.begin());
+    else if (method == InterpolationMethod::CubicSpline)
+        interpolator_ = CubicNaturalSpline(strikes_.begin(), strikes_.end(), vols_.begin());
     else {
         QL_FAIL("Invalid method " << (int)method);
     }
@@ -215,17 +218,19 @@ Real BlackVolatilitySurfaceDelta::forward(Time t) const {
 }
 
 Volatility BlackVolatilitySurfaceDelta::blackVolImpl(Time t, Real strike) const {
+    // Only flat extrapolation allowed
+    Time tme = t <= times_.back() ? t : times_.back();
     // If asked for strike == 0, just return the ATM value.
     if (strike == 0 || strike == Null<Real>()) {
         if (hasAtm_) {
             // ask the ATM interpolator directly
-            return interpolators_[putDeltas_.size()]->blackVol(t, Null<Real>(), true);
+            return interpolators_[putDeltas_.size()]->blackVol(tme, Null<Real>(), true);
         } else {
             // set strike to be fwd and we will return ATMF
-            strike = forward(t);
+            strike = forward(tme);
         }
     }
-    return blackVolSmile(t)->volatility(strike);
+    return blackVolSmile(tme)->volatility(strike);
 }
 
 } // namespace QuantExt

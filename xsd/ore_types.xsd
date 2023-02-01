@@ -20,17 +20,24 @@
       <xs:pattern value="(\d{4}-([0]\d|1[0-2])-([0-2]\d|3[01]))?"/>
     </xs:restriction>
   </xs:simpleType>
+  
+  <xs:simpleType name="period">
+    <!-- period can be 1D, 5M, 10w, 20Y etc -->
+    <xs:restriction base="xs:string">
+      <xs:pattern value="(\d*(d|D|m|M|y|Y))?"/>
+    </xs:restriction>
+  </xs:simpleType>
+  
+  <xs:simpleType name="paymentLag">
+    <!-- paymentLag can be either integer or a period 1D, 5M, 10w, 20Y etc -->
+    <xs:restriction base="xs:string">
+      <xs:pattern value="(\d*|(\d*(d|D|m|M|y|Y)))?"/>
+    </xs:restriction>
+  </xs:simpleType>
 
   <xs:simpleType name="indexNameType">
-    <!-- Index name is of form CCY-NAME or CCY-NAME-TENOR max length is EUR-EURIBOR-12M or FX-SOURCE-CCY1-CCY2 -->
     <xs:restriction base="xs:string">
-      <xs:maxLength value="15"/>
-      <!-- This is not strict.
-           - CCY is any 3 uppercase character string (can we use the below currencyCode list?)
-           - NAME is any 3 to 8 character string ("CMS" up to "FedFunds")
-           - TENOR is any 1 to 3 digit followed by one of YMWD (99M would pass)
-        -->
-      <xs:pattern value="\p{Lu}{3}-\c{3,8}|\p{Lu}{3}-\c{3,8}-\d{1,3}[YMWD]|\c{2}-\c{1,8}-\p{Lu}{3}-\p{Lu}{3}"/>
+      <xs:minLength value='1'/>
     </xs:restriction>
   </xs:simpleType>
 
@@ -96,6 +103,7 @@
       <xs:enumeration value="CUC"/>
       <xs:enumeration value="CUP"/>
       <xs:enumeration value="CVE"/>
+      <xs:enumeration value="CYP"/>
       <xs:enumeration value="CZK"/>
       <xs:enumeration value="DJF"/>
       <xs:enumeration value="DKK"/>
@@ -147,6 +155,8 @@
       <xs:enumeration value="LKR"/>
       <xs:enumeration value="LRD"/>
       <xs:enumeration value="LSL"/>
+      <xs:enumeration value="LTL"/>
+      <xs:enumeration value="LVL"/>
       <xs:enumeration value="LYD"/>
       <xs:enumeration value="MAD"/>
       <xs:enumeration value="MDL"/>
@@ -190,6 +200,7 @@
       <xs:enumeration value="SGD"/>
       <xs:enumeration value="SHP"/>
       <xs:enumeration value="SLL"/>
+      <xs:enumeration value="SKK"/>
       <xs:enumeration value="SOS"/>
       <xs:enumeration value="SRD"/>
       <xs:enumeration value="SSP"/>
@@ -232,6 +243,13 @@
       <xs:enumeration value="ZAR"/>
       <xs:enumeration value="ZMW"/>
       <xs:enumeration value="ZWL"/>
+      <xs:enumeration value="XBT"/>
+      <xs:enumeration value="BTC"/>
+      <xs:enumeration value="ETH"/>
+      <xs:enumeration value="ETC"/>
+      <xs:enumeration value="BCH"/>
+      <xs:enumeration value="XRP"/>
+      <xs:enumeration value="LTC"/>
     </xs:restriction>
   </xs:simpleType>
   
@@ -253,12 +271,13 @@
 				<xs:enumeration value="GBX" />
 				<xs:enumeration value="ILa" />
 				<xs:enumeration value="ILX" />
+				<xs:enumeration value="KWf" />
 				<xs:enumeration value="ZAc" />
 				<xs:enumeration value="ZAC" />
 				<xs:enumeration value="ZAX" />
 			</xs:restriction>
 		</xs:simpleType>
-        </xs:union>
+     </xs:union>
   </xs:simpleType>
   
   <xs:simpleType name="currencyPair">
@@ -291,12 +310,13 @@
       <xs:enumeration value="NEAREST"/>
       <xs:enumeration value="NONE"/>
       <xs:enumeration value="NotApplicable"/>
+      <xs:enumeration value=""/>
     </xs:restriction>
   </xs:simpleType>
 
   <xs:simpleType name="calendar">
     <xs:restriction base="xs:string">
-      <xs:pattern value="(JoinHolidays\(|JoinBusinessDays\()?((,)?(, )?(^)?(TGT|TARGET|CN-IB|US-FED|US-GOV|US-NERC|US-NYSE|US-SET|Australia|Botswana|Brazil|Canada|Denmark|Japan|Norway|Switzerland|Sweden|Belgium|Finland|Luxembourg|Spain|Austria|Romania|Poland|New Zealand|FRA|CATO|CHZU|JPTO|GBLO|SEST|TRIS|USNY|EUTA|BEBR|AT|AR|AU|BW|BR|CA|CL|CN|CO|CZ|DK|FI|FR|DE|HK|HU|IS|IN|ID|IL|IT|JP|MX|MY|NL|NO|NZ|PE|PH|PL|RO|RU|SG|ZA|KR|SE|CH|TW|TH|TR|UA|GB|US|BE|LU|ES|ARG|AUS|BWA|BRA|CAN|CHL|CHN|COL|CZE|DNK|FIN|DEU|HKG|HUN|ISL|IND|IDN|ISR|ITA|JOD|JPN|KES|LKR|MEX|MUR|MYS|NLD|NOR|NZL|PER|PHL|POL|ROU|RSD|RUS|SAU|SGP|UGX|ZAF|ZMW|KOR|SWE|CHE|TWN|THA|TUR|UKR|GBR|USA|BEL|LUX|ESP|AUT|ARS|AUD|BGN|BWP|BRL|CAD|CLP|CNH|CNY|COP|CZK|DKK|FRF|GHS|HKD|HRK|HUF|INR|IDR|ILS|ISK|ITL|JPY|MXN|MYR|NOK|NZD|PEN|PHP|PLN|RON|RUB|SAR|SGD|ZAR|KRW|SEK|CHF|EUR|TWD|THB|TRY|UAH|GBP|USD|BEF|LUF|ATS|AED|BHD|CLF|EGP|KWD|KZT|MAD|MXV|NGN|OMR|PKR|QAR|UYU|TND|AOA|GEL|ETB|XOF|VND|GBp|GBX|ILa|ILX|ZAc|ZAC|ZAX|BVMF|XTSE|XSHG|XFRA|XETR|ECAG|EUWA|XJKT|XIDX|XTAE|XMIL|MISX|XKRX|XSWX|XLON|XLME|XNYS|DEN|TSX|BOVESPA|Euwax|CME Group|Eurex|Xetra|Frankfurt stock exchange|French settlement|German settlement|Paris stock exchange|Telbor|National Stock Exchange of India|London stock exchange|LNB|London metals exchange|Iceland stock exchange|New York stock exchange|Italian settlement|Santiago Stock Exchange|Ukrainian stock exchange|NGL|NYB|SA|SS|SYB|TKB|TRB|UK|UK settlement|Jakarta stock exchange|US settlement|Belgian settlement|US with Libor impact|US government bond market|North American Energy Reliability Council|Federal Reserve Bankwire System|WMR|ZUB|ICE_FuturesUS|ICE_FuturesUS_1|ICE_FuturesUS_2|ICE_FuturesEU|ICE_FuturesEU_1|ICE_EndexEnergy|ICE_EndexEquities|ICE_SwapTradeUS|ICE Futures U.S.|ICE Futures U.S. 1|ICE Futures U.S. 2|ICE Futures Europe|ICE Futures Europe 1|ICE Endex Energy|ICE Endex Equities|ICE Swap Trade U.S.|ICE Swap Trade U.K.|ICE Futures Singapore|ICE_SwapTradeUK|ICE_FuturesSingapore|CME|Thailand stock exchange|Turkey|Milan stock exchange|Taiwan stock exchange|South-Korean settlement|South-Korea exchange|South Africa|Bratislava stock exchange|Moscow exchange|Mexican stock exchange|Russian settlement|Spanish settlement|Luxembourgish settlement|Dutch settlement|Austrian settlement|Tadawul|Tel Aviv stock exchange|Bucharest stock exchange|Singapore exchange|Hong Kong stock exchange|Vienna stock exchange|Prague stock exchange|China inter bank market|Shanghai stock exchange|Colombia Stock Exchange|Buenos Aires stock exchange|Philippine stock exchange|Lima stock exchange|SIX Swiss Exchange|Malaysia Stock Exchange|Thomson Reuters QM/Reuters Spot|Israel Telbor Implementation|WeekendsOnly|weekends only|UNMAPPED|Null|NullCalendar|[A-Z]{4}|CUSTOM_.*))*(\))?"/>
+      <xs:pattern value="(JoinHolidays\(|JoinBusinessDays\()?((,)?(, )?(^)?(TGT|TARGET|CN-IB|US-FED|US-GOV|US-NERC|US-NYSE|US-SET|Australia|Botswana|Brazil|Canada|Denmark|Hungary|Japan|Norway|Switzerland|Sweden|Belgium|Finland|Luxembourg|Spain|Austria|Romania|Poland|New Zealand|FRA|CATO|CHZU|JPTO|GBLO|SEST|TRIS|USNY|EUTA|BEBR|AE|AT|AR|AU|BW|BR|CA|CL|CN|CO|CZ|DK|FI|FR|DE|HK|HU|IE|IS|IN|ID|IL|IT|JE|JP|MX|MY|NL|NO|NZ|PE|PH|PL|RO|RU|SG|ZA|KR|SE|CH|TW|TH|TR|UA|GB|US|BE|LU|ES|ARE|ARG|AUS|BWA|BRA|CAN|CHL|CHN|COL|CZE|DNK|FIN|DEU|HKG|HUN|ISL|IND|IDN|ISR|ITA|JOD|JPN|KES|LKR|MEX|MUR|MYS|NLD|NOR|NZL|PER|PHL|POL|ROU|RSD|RUS|SAU|SGP|UGX|ZAF|ZMW|KOR|SWE|CHE|TWN|THA|TUR|UKR|GBR|USA|BEL|LUX|ESP|AUT|ARS|AUD|BGN|BWP|BRL|CAD|CLP|CNH|CNY|COP|CZK|DKK|FRF|GHS|HKD|HRK|HUF|INR|IDR|ILS|IRL|ISK|ITL|JPY|MXN|MYR|NOK|NZD|PEN|PHP|PLN|RON|RUB|SAR|SGD|ZAR|KRW|SEK|CHF|EUR|TWD|THB|TRY|UAH|GBP|USD|BEF|LUF|ATS|AED|BHD|CLF|EGP|KWD|KZT|MAD|MXV|NGN|OMR|PKR|QAR|UYU|TND|AOA|GEL|ETB|XOF|VND|GBp|GBX|ILa|ILX|ZAc|ZAC|ZAX|BVMF|XTSE|XSHG|XFRA|XDUB|XETR|ECAG|EUWA|XJKT|XIDX|XTAE|XMIL|MISX|XKRX|XSWX|XLON|XLME|XNYS|DEN|TSX|BOVESPA|Euwax|CME Group|Eurex|Xetra|Frankfurt stock exchange|French settlement|German settlement|Paris stock exchange|Telbor|National Stock Exchange of India|London stock exchange|LNB|London metals exchange|Iceland stock exchange|New York stock exchange|Italian settlement|Santiago Stock Exchange|Ukrainian stock exchange|NGL|NYB|SA|SS|SYB|TKB|TRB|UK|UK settlement|Jakarta stock exchange|US settlement|Belgian settlement|US with Libor impact|US government bond market|North American Energy Reliability Council|Federal Reserve Bankwire System|WMR|ZUB|ICE_FuturesUS|ICE_FuturesUS_1|ICE_FuturesUS_2|ICE_FuturesEU|ICE_FuturesEU_1|ICE_EndexEnergy|ICE_EndexEquities|ICE_SwapTradeUS|ICE Futures U.S.|ICE Futures U.S. 1|ICE Futures U.S. 2|ICE Futures Europe|ICE Futures Europe 1|ICE Endex Energy|ICE Endex Equities|ICE Swap Trade U.S.|ICE Swap Trade U.K.|ICE Futures Singapore|ICE_SwapTradeUK|ICE_FuturesSingapore|CME|Thailand stock exchange|Turkey|Milan stock exchange|Taiwan stock exchange|South-Korean settlement|South-Korea exchange|South Africa|Bratislava stock exchange|Moscow exchange|Mexican stock exchange|Russian settlement|Spanish settlement|Luxembourgish settlement|Dutch settlement|Austrian settlement|Tadawul|Tel Aviv stock exchange|Bucharest stock exchange|Singapore exchange|Hong Kong stock exchange|Vienna stock exchange|Prague stock exchange|China inter bank market|Shanghai stock exchange|Colombia Stock Exchange|Buenos Aires stock exchange|Philippine stock exchange|Lima stock exchange|SIX Swiss Exchange|Malaysia Stock Exchange|Thomson Reuters QM/Reuters Spot|Israel Telbor Implementation|WeekendsOnly|weekends only|UNMAPPED|Null|NullCalendar|[A-Z]{4}|CUSTOM_.*))*(\))?"/>
     </xs:restriction>
   </xs:simpleType>
   <xs:simpleType name="dayCounter">
@@ -317,13 +337,26 @@
       <xs:enumeration value="ACT/365L"/>
       <xs:enumeration value="Act/365"/>
       <xs:enumeration value="Act/365L"/>
+      <xs:enumeration value="Act/365 (Canadian Bond)"/>
       <xs:enumeration value="T360"/>
       <xs:enumeration value="30/360"/>
+      <xs:enumeration value="30/360 US"/>
+      <xs:enumeration value="30/360 (US)"/>
+      <xs:enumeration value="30U/360"/>
+      <xs:enumeration value="30US/360"/>
       <xs:enumeration value="30/360 (Bond Basis)"/>
       <xs:enumeration value="ACT/nACT"/>
       <xs:enumeration value="30E/360 (Eurobond Basis)"/>
+      <xs:enumeration value="30/360 AIBD (Euro)"/>
+      <xs:enumeration value="30E/360.ICMA"/>
+      <xs:enumeration value="30E/360 ICAM"/>
       <xs:enumeration value="30E/360"/>
+      <xs:enumeration value="30E/360E"/>
       <xs:enumeration value="30E/360.ISDA"/>
+      <xs:enumeration value="30E/360 ISDA"/>
+      <xs:enumeration value="30/360 German"/>
+      <xs:enumeration value="30/360 (German)"/>
+      <xs:enumeration value="30/360 Italian"/>
       <xs:enumeration value="30/360 (Italian)"/>
       <xs:enumeration value="ActActISDA"/>
       <xs:enumeration value="ACT/ACT.ISDA"/>
@@ -433,14 +466,20 @@
       <xs:enumeration value="NaturalCubic"/>
       <xs:enumeration value="FinancialCubic"/>
       <xs:enumeration value="Cubic"/>
+      <xs:enumeration value="Hermite"/>
+      <xs:enumeration value="Quadratic"/>
+      <xs:enumeration value="LogQuadratic"/>
+      <xs:enumeration value="CubicSpline"/>
       <xs:enumeration value="LinearFlat"/>
       <xs:enumeration value="LogLinearFlat"/>
       <xs:enumeration value="CubicFlat"/>
+      <xs:enumeration value="HermiteFlat"/>
       <xs:enumeration value="ConvexMonotone"/>
       <xs:enumeration value="ExponentialSplines"/>
       <xs:enumeration value="NelsonSiegel"/>
       <xs:enumeration value="Svensson"/>
       <xs:enumeration value="BackwardFlat"/>
+      <xs:enumeration value="CubicSpline"/>
     </xs:restriction>
   </xs:simpleType>
 
@@ -481,6 +520,7 @@
 
   <xs:simpleType name="fxVolInterpolation">
     <xs:restriction base="xs:string">
+      <xs:enumeration value=""/>
       <xs:enumeration value="VannaVolga1"/>
       <xs:enumeration value="VannaVolga2"/>
       <xs:enumeration value="Linear"/>
@@ -540,6 +580,7 @@
       <xs:enumeration value="RelativeToInitialNotional"/>
       <xs:enumeration value="RelativeToPreviousNotional"/>
       <xs:enumeration value="Annuity"/>
+      <xs:enumeration value="LinearToMaturity"/>
     </xs:restriction>
   </xs:simpleType>
 
@@ -769,10 +810,11 @@
           <xs:all>
             <xs:element type="date" name="StartDate"/>
             <xs:element type="date" name="EndDate" minOccurs="0"/>
+            <xs:element type="bool" name="AdjustEndDateToPreviousMonthEnd" minOccurs="0" maxOccurs="1"/>
             <xs:element type="xs:string" name="Tenor"/>
             <xs:element type="calendar" name="Calendar" minOccurs="0"/>
             <xs:element type="businessDayConvention" name="Convention"/>
-            <xs:element type="businessDayConvention" name="TermConvention"/>
+            <xs:element type="businessDayConvention" name="TermConvention" minOccurs="0"/>
             <xs:element type="dateRule" name="Rule" minOccurs="0"/>
             <xs:element type="bool" name="EndOfMonth" minOccurs="0"/>
             <xs:element type="date" name="FirstDate" minOccurs="0"/>
@@ -797,6 +839,7 @@
           </xs:all>
         </xs:complexType>
       </xs:element>
+      <xs:element ref="DerivedScheduleGroup"/>
     </xs:choice>
   </xs:complexType>
 
@@ -825,27 +868,6 @@
     </xs:restriction>
   </xs:simpleType>
 
-  <xs:simpleType name="averageType">
-    <xs:restriction base="xs:string">
-      <xs:enumeration value="Arithmetic"/>
-      <xs:enumeration value="Geometric"/>
-    </xs:restriction>
-  </xs:simpleType>
-
-  <xs:simpleType name="asianType">
-    <xs:restriction base="xs:string">
-      <xs:enumeration value="Price"/>
-      <xs:enumeration value="Strike"/>
-    </xs:restriction>
-  </xs:simpleType>
-
-  <xs:complexType name="asianData">
-    <xs:all>
-       <xs:element type="averageType" name="AverageType"/>
-       <xs:element type="asianType" name="AsianType"/>
-    </xs:all>
-  </xs:complexType>
-
   <xs:complexType name="premiumData">
     <xs:sequence>
       <xs:element name="Premium" minOccurs="0" maxOccurs="unbounded">
@@ -858,6 +880,19 @@
         </xs:complexType>
       </xs:element>
     </xs:sequence>
+  </xs:complexType>
+
+  <xs:element name="DerivedScheduleGroup" abstract="true"/>
+  <xs:element name="DerivedSchedule" type="DerivedScheduleType" substitutionGroup="DerivedScheduleGroup"/>
+  <xs:element name="Derived" type="DerivedScheduleType" substitutionGroup="DerivedScheduleGroup"/>
+
+  <xs:complexType name="DerivedScheduleType">
+    <xs:all>
+      <xs:element type="xs:string" name="BaseSchedule"/>
+      <xs:element type="xs:string" name="Shift" minOccurs="0"/>
+      <xs:element type="calendar" name="Calendar" minOccurs="0"/>
+      <xs:element type="businessDayConvention" name="Convention" minOccurs="0"/>
+    </xs:all>
   </xs:complexType>
 
 </xs:schema>

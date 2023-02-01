@@ -36,7 +36,7 @@ using namespace QuantLib;
     termstructure at construction, but you can vary this
     as well as the state.
     The purely time based variant is mainly there for
-    perfomance reasons, note that it does not provide the
+    performance reasons, note that it does not provide the
     full term structure interface and does not send
     notifications on reference time updates.
 
@@ -49,10 +49,10 @@ public:
                                    const Size currency, const DayCounter& dc = DayCounter(),
                                    const bool purelyTimeBased = false);
 
-    Date maxDate() const;
-    Time maxTime() const;
+    Date maxDate() const override;
+    Time maxTime() const override;
 
-    const Date& referenceDate() const;
+    const Date& referenceDate() const override;
 
     void referenceDate(const Date& d);
     void referenceTime(const Time t);
@@ -60,11 +60,10 @@ public:
     void move(const Date& d, const Real z, const Real y);
     void move(const Time t, const Real z, const Real y);
 
-    void update();
+    void update() override;
 
 protected:
-    Rate hazardRateImpl(Time) const;
-    Probability survivalProbabilityImpl(Time) const;
+    Probability survivalProbabilityImpl(Time) const override;
 
     const boost::shared_ptr<CrossAssetModel> model_;
     const Size index_, currency_;

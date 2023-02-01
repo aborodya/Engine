@@ -55,11 +55,19 @@ public:
     CurrencySwap(const std::vector<Leg>& legs, const std::vector<bool>& payer, const std::vector<Currency>& currency,
                  const bool isPhysicallySettled = true, const bool isResettable = false);
     //@}
+    //! \name LazyObject interface
+    //@{
+    void alwaysForwardNotifications() override;
+    //@}
+    //! \name Observable interface
+    //@{
+    void deepUpdate() override;
+    //@}
     //! \name Instrument interface
     //@{
-    bool isExpired() const;
-    void setupArguments(PricingEngine::arguments*) const;
-    void fetchResults(const PricingEngine::results*) const;
+    bool isExpired() const override;
+    void setupArguments(PricingEngine::arguments*) const override;
+    void fetchResults(const PricingEngine::results*) const override;
     //@}
     //! \name Additional interface
     //@{
@@ -119,7 +127,7 @@ protected:
     CurrencySwap(Size legs);
     //! \name Instrument interface
     //@{
-    void setupExpired() const;
+    void setupExpired() const override;
     //@}
     // data members
     std::vector<Leg> legs_;
@@ -140,7 +148,7 @@ public:
     std::vector<Currency> currency;
     bool isPhysicallySettled;
     bool isResettable;
-    void validate() const;
+    void validate() const override;
 };
 
 //! \ingroup instruments
@@ -150,7 +158,7 @@ public:
     std::vector<Real> legBPS, inCcyLegBPS;
     std::vector<DiscountFactor> startDiscounts, endDiscounts;
     DiscountFactor npvDateDiscount;
-    void reset();
+    void reset() override;
 };
 
 //! \ingroup instruments

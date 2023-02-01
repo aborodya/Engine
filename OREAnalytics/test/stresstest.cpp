@@ -100,6 +100,8 @@ boost::shared_ptr<data::Conventions> stressConv() {
     conventions->add(boost::make_shared<data::DepositConvention>("JPY-DEP-CONVENTIONS", "JPY-LIBOR"));
     conventions->add(boost::make_shared<data::DepositConvention>("CHF-DEP-CONVENTIONS", "CHF-LIBOR"));
 
+    InstrumentConventions::instance().setConventions(conventions);
+
     return conventions;
 }
 
@@ -119,11 +121,11 @@ boost::shared_ptr<analytics::ScenarioSimMarketParameters> setupStressSimMarketDa
     simMarketData->setSwapVolTerms("", {1 * Years, 2 * Years, 3 * Years, 5 * Years, 7 * Years, 10 * Years, 20 * Years});
     simMarketData->setSwapVolExpiries(
         "", {6 * Months, 1 * Years, 2 * Years, 3 * Years, 5 * Years, 7 * Years, 10 * Years, 20 * Years});
-    simMarketData->setSwapVolCcys({"EUR", "GBP", "USD", "CHF", "JPY"});
+    simMarketData->setSwapVolKeys({"EUR", "GBP", "USD", "CHF", "JPY"});
     simMarketData->swapVolDecayMode() = "ForwardVariance";
     simMarketData->setSimulateSwapVols(true); // false;
 
-    simMarketData->setFxVolExpiries(
+    simMarketData->setFxVolExpiries("",
         vector<Period>{1 * Months, 3 * Months, 6 * Months, 2 * Years, 3 * Years, 4 * Years, 5 * Years});
     simMarketData->setFxVolDecayMode(string("ConstantVariance"));
     simMarketData->setSimulateFXVols(true); // false;
@@ -135,7 +137,7 @@ boost::shared_ptr<analytics::ScenarioSimMarketParameters> setupStressSimMarketDa
 
     simMarketData->setSimulateCapFloorVols(true);
     simMarketData->capFloorVolDecayMode() = "ForwardVariance";
-    simMarketData->setCapFloorVolCcys({"EUR", "USD"});
+    simMarketData->setCapFloorVolKeys({"EUR", "USD"});
     simMarketData->setCapFloorVolExpiries(
         "", {6 * Months, 1 * Years, 2 * Years, 3 * Years, 5 * Years, 7 * Years, 10 * Years, 15 * Years, 20 * Years});
     simMarketData->setCapFloorVolStrikes("", {0.00, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06});
@@ -270,9 +272,9 @@ BOOST_AUTO_TEST_CASE(regression) {
     boost::shared_ptr<StressTestScenarioData> stressData = setupStressScenarioData();
 
     // build scenario sim market
-    Conventions conventions = *stressConv();
+    stressConv();
     boost::shared_ptr<analytics::ScenarioSimMarket> simMarket =
-        boost::make_shared<analytics::ScenarioSimMarket>(initMarket, simMarketData, conventions);
+        boost::make_shared<analytics::ScenarioSimMarket>(initMarket, simMarketData);
 
     // build scenario factory
     boost::shared_ptr<Scenario> baseScenario = simMarket->baseScenario();
@@ -283,7 +285,7 @@ BOOST_AUTO_TEST_CASE(regression) {
         boost::make_shared<StressScenarioGenerator>(stressData, baseScenario, simMarketData, simMarket, scenarioFactory);
     simMarket->scenarioGenerator() = scenarioGenerator;
 
-    // build porfolio
+    // build portfolio
     boost::shared_ptr<EngineData> engineData = boost::make_shared<EngineData>();
     engineData->model("Swap") = "DiscountedCashflows";
     engineData->engine("Swap") = "DiscountingSwapEngine";
@@ -329,8 +331,7 @@ BOOST_AUTO_TEST_CASE(regression) {
     BOOST_TEST_MESSAGE("Portfolio size after build: " << portfolio->size());
 
     // build the sensitivity analysis object
-    ore::analytics::StressTest analysis(portfolio, initMarket, "default", engineData, simMarketData, stressData,
-                                        conventions);
+    ore::analytics::StressTest analysis(portfolio, initMarket, "default", engineData, simMarketData, stressData);
 
     std::map<std::string, Real> baseNPV = analysis.baseNPV();
     std::map<std::pair<std::string, std::string>, Real> shiftedNPV = analysis.shiftedNPV();

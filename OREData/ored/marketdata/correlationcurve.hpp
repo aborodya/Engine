@@ -50,10 +50,9 @@ public:
     CorrelationCurve() {}
     //! Detailed constructor
     CorrelationCurve(Date asof, CorrelationCurveSpec spec, const Loader& loader,
-                     const CurveConfigurations& curveConfigs, const Conventions& conventions,
-                     map<string, boost::shared_ptr<SwapIndex>>& swapIndices,
+                     const CurveConfigurations& curveConfigs, map<string, boost::shared_ptr<SwapIndex>>& swapIndices,
                      map<string, boost::shared_ptr<YieldCurve>>& yieldCurves,
-                     map<string, boost::shared_ptr<SwaptionVolCurve>>& swaptionVolCurves);
+                     map<string, boost::shared_ptr<GenericYieldVolCurve>>& swaptionVolCurves);
     //@}
 
     //! \name Inspectors
@@ -66,10 +65,9 @@ private:
     void calibrateCMSSpreadCorrelations(const boost::shared_ptr<CorrelationCurveConfig>& config, Date asof,
                                         const vector<Handle<Quote>>& prices, vector<Handle<Quote>>& quotes,
                                         boost::shared_ptr<QuantExt::CorrelationTermStructure>& curve,
-                                        const Conventions& conventions,
                                         map<string, boost::shared_ptr<SwapIndex>>& swapIndices,
                                         map<string, boost::shared_ptr<YieldCurve>>& yieldCurves,
-                                        map<string, boost::shared_ptr<SwaptionVolCurve>>& swaptionVolCurves);
+                                        map<string, boost::shared_ptr<GenericYieldVolCurve>>& swaptionVolCurves);
     CorrelationCurveSpec spec_;
     boost::shared_ptr<QuantExt::CorrelationTermStructure> corr_;
 

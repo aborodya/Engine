@@ -29,8 +29,22 @@
 #include <ored/utilities/xmlutils.hpp>
 
 // we only want to include these here.
+#if defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wsuggest-override"
+#endif
+#if defined(__GNUC__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wsuggest-override"
+#endif
 #include <rapidxml.hpp>
 #include <rapidxml_print.hpp>
+#if defined(__clang__)
+#pragma clang diagnostic pop
+#endif
+#if defined(__GNUC__)
+#pragma GCC diagnostic pop
+#endif
 
 #include <algorithm>
 #include <fstream>
@@ -43,6 +57,14 @@ namespace ore {
 namespace data {
 
 namespace {
+
+// handle rapid xml parser errors
+
+void handle_rapidxml_parse_error(const rapidxml::parse_error& e) {
+    // limit to first 30 chars.
+    string where(e.where<char>(), std::min<std::size_t>(strlen(e.where<char>()), 30));
+    QL_FAIL("RapidXML Parse Error : " << e.what() << ". where=" << where);
+}
 
 // helper routine to convert a value of an arbitrary type to string
 
@@ -89,9 +111,8 @@ XMLDocument::XMLDocument(const string& fileName) : _doc(new rapidxml::xml_docume
     t.close(); // close file handle
     try {
         _doc->parse<0>(_buffer);
-    } catch (rapidxml::parse_error& pe) {
-        string where(pe.where<char>(), 30); // limit to first 30 chars.
-        QL_FAIL("RapidXML Parse Error : " << pe.what() << ". where=" << where);
+    } catch (const rapidxml::parse_error& pe) {
+        handle_rapidxml_parse_error(pe);
     }
 }
 
@@ -110,9 +131,8 @@ void XMLDocument::fromXMLString(const string& xmlString) {
     _buffer[length] = '\0';
     try {
         _doc->parse<0>(_buffer);
-    } catch (rapidxml::parse_error& pe) {
-        string where(pe.where<char>(), 30); // limit to first 30 chars.
-        QL_FAIL("RapidXML Parse Error : " << pe.what() << ". where=" << where);
+    } catch (const rapidxml::parse_error& pe) {
+        handle_rapidxml_parse_error(pe);
     }
 }
 
@@ -193,7 +213,7 @@ void XMLUtils::addChild(XMLDocument& doc, XMLNode* n, const string& name, const 
 }
 
 void XMLUtils::addChild(XMLDocument& doc, XMLNode* n, const string& name, const string& value) {
-    if (value.size() == 0) {
+    if (value.empty()) {
         addChild(doc, n, name);
     } else {
         XMLNode* node = doc.allocNode(name, value);
@@ -203,7 +223,7 @@ void XMLUtils::addChild(XMLDocument& doc, XMLNode* n, const string& name, const 
 }
 
 void XMLUtils::addChildAsCdata(XMLDocument& doc, XMLNode* n, const string& name, const string& value) {
-    if (value.size() == 0) {
+    if (value.empty()) {
         addChild(doc, n, name);
     } else {
         QL_REQUIRE(n, "XML Node is NULL (adding " << name << ")");
@@ -218,16 +238,26 @@ void XMLUtils::addChildAsCdata(XMLDocument& doc, XMLNode* n, const string& name,
 
 void XMLUtils::addChild(XMLDocument& doc, XMLNode* n, const string& name, const string& value, const string& attrName,
                         const string& attr) {
+    if (!attrName.empty() || !attr.empty()) {
+        addChild(doc, n, name, value, std::vector<string>{attrName}, std::vector<string>{attr});
+    } else {
+        addChild(doc, n, name, value, std::vector<string>{}, std::vector<string>{});
+    }
+}
+
+void XMLUtils::addChild(XMLDocument& doc, XMLNode* n, const string& name, const string& value,
+                        const vector<string>& attrNames, const vector<string>& attrs) {
+    QL_REQUIRE(attrNames.size() == attrs.size(), "The size of attrNames should be the same as the size of attrs.");
     XMLNode* node;
-    if (value.size() == 0) {
+    if (value.empty()) {
         node = addChild(doc, n, name);
     } else {
         node = doc.allocNode(name, value);
         QL_REQUIRE(n, "XML Node is NULL (adding " << name << ")");
         n->insert_node(0, node);
     }
-    if (attrName != "" || attr != "") {
-        XMLUtils::addAttribute(doc, node, attrName, attr);
+    for (Size i = 0; i < attrNames.size(); ++i) {
+        XMLUtils::addAttribute(doc, node, attrNames[i], attrs[i]);
     }
 }
 
@@ -267,13 +297,13 @@ void XMLUtils::addChildren(XMLDocument& doc, XMLNode* parent, const string& name
     }
 }
 
-string XMLUtils::getChildValue(XMLNode* node, const string& name, bool mandatory) {
+string XMLUtils::getChildValue(XMLNode* node, const string& name, bool mandatory, const string& defaultValue) {
     QL_REQUIRE(node, "XMLNode is NULL (was looking for child " << name << ")");
     xml_node<>* child = node->first_node(name.c_str());
     if (mandatory) {
         QL_REQUIRE(child, "Error: No XML Child Node " << name << " found.");
     }
-    return child ? getNodeValue(child) : "";
+    return child ? getNodeValue(child) : defaultValue;
 }
 
 Real XMLUtils::getChildValueAsDouble(XMLNode* node, const string& name, bool mandatory, double defaultValue) {
@@ -362,13 +392,16 @@ map<string, string> XMLUtils::getChildrenAttributesAndValues(XMLNode* parent, co
          child = XMLUtils::getNextSibling(child, names.c_str())) {
         string first = getAttribute(child, attributeName);
         string second = getNodeValue(child);
-        if (mandatory) {
-            QL_REQUIRE(first != "", "empty attribute for " << names);
-        }
+        if (first.empty())
+            continue;
+        auto it = res.find(first);
+        if (it != res.end())
+            WLOG("XMLUtils::getChildrenAttributesAndValues: Duplicate entry " << first <<
+                " in node " << names << ". Overwritting with value " << second << ".");
         res.insert(pair<string, string>(first, second));
     }
     if (mandatory) {
-        QL_REQUIRE(res.size() > 0, "Error: No XML Node " << names << " found.");
+        QL_REQUIRE(!res.empty(), "Error: No XML Node " << names << " found.");
     }
     return res;
 }
@@ -385,7 +418,7 @@ XMLNode* XMLUtils::locateNode(XMLNode* n, const string& name) {
     if (n->name() == name)
         return n;
     else {
-        const char* p = name.size() == 0 ? nullptr : name.c_str();
+        const char* p = name.empty() ? nullptr : name.c_str();
         XMLNode* node = n->first_node(p);
         QL_REQUIRE(node, "XML node with name " << name << " not found");
         return node;
@@ -418,7 +451,7 @@ string XMLUtils::getAttribute(XMLNode* node, const string& attrName) {
 vector<XMLNode*> XMLUtils::getChildrenNodes(XMLNode* node, const string& name) {
     QL_REQUIRE(node, "XMLUtils::getChildredNodes(" << name << ") node is NULL");
     vector<XMLNode*> res;
-    const char* p = name.size() == 0 ? nullptr : name.c_str();
+    const char* p = name.empty() ? nullptr : name.c_str();
     for (xml_node<>* c = node->first_node(p); c; c = c->next_sibling(p))
         res.push_back(c);
     return res;

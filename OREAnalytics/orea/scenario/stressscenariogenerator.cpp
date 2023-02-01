@@ -148,7 +148,12 @@ void StressScenarioGenerator::addDiscountCurveShifts(StressTestScenarioData::Str
         StressTestScenarioData::CurveShiftData data = d.second;
         ShiftType shiftType = parseShiftType(data.shiftType);
         //DayCounter dc = parseDayCounter(simMarketData_->yieldCurveDayCounter(ccy));
-	DayCounter dc = simMarket_->discountCurve(ccy)->dayCounter();
+	DayCounter dc;
+        if(auto s = simMarket_.lock()) {
+            dc = s->discountCurve(ccy)->dayCounter();
+        } else {
+            QL_FAIL("Internal error: could not lock simMarket. Contact dev.");
+        }
 
         for (Size j = 0; j < n_ten; ++j) {
             Date d = asof + simMarketData_->yieldCurveTenors(ccy)[j];
@@ -197,7 +202,12 @@ void StressScenarioGenerator::addSurvivalProbabilityShifts(StressTestScenarioDat
         StressTestScenarioData::CurveShiftData data = d.second;
         ShiftType shiftType = parseShiftType(data.shiftType);
         //DayCounter dc = parseDayCounter(simMarketData_->defaultCurveDayCounter(name));
-        DayCounter dc = simMarket_->defaultCurve(name)->dayCounter();
+	DayCounter dc;
+        if(auto s = simMarket_.lock()) {
+            dc = s->defaultCurve(name)->curve()->dayCounter();
+        } else {
+            QL_FAIL("Internal error: could not lock simMarket. Contact dev.");
+        }
 
         for (Size j = 0; j < n_ten; ++j) {
             Date d = asof + simMarketData_->defaultTenors(name)[j];
@@ -249,7 +259,12 @@ void StressScenarioGenerator::addIndexCurveShifts(StressTestScenarioData::Stress
         StressTestScenarioData::CurveShiftData data = d.second;
         ShiftType shiftType = parseShiftType(data.shiftType);
         //DayCounter dc = parseDayCounter(simMarketData_->yieldCurveDayCounter(indexName));
-        DayCounter dc = simMarket_->iborIndex(indexName)->forwardingTermStructure()->dayCounter();
+	DayCounter dc;
+        if(auto s = simMarket_.lock()) {
+            dc = s->iborIndex(indexName)->forwardingTermStructure()->dayCounter();
+        } else {
+            QL_FAIL("Internal error: could not lock simMarket. Contact dev.");
+        }
 
         for (Size j = 0; j < n_ten; ++j) {
             Date d = asof + simMarketData_->yieldCurveTenors(indexName)[j];
@@ -299,7 +314,12 @@ void StressScenarioGenerator::addYieldCurveShifts(StressTestScenarioData::Stress
         StressTestScenarioData::CurveShiftData data = d.second;
         ShiftType shiftType = parseShiftType(data.shiftType);
         //DayCounter dc = parseDayCounter(simMarketData_->yieldCurveDayCounter(name));
-        DayCounter dc = simMarket_->yieldCurve(name)->dayCounter();
+	DayCounter dc;
+        if(auto s = simMarket_.lock()) {
+            dc = s->yieldCurve(name)->dayCounter();
+        } else {
+            QL_FAIL("Internal error: could not lock simMarket. Contact dev.");
+        }
 
         for (Size j = 0; j < n_ten; ++j) {
             Date d = asof + simMarketData_->yieldCurveTenors(name)[j];
@@ -339,24 +359,29 @@ void StressScenarioGenerator::addFxVolShifts(StressTestScenarioData::StressTestD
                                              boost::shared_ptr<Scenario>& scenario) {
     Date asof = baseScenario_->asof();
 
-    Size n_fxvol_exp = simMarketData_->fxVolExpiries().size();
-
-    std::vector<Real> values(n_fxvol_exp);
-    std::vector<Real> times(n_fxvol_exp);
-
-    // buffer for shifted zero curves
-    std::vector<Real> shiftedValues(n_fxvol_exp);
-
     for (auto d : std.fxVolShifts) {
         string ccypair = d.first;
         LOG("Apply stress scenario to fx vol structure " << ccypair);
 
+        Size n_fxvol_exp = simMarketData_->fxVolExpiries(ccypair).size();
+
+        std::vector<Real> values(n_fxvol_exp);
+        std::vector<Real> times(n_fxvol_exp);
+
+        // buffer for shifted zero curves
+        std::vector<Real> shiftedValues(n_fxvol_exp);
+
         StressTestScenarioData::VolShiftData data = d.second;
 
         //DayCounter dc = parseDayCounter(simMarketData_->fxVolDayCounter(ccypair));
-        DayCounter dc = simMarket_->fxVol(ccypair)->dayCounter();
+        DayCounter dc;
+        if (auto s = simMarket_.lock()) {
+            dc = s->fxVol(ccypair)->dayCounter();
+        } else {
+            QL_FAIL("Internal error: could not lock simMarket. Contact dev.");
+        }
         for (Size j = 0; j < n_fxvol_exp; ++j) {
-            Date d = asof + simMarketData_->fxVolExpiries()[j];
+            Date d = asof + simMarketData_->fxVolExpiries(ccypair)[j];
 
             RiskFactorKey key(RiskFactorKey::KeyType::FXVolatility, ccypair, j);
             values[j] = baseScenario_->get(key);
@@ -404,7 +429,12 @@ void StressScenarioGenerator::addEquityVolShifts(StressTestScenarioData::StressT
         StressTestScenarioData::VolShiftData data = d.second;
 
         //DayCounter dc = parseDayCounter(simMarketData_->equityVolDayCounter(equity));
-        DayCounter dc = simMarket_->equityVol(equity)->dayCounter();
+	DayCounter dc;
+        if(auto s = simMarket_.lock()) {
+            dc = s->equityVol(equity)->dayCounter();
+        } else {
+            QL_FAIL("Internal error: could not lock simMarket. Contact dev.");
+        }
         for (Size j = 0; j < n_eqvol_exp; ++j) {
             Date d = asof + simMarketData_->equityVolExpiries(equity)[j];
 
@@ -441,11 +471,11 @@ void StressScenarioGenerator::addSwaptionVolShifts(StressTestScenarioData::Stres
     Date asof = baseScenario_->asof();
 
     for (auto d : std.swaptionVolShifts) {
-        std::string ccy = d.first;
-        LOG("Apply stress scenario to swaption vol structure " << ccy);
+        std::string key = d.first;
+        LOG("Apply stress scenario to swaption vol structure '" << key << "'");
 
-        Size n_swvol_term = simMarketData_->swapVolTerms(ccy).size();
-        Size n_swvol_exp = simMarketData_->swapVolExpiries(ccy).size();
+        Size n_swvol_term = simMarketData_->swapVolTerms(key).size();
+        Size n_swvol_exp = simMarketData_->swapVolExpiries(key).size();
 
         vector<vector<Real>> volData(n_swvol_exp, vector<Real>(n_swvol_term, 0.0));
         vector<Real> volExpiryTimes(n_swvol_exp, 0.0);
@@ -459,24 +489,28 @@ void StressScenarioGenerator::addSwaptionVolShifts(StressTestScenarioData::Stres
         vector<Real> shiftExpiryTimes(data.shiftExpiries.size(), 0.0);
         vector<Real> shiftTermTimes(data.shiftTerms.size(), 0.0);
 
-        //DayCounter dc = parseDayCounter(simMarketData_->swapVolDayCounter(ccy));
-        DayCounter dc = simMarket_->swaptionVol(ccy)->dayCounter();
+	DayCounter dc;
+        if(auto s = simMarket_.lock()) {
+            dc = s->swaptionVol(key)->dayCounter();
+        } else {
+            QL_FAIL("Internal error: could not lock simMarket. Contact dev.");
+        }
 
         // cache original vol data
         for (Size j = 0; j < n_swvol_exp; ++j) {
-            Date expiry = asof + simMarketData_->swapVolExpiries(ccy)[j];
+            Date expiry = asof + simMarketData_->swapVolExpiries(key)[j];
             volExpiryTimes[j] = dc.yearFraction(asof, expiry);
         }
         for (Size j = 0; j < n_swvol_term; ++j) {
-            Date term = asof + simMarketData_->swapVolTerms(ccy)[j];
+            Date term = asof + simMarketData_->swapVolTerms(key)[j];
             volTermTimes[j] = dc.yearFraction(asof, term);
         }
         for (Size j = 0; j < n_swvol_exp; ++j) {
             for (Size k = 0; k < n_swvol_term; ++k) {
                 Size idx = j * n_swvol_term + k;
 
-                RiskFactorKey key(RiskFactorKey::KeyType::SwaptionVolatility, ccy, idx);
-                volData[j][k] = baseScenario_->get(key);
+                RiskFactorKey rf(RiskFactorKey::KeyType::SwaptionVolatility, key, idx);
+                volData[j][k] = baseScenario_->get(rf);
             }
         }
 
@@ -510,7 +544,7 @@ void StressScenarioGenerator::addSwaptionVolShifts(StressTestScenarioData::Stres
         for (Size jj = 0; jj < n_swvol_exp; ++jj) {
             for (Size kk = 0; kk < n_swvol_term; ++kk) {
                 Size idx = jj * n_swvol_term + kk;
-                scenario->add(RiskFactorKey(RiskFactorKey::KeyType::SwaptionVolatility, ccy, idx),
+                scenario->add(RiskFactorKey(RiskFactorKey::KeyType::SwaptionVolatility, key, idx),
                               shiftedVolData[jj][kk]);
             }
         }
@@ -523,17 +557,17 @@ void StressScenarioGenerator::addCapFloorVolShifts(StressTestScenarioData::Stres
     Date asof = baseScenario_->asof();
 
     for (auto d : std.capVolShifts) {
-        std::string ccy = d.first;
-        LOG("Apply stress scenario to cap/floor vol structure " << ccy);
+        std::string key = d.first;
+        LOG("Apply stress scenario to cap/floor vol structure " << key);
 
-        vector<Real> volStrikes = simMarketData_->capFloorVolStrikes(ccy);
+        vector<Real> volStrikes = simMarketData_->capFloorVolStrikes(key);
         // Strikes may be empty which indicates that the optionlet structure in the simulation market is an ATM curve
         if (volStrikes.empty()) {
             volStrikes = {0.0};
         }
         Size n_cfvol_strikes = volStrikes.size();
 
-        Size n_cfvol_exp = simMarketData_->capFloorVolExpiries(ccy).size();
+        Size n_cfvol_exp = simMarketData_->capFloorVolExpiries(key).size();
         vector<vector<Real>> volData(n_cfvol_exp, vector<Real>(n_cfvol_strikes, 0.0));
         vector<Real> volExpiryTimes(n_cfvol_exp, 0.0);
         vector<vector<Real>> shiftedVolData(n_cfvol_exp, vector<Real>(n_cfvol_strikes, 0.0));
@@ -544,19 +578,24 @@ void StressScenarioGenerator::addCapFloorVolShifts(StressTestScenarioData::Stres
         vector<Real> shifts = data.shifts;
         vector<Real> shiftExpiryTimes(data.shiftExpiries.size(), 0.0);
 
-        //DayCounter dc = parseDayCounter(simMarketData_->capFloorVolDayCounter(ccy));
-        DayCounter dc = simMarket_->capFloorVol(ccy)->dayCounter();
+        //DayCounter dc = parseDayCounter(simMarketData_->capFloorVolDayCounter(key));
+        DayCounter dc;
+        if (auto s = simMarket_.lock()) {
+            dc = s->capFloorVol(key)->dayCounter();
+        } else {
+            QL_FAIL("Internal error: could not lock simMarket. Contact dev.");
+        }
 
         // cache original vol data
         for (Size j = 0; j < n_cfvol_exp; ++j) {
-            Date expiry = asof + simMarketData_->capFloorVolExpiries(ccy)[j];
+            Date expiry = asof + simMarketData_->capFloorVolExpiries(key)[j];
             volExpiryTimes[j] = dc.yearFraction(asof, expiry);
         }
         for (Size j = 0; j < n_cfvol_exp; ++j) {
             for (Size k = 0; k < n_cfvol_strikes; ++k) {
                 Size idx = j * n_cfvol_strikes + k;
-                RiskFactorKey key(RiskFactorKey::KeyType::OptionletVolatility, ccy, idx);
-                volData[j][k] = baseScenario_->get(key);
+                volData[j][k] =
+                    baseScenario_->get(RiskFactorKey(RiskFactorKey::KeyType::OptionletVolatility, key, idx));
             }
         }
 
@@ -575,7 +614,7 @@ void StressScenarioGenerator::addCapFloorVolShifts(StressTestScenarioData::Stres
         for (Size jj = 0; jj < n_cfvol_exp; ++jj) {
             for (Size kk = 0; kk < n_cfvol_strikes; ++kk) {
                 Size idx = jj * n_cfvol_strikes + kk;
-                scenario->add(RiskFactorKey(RiskFactorKey::KeyType::OptionletVolatility, ccy, idx),
+                scenario->add(RiskFactorKey(RiskFactorKey::KeyType::OptionletVolatility, key, idx),
                               shiftedVolData[jj][kk]);
             }
         }

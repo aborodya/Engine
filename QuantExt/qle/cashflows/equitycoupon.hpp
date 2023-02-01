@@ -41,34 +41,40 @@ using namespace QuantLib;
  */
 class EquityCouponPricer;
 
+enum class EquityReturnType { Price, Total, Absolute, Dividend };
+
+EquityReturnType parseEquityReturnType(const std::string& str);
+std::ostream& operator<<(std::ostream& out, EquityReturnType t);
+
 //! equity coupon
 /*!
     \ingroup cashflows
 */
-class EquityCoupon : public Coupon, public Observer {
+class EquityCoupon : public Coupon, public Observer {   
 public:
     EquityCoupon(const Date& paymentDate, Real nominal, const Date& startDate, const Date& endDate, Natural fixingDays,
                  const boost::shared_ptr<EquityIndex>& equityCurve, const DayCounter& dayCounter,
-                 bool isTotalReturn = false, Real dividendFactor = 1.0, bool notionalReset = false,
+                 EquityReturnType returnType, Real dividendFactor = 1.0, bool notionalReset = false, 
                  Real initialPrice = Null<Real>(), Real quantity = Null<Real>(), const Date& fixingStartDate = Date(),
                  const Date& fixingEndDate = Date(), const Date& refPeriodStart = Date(),
                  const Date& refPeriodEnd = Date(), const Date& exCouponDate = Date(),
-                 const boost::shared_ptr<FxIndex>& fxIndex = nullptr, const bool initialPriceIsInTargetCcy = false, const bool isAbsoluteReturn = false);
+                 const boost::shared_ptr<FxIndex>& fxIndex = nullptr, const bool initialPriceIsInTargetCcy = false,
+		 Real legInitialNotional = Null<Real>(), const Date& legFixingDate = Date());
 
     //! \name CashFlow interface
     //@{
-    Real amount() const { return rate() * nominal(); }
+    Real amount() const override { return rate() * nominal(); }
     //@}
 
     //! \name Coupon interface
     //@{
     // Real price(const Handle<YieldTermStructure>& discountingCurve) const;
-    DayCounter dayCounter() const { return dayCounter_; }
-    Real accruedAmount(const Date&) const;
+    DayCounter dayCounter() const override { return dayCounter_; }
+    Real accruedAmount(const Date&) const override;
     // calculates the rate for the period, not yearly i.e. (S(t+1)-S(t))/S(t)
-    Rate rate() const;
+    Rate rate() const override;
     // nominal changes if notional is resettable
-    Real nominal() const;
+    Real nominal() const override;
     //@}
 
     //! \name Inspectors
@@ -77,10 +83,8 @@ public:
     const boost::shared_ptr<EquityIndex>& equityCurve() const { return equityCurve_; }
     //! fx index curve
     const boost::shared_ptr<FxIndex>& fxIndex() const { return fxIndex_; }
-    //! total return or price return?
-    bool isTotalReturn() const { return isTotalReturn_; }
-    //! absolute return or relative return
-    bool absoluteReturn() const { return isAbsoluteReturn_; }
+    //! the return type of the coupon
+    EquityReturnType returnType() const { return returnType_; }
     //! are dividends scaled (e.g. to account for tax)
     Real dividendFactor() const { return dividendFactor_; }
     //! The date at which the starting equity price is fixed
@@ -94,7 +98,7 @@ public:
     //! initial price is in target ccy (if applicable, i.e. if fxIndex != null, otherwise ignored)
     bool initialPriceIsInTargetCcy() const;
     //! Number of equity shares held
-    Real quantity() const { return quantity_; }
+    Real quantity() const;
     //! FX conversion rate (or 1.0 if not applicable)
     Real fxRate() const;
     //! This function is called for other coupon types
@@ -102,16 +106,20 @@ public:
         QL_FAIL("Equity Coupons have 2 fixings, not 1.");
         return Date();
     }
+    //! Initial notional of the equity leg, to compute quantity if not provided in the resetting case
+    Real legInitialNotional() const { return legInitialNotional_; }
+    //! Fixing date of the first equity coupon, to compute quantity if not provided in the resetting case
+    Date legFixingDate() const { return legFixingDate_; }
     //@}
 
     //! \name Observer interface
     //@{
-    void update() { notifyObservers(); }
+    void update() override { notifyObservers(); }
     //@}
 
     //! \name Visitability
     //@{
-    virtual void accept(AcyclicVisitor&);
+    virtual void accept(AcyclicVisitor&) override;
     //@}
     void setPricer(const boost::shared_ptr<EquityCouponPricer>&);
     boost::shared_ptr<EquityCouponPricer> pricer() const;
@@ -121,17 +129,18 @@ protected:
     Natural fixingDays_;
     boost::shared_ptr<EquityIndex> equityCurve_;
     DayCounter dayCounter_;
-    bool isTotalReturn_;
+    EquityReturnType returnType_;
     Real dividendFactor_;
     bool notionalReset_;
     Real initialPrice_;
     bool initialPriceIsInTargetCcy_;
-    Real quantity_;
+    mutable Real quantity_;
     Date fixingStartDate_;
     Date fixingEndDate_;
     Natural paymentLag_;
     boost::shared_ptr<FxIndex> fxIndex_;
-    bool isAbsoluteReturn_;
+    Real legInitialNotional_;
+    Date legFixingDate_;
 };
 
 // inline definitions
@@ -159,8 +168,7 @@ public:
     EquityLeg& withPaymentAdjustment(BusinessDayConvention convention);
     EquityLeg& withPaymentLag(Natural paymentLag);
     EquityLeg& withPaymentCalendar(const Calendar& calendar);
-    EquityLeg& withTotalReturn(bool);
-    EquityLeg& withAbsoluteReturn(bool);
+    EquityLeg& withReturnType(EquityReturnType);
     EquityLeg& withDividendFactor(Real);
     EquityLeg& withInitialPrice(Real);
     EquityLeg& withInitialPriceIsInTargetCcy(bool);
@@ -179,8 +187,7 @@ private:
     Natural paymentLag_;
     BusinessDayConvention paymentAdjustment_;
     Calendar paymentCalendar_;
-    bool isTotalReturn_;
-    bool absoluteReturn_;
+    EquityReturnType returnType_;
     Real initialPrice_;
     bool initialPriceIsInTargetCcy_;
     Real dividendFactor_;

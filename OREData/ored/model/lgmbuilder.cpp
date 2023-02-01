@@ -34,6 +34,7 @@
 #include <ored/utilities/dategrid.hpp>
 #include <ored/utilities/log.hpp>
 #include <ored/utilities/parsers.hpp>
+#include <ored/utilities/indexparser.hpp>
 #include <ored/utilities/strike.hpp>
 
 using namespace QuantLib;
@@ -62,7 +63,7 @@ SwaptionData swaptionData(const boost::shared_ptr<Swaption> swaption, const Hand
     swaption->setPricingEngine(engine);
 
     SwaptionData sd;
-    sd.timeToExpiry = svts->timeFromReference(swaption->exercise()->dates().back());
+    sd.timeToExpiry = yts->timeFromReference(swaption->exercise()->dates().back());
     sd.swapLength = swaption->result<Real>("swapLength");
     sd.strike = swaption->result<Real>("strike");
     sd.atmForward = swaption->result<Real>("atmForward");
@@ -73,18 +74,19 @@ SwaptionData swaptionData(const boost::shared_ptr<Swaption> swaption, const Hand
     return sd;
 }
 
-// Utility function to create swaption helper.
+// Utility function to create swaption helper. Returns helper and (possibly updated) strike
 template <typename E, typename T>
-boost::shared_ptr<SwaptionHelper>
+std::pair<boost::shared_ptr<SwaptionHelper>, double>
 createSwaptionHelper(const E& expiry, const T& term, const Handle<SwaptionVolatilityStructure>& svts,
                      const Handle<Quote>& vol, const boost::shared_ptr<IborIndex>& iborIndex,
                      const Period& fixedLegTenor, const DayCounter& fixedDayCounter, const DayCounter& floatDayCounter,
                      const Handle<YieldTermStructure>& yts, BlackCalibrationHelper::CalibrationErrorType errorType,
-                     Real strike, Real shift) {
+                     Real strike, Real shift, const Size settlementDays, const RateAveraging::Type averagingMethod) {
 
     auto vt = svts->volatilityType();
     auto helper = boost::make_shared<SwaptionHelper>(expiry, term, vol, iborIndex, fixedLegTenor, fixedDayCounter,
-                                                     floatDayCounter, yts, errorType, strike, 1.0, vt, shift);
+                                                     floatDayCounter, yts, errorType, strike, 1.0, vt, shift,
+                                                     settlementDays, averagingMethod);
 
     // If the helper value is lower than mmv, replace it with a "more reasonable" helper. Here, we replace
     // the helper with a helper that has the ATM strike. There are other options here.
@@ -94,9 +96,10 @@ createSwaptionHelper(const E& expiry, const T& term, const Handle<SwaptionVolati
         auto sd = swaptionData(helper->swaption(), yts, svts);
         strike = sd.atmForward;
         helper = boost::make_shared<SwaptionHelper>(expiry, term, vol, iborIndex, fixedLegTenor, fixedDayCounter,
-                                                    floatDayCounter, yts, errorType, strike, 1.0, vt, shift);
-        DLOG("Helper with expiry " << expiry << " and term " << term << " has an absolute market value of " << mv
-                                   << " which is lower than minimum market value " << mmv
+                                                    floatDayCounter, yts, errorType, strike, 1.0, vt, shift,
+                                                    settlementDays, averagingMethod);
+        DLOG("Helper with expiry " << expiry << " and term " << term << " has an absolute market value of "
+                                   << std::scientific << mv << " which is lower than minimum market value " << mmv
                                    << " so switching to helper with atm rate " << strike);
     }
 
@@ -106,12 +109,13 @@ createSwaptionHelper(const E& expiry, const T& term, const Handle<SwaptionVolati
     if (errorType != BlackCalibrationHelper::PriceError && mv < smv) {
         helper = boost::make_shared<SwaptionHelper>(expiry, term, vol, iborIndex, fixedLegTenor, fixedDayCounter,
                                                     floatDayCounter, yts, BlackCalibrationHelper::PriceError, strike,
-                                                    1.0, vt, shift);
-        TLOG("Helper with expiry " << expiry << " and term " << term << " has an absolute market value of " << mv
-                                   << " which is lower than " << smv << " so switching to a price error helper.");
+                                                    1.0, vt, shift, settlementDays, averagingMethod);
+        TLOG("Helper with expiry " << expiry << " and term " << term << " has an absolute market value of "
+                                   << std::scientific << mv << " which is lower than " << smv
+                                   << " so switching to a price error helper.");
     }
 
-    return helper;
+    return std::make_pair(helper, strike);
 }
 
 } // namespace
@@ -130,21 +134,27 @@ LgmBuilder::LgmBuilder(const boost::shared_ptr<ore::data::Market>& market, const
       calibrationErrorType_(BlackCalibrationHelper::RelativePriceError) {
 
     marketObserver_ = boost::make_shared<MarketObserver>();
-    QuantLib::Currency ccy = parseCurrency(data_->ccy());
-    LOG("LgmCalibration for ccy " << ccy << ", configuration is " << configuration_);
+    string qualifier = data_->qualifier();
+    currency_ = qualifier;
+    boost::shared_ptr<IborIndex> index;
+    if(tryParseIborIndex(qualifier,index)) {
+	currency_ = index->currency().code();
+    }
+    LOG("LgmCalibration for qualifier " << qualifier << " (ccy=" << currency_ << "), configuration is " << configuration_);
+    Currency ccy = parseCurrency(currency_);
 
     requiresCalibration_ =
         (data_->calibrateA() || data_->calibrateH()) && data_->calibrationType() != CalibrationType::None;
 
     // the discount curve underlying the model might be relinked to a different curve outside this builder
     // the calibration curve should always stay the same though, therefore we create a different handle for this
-    modelDiscountCurve_ = RelinkableHandle<YieldTermStructure>(*market_->discountCurve(ccy.code(), configuration_));
+    modelDiscountCurve_ = RelinkableHandle<YieldTermStructure>(*market_->discountCurve(currency_, configuration_));
     calibrationDiscountCurve_ = Handle<YieldTermStructure>(*modelDiscountCurve_);
 
     if (requiresCalibration_) {
-        svts_ = market_->swaptionVol(data_->ccy(), configuration_);
-        swapIndex_ = market_->swapIndex(market_->swapIndexBase(data_->ccy(), configuration_), configuration_);
-        shortSwapIndex_ = market_->swapIndex(market_->shortSwapIndexBase(data_->ccy(), configuration_), configuration_);
+        svts_ = market_->swaptionVol(data_->qualifier(), configuration_);
+        swapIndex_ = market_->swapIndex(market_->swapIndexBase(data_->qualifier(), configuration_), configuration_);
+        shortSwapIndex_ = market_->swapIndex(market_->shortSwapIndexBase(data_->qualifier(), configuration_), configuration_);
         registerWith(svts_);
         marketObserver_->addObservable(swapIndex_->forwardingTermStructure());
         marketObserver_->addObservable(swapIndex_->discountingTermStructure());
@@ -191,7 +201,7 @@ LgmBuilder::LgmBuilder(const boost::shared_ptr<ore::data::Market>& market, const
         QL_REQUIRE(data_->hTimes().size() == 0,
                    "LgmBuilder: empty reversion time grid expected for constant parameter type");
         QL_REQUIRE(data_->hValues().size() == 1,
-                   "LgmBuidler: initial reversion values shouuld have size 1 for constant parameter type");
+                   "LgmBuidler: initial reversion values should have size 1 for constant parameter type");
     } else if (data_->hParamType() == ParamType::Piecewise) {
         if (data_->calibrateH() && data_->calibrationType() == CalibrationType::Bootstrap) {
             if (data_->hTimes().size() > 0) {
@@ -211,19 +221,19 @@ LgmBuilder::LgmBuilder(const boost::shared_ptr<ore::data::Market>& market, const
 
     if (data_->reversionType() == LgmData::ReversionType::HullWhite &&
         data_->volatilityType() == LgmData::VolatilityType::HullWhite) {
-        DLOG("IR parametrization for " << ccy << ": IrLgm1fPiecewiseConstantHullWhiteAdaptor");
+        DLOG("IR parametrization for " << qualifier << ": IrLgm1fPiecewiseConstantHullWhiteAdaptor");
         parametrization_ = boost::make_shared<QuantExt::IrLgm1fPiecewiseConstantHullWhiteAdaptor>(
             ccy, modelDiscountCurve_, aTimes, alpha, hTimes, h);
     } else if (data_->reversionType() == LgmData::ReversionType::HullWhite &&
                data_->volatilityType() == LgmData::VolatilityType::Hagan) {
-        DLOG("IR parametrization for " << ccy << ": IrLgm1fPiecewiseConstant");
+        DLOG("IR parametrization for " << qualifier << ": IrLgm1fPiecewiseConstant");
         parametrization_ = boost::make_shared<QuantExt::IrLgm1fPiecewiseConstantParametrization>(
             ccy, modelDiscountCurve_, aTimes, alpha, hTimes, h);
     } else if (data_->reversionType() == LgmData::ReversionType::Hagan &&
                data_->volatilityType() == LgmData::VolatilityType::Hagan) {
         parametrization_ = boost::make_shared<QuantExt::IrLgm1fPiecewiseLinearParametrization>(
             ccy, modelDiscountCurve_, aTimes, alpha, hTimes, h);
-        DLOG("IR parametrization for " << ccy << ": IrLgm1fPiecewiseLinear");
+        DLOG("IR parametrization for " << qualifier << ": IrLgm1fPiecewiseLinear");
     } else {
         QL_FAIL("LgmBuilder: Reversion type Hagan and volatility type HullWhite not covered");
     }
@@ -261,7 +271,7 @@ bool LgmBuilder::requiresRecalibration() const {
 
 void LgmBuilder::performCalculations() const {
 
-    DLOG("Recalibrate LGM model for currency " << data_->ccy());
+    DLOG("Recalibrate LGM model for qualifier " << data_->qualifier() << " currency " << currency_);
 
     if (!requiresRecalibration()) {
         DLOG("Skipping calibration as nothing has changed");
@@ -320,7 +330,7 @@ void LgmBuilder::performCalculations() const {
                 model_->calibrate(swaptionBasket_, *optimizationMethod_, endCriteria_);
             }
         }
-        TLOG("LGM " << data_->ccy() << " calibration errors:");
+        TLOG("LGM " << data_->qualifier() << " calibration errors:");
         error_ = getCalibrationError(swaptionBasket_);
     } catch (const std::exception& e) {
         // just log a warning, we check below if we meet the bootstrap tolerance and handle the result there
@@ -329,44 +339,48 @@ void LgmBuilder::performCalculations() const {
     calibrationInfo.rmse = error_;
     if (fabs(error_) < bootstrapTolerance_ ||
         (data_->calibrationType() == CalibrationType::BestFit && error_ != QL_MAX_REAL)) {
-        // we check the log level here to avoid unncessary computations
+        // we check the log level here to avoid unnecessary computations
         if (Log::instance().filter(ORE_DATA) || setCalibrationInfo_) {
-            TLOGGERSTREAM << "Basket details:";
+            TLOGGERSTREAM("Basket details:");
             try {
-                TLOGGERSTREAM << getBasketDetails(calibrationInfo);
+		auto d = getBasketDetails(calibrationInfo);
+                TLOGGERSTREAM(d);
             } catch (const std::exception& e) {
-                WLOG("An error occured: " << e.what());
+                WLOG("An error occurred: " << e.what());
             }
-            TLOGGERSTREAM << "Calibration details (with time grid = calibration swaption expiries):";
+            TLOGGERSTREAM("Calibration details (with time grid = calibration swaption expiries):");
             try {
-                TLOGGERSTREAM << getCalibrationDetails(calibrationInfo, swaptionBasket_, parametrization_);
+		auto d = getCalibrationDetails(calibrationInfo, swaptionBasket_, parametrization_);
+		TLOGGERSTREAM(d);
             } catch (const std::exception& e) {
-                WLOG("An error occured: " << e.what());
+                WLOG("An error occurred: " << e.what());
             }
-            TLOGGERSTREAM << "Parameter details (with parameter time grid)";
-            TLOGGERSTREAM << getCalibrationDetails(parametrization_);
-            TLOGGERSTREAM << "rmse = " << error_;
+            TLOGGERSTREAM("Parameter details (with parameter time grid)");
+            TLOGGERSTREAM(getCalibrationDetails(calibrationInfo, swaptionBasket_, parametrization_))
+            TLOGGERSTREAM("rmse = " << error_);
             calibrationInfo.valid = true;
         }
     } else {
-        std::string exceptionMessage = "LGM (" + data_->ccy() + ") calibration error " + std::to_string(error_) +
+        std::string exceptionMessage = "LGM (" + data_->qualifier() + ") calibration error " + std::to_string(error_) +
                                        " exceeds tolerance " + std::to_string(bootstrapTolerance_);
         WLOG(StructuredModelErrorMessage("Failed to calibrate LGM Model", exceptionMessage));
-        WLOGGERSTREAM << "Basket details:";
+        WLOGGERSTREAM("Basket details:");
         try {
-            WLOGGERSTREAM << getBasketDetails(calibrationInfo);
+	    auto d = getBasketDetails(calibrationInfo);
+            WLOGGERSTREAM(d);
         } catch (const std::exception& e) {
-            WLOG("An error occured: " << e.what());
+            WLOG("An error occurred: " << e.what());
         }
-        WLOGGERSTREAM << "Calibration details (with time grid = calibration swaption expiries):";
+        WLOGGERSTREAM("Calibration details (with time grid = calibration swaption expiries):");
         try {
-            WLOGGERSTREAM << getCalibrationDetails(calibrationInfo, swaptionBasket_, parametrization_);
+	    auto d = getCalibrationDetails(calibrationInfo, swaptionBasket_, parametrization_);
+            WLOGGERSTREAM(d);
         } catch (const std::exception& e) {
-            WLOG("An error occured: " << e.what());
+            WLOG("An error occurred: " << e.what());
         }
-        WLOGGERSTREAM << "Parameter details (with parameter time grid)";
-        WLOGGERSTREAM << getCalibrationDetails(parametrization_);
-        WLOGGERSTREAM << "rmse = " << error_;
+        WLOGGERSTREAM("Parameter details (with parameter time grid)");
+        WLOGGERSTREAM(getCalibrationDetails(parametrization_));
+        WLOGGERSTREAM("rmse = " << error_);
         calibrationInfo.valid = true;
         if (!continueOnError_) {
             QL_FAIL(exceptionMessage);
@@ -381,13 +395,13 @@ void LgmBuilder::performCalculations() const {
 
     if (data_->shiftHorizon() > 0.0) {
         Real value = -parametrization_->H(data_->shiftHorizon());
-        DLOG("Apply shift horizon " << data_->shiftHorizon() << " (C=" << value << ") to the " << data_->ccy()
+        DLOG("Apply shift horizon " << data_->shiftHorizon() << " (C=" << value << ") to the " << data_->qualifier()
                                     << " LGM model");
         parametrization_->shift() = value;
     }
 
     if (data_->scaling() != 1.0) {
-        DLOG("Apply scaling " << data_->scaling() << " to the " << data_->ccy() << " LGM model");
+        DLOG("Apply scaling " << data_->scaling() << " to the " << data_->qualifier() << " LGM model");
         parametrization_->scaling() = data_->scaling();
     }
 } // performCalculations()
@@ -402,7 +416,7 @@ void LgmBuilder::getExpiryAndTerm(const Size j, Period& expiryPb, Period& termPb
         Date tmpExpiry = expiryDateBased ? expiryDb : svts_->optionDateFromTenor(expiryPb);
         Date tmpStart = swapIndex_->iborIndex()->valueDate(swapIndex_->iborIndex()->fixingCalendar().adjust(tmpExpiry));
         // ensure that we have a term >= 1 Month, otherwise QL might throw "non-positive swap length (0)  given" from
-        // the black swaption engine during calibration helper pricing; also notice that we use the swap legnth
+        // the black swaption engine during calibration helper pricing; also notice that we use the swap length
         // calculated in the svts (i.e. a length rounded to whole months) to read the volatility from the cube, which is
         // consistent with what is done in BlackSwaptionEngine (although one might ask whether an interpolated
         // volatility would be more appropriate)
@@ -452,7 +466,7 @@ bool LgmBuilder::volSurfaceChanged(const bool updateCache) const {
         Real termT;
 
         getExpiryAndTerm(j, expiryPb, termPb, expiryDb, termDb, termT, expiryDateBased, termDateBased);
-        Real strikeValue = getStrike(j);
+        Real strikeValue = swaptionStrike_.at(swaptionCounter);
 
         Real vol;
         if (expiryDateBased && termDateBased) {
@@ -490,13 +504,14 @@ void LgmBuilder::buildSwaptionBasket() const {
 
     std::ostringstream log;
 
-    Handle<YieldTermStructure> yts = market_->discountCurve(data_->ccy(), configuration_);
+    Handle<YieldTermStructure> yts = market_->discountCurve(currency_, configuration_);
 
     std::vector<Time> expiryTimes;
     std::vector<Time> maturityTimes;
     swaptionBasket_.clear();
     swaptionBasketVols_.clear();
     swaptionVolCache_.clear();
+    swaptionStrike_.clear();
 
     DLOG("build reference date grid '" << referenceCalibrationGrid_ << "'");
     Date lastRefCalDate = Date::minDate();
@@ -523,32 +538,43 @@ void LgmBuilder::buildSwaptionBasket() const {
             termTmp > shortSwapIndex_->tenor() ? swapIndex_->dayCounter() : shortSwapIndex_->dayCounter();
         auto floatDayCounter = termTmp > shortSwapIndex_->tenor() ? swapIndex_->iborIndex()->dayCounter()
                                                                   : shortSwapIndex_->iborIndex()->dayCounter();
+        Size settlementDays = Null<Size>();
+        RateAveraging::Type averagingMethod = RateAveraging::Compound;
+        if (auto on = dynamic_pointer_cast<OvernightIndexedSwapIndex>(*swapIndex_)) {
+            settlementDays = on->fixingDays();
+	    averagingMethod = on->averagingMethod();
+        }
 
         Real dummyQuote = svts_->volatilityType() == Normal ? 0.0020 : 0.10;
         auto volQuote = boost::make_shared<SimpleQuote>(dummyQuote);
         Handle<Quote> vol = Handle<Quote>(volQuote);
         boost::shared_ptr<SwaptionHelper> helper;
+        Real updatedStrike;
 
         if (expiryDateBased && termDateBased) {
             Real shift = svts_->volatilityType() == ShiftedLognormal ? svts_->shift(expiryDb, termT) : 0.0;
-            helper = createSwaptionHelper(expiryDb, termDb, svts_, vol, iborIndex, fixedLegTenor, fixedDayCounter,
-                                          floatDayCounter, yts, calibrationErrorType_, strikeValue, shift);
+            std::tie(helper, updatedStrike) = createSwaptionHelper(
+                expiryDb, termDb, svts_, vol, iborIndex, fixedLegTenor, fixedDayCounter, floatDayCounter, yts,
+                calibrationErrorType_, strikeValue, shift, settlementDays, averagingMethod);
         }
         if (expiryDateBased && !termDateBased) {
             Real shift = svts_->volatilityType() == ShiftedLognormal ? svts_->shift(expiryDb, termPb) : 0.0;
-            helper = createSwaptionHelper(expiryDb, termPb, svts_, vol, iborIndex, fixedLegTenor, fixedDayCounter,
-                                          floatDayCounter, yts, calibrationErrorType_, strikeValue, shift);
+            std::tie(helper, updatedStrike) = createSwaptionHelper(
+                expiryDb, termPb, svts_, vol, iborIndex, fixedLegTenor, fixedDayCounter, floatDayCounter, yts,
+                calibrationErrorType_, strikeValue, shift, settlementDays, averagingMethod);
         }
         if (!expiryDateBased && termDateBased) {
             Date expiry = svts_->optionDateFromTenor(expiryPb);
             Real shift = svts_->volatilityType() == ShiftedLognormal ? svts_->shift(expiryPb, termT) : 0.0;
-            helper = createSwaptionHelper(expiry, termDb, svts_, vol, iborIndex, fixedLegTenor, fixedDayCounter,
-                                          floatDayCounter, yts, calibrationErrorType_, strikeValue, shift);
+            std::tie(helper, updatedStrike) = createSwaptionHelper(
+                expiry, termDb, svts_, vol, iborIndex, fixedLegTenor, fixedDayCounter, floatDayCounter, yts,
+                calibrationErrorType_, strikeValue, shift, settlementDays, averagingMethod);
         }
         if (!expiryDateBased && !termDateBased) {
             Real shift = svts_->volatilityType() == ShiftedLognormal ? svts_->shift(expiryPb, termPb) : 0.0;
-            helper = createSwaptionHelper(expiryPb, termPb, svts_, vol, iborIndex, fixedLegTenor, fixedDayCounter,
-                                          floatDayCounter, yts, calibrationErrorType_, strikeValue, shift);
+            std::tie(helper, updatedStrike) = createSwaptionHelper(
+                expiryPb, termPb, svts_, vol, iborIndex, fixedLegTenor, fixedDayCounter, floatDayCounter, yts,
+                calibrationErrorType_, strikeValue, shift, settlementDays, averagingMethod);
         }
 
         // check if we want to keep the helper when a reference calibration grid is given
@@ -559,8 +585,11 @@ void LgmBuilder::buildSwaptionBasket() const {
             swaptionActive_[j] = true;
             swaptionBasketVols_.push_back(volQuote);
             swaptionBasket_.push_back(helper);
+            swaptionStrike_.push_back(updatedStrike);
             expiryTimes.push_back(yts->timeFromReference(expiryDate));
-            maturityTimes.push_back(yts->timeFromReference(helper->underlyingSwap()->maturityDate()));
+            Date matDate = helper->underlyingSwap() ? helper->underlyingSwap()->maturityDate()
+                                                    : helper->underlyingOvernightIndexedSwap()->maturityDate();
+            maturityTimes.push_back(yts->timeFromReference(matDate));
             if (refCalDate != referenceCalibrationDates.end())
                 lastRefCalDate = *refCalDate;
         }
@@ -587,7 +616,7 @@ void LgmBuilder::buildSwaptionBasket() const {
 
 std::string LgmBuilder::getBasketDetails(LgmCalibrationInfo& info) const {
     std::ostringstream log;
-    Handle<YieldTermStructure> yts = market_->discountCurve(data_->ccy(), configuration_);
+    Handle<YieldTermStructure> yts = market_->discountCurve(currency_, configuration_);
     log << std::right << std::setw(3) << "#" << std::setw(16) << "expiry" << std::setw(16) << "swapLength"
         << std::setw(16) << "strike" << std::setw(16) << "atmForward" << std::setw(16) << "annuity" << std::setw(16)
         << "vega" << std::setw(16) << "vol\n";

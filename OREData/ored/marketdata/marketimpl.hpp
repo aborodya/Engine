@@ -28,6 +28,7 @@
 #include <ored/marketdata/market.hpp>
 
 #include <qle/indexes/inflationindexobserver.hpp>
+#include <qle/indexes/fxindex.hpp>
 
 #include <map>
 
@@ -51,108 +52,99 @@ using std::tuple;
  */
 class MarketImpl : public Market {
 public:
-    //! Default constructor
-    MarketImpl() {}
-
-    //! Constructor taking a pointer to conventions
-    MarketImpl(const boost::shared_ptr<Conventions>& conventions)
-        : conventions_ref_(conventions), conventions_(*conventions_ref_) {
-        initialise();
-    }
-
-    /*! Constructor taking a reference to conventions. This ctor is deprecated.
-        TODO remove this ctor, remove the conventions member variable holding the copy. */
-    MarketImpl(const Conventions& conventions) : conventions_(conventions) { initialise(); }
-
-    void initialise() {
-        // if no fx spots are defined we still need an empty triangulation
-        fxSpots_[Market::defaultConfiguration] = FXTriangulation();
-    }
+    explicit MarketImpl(const bool handlePseudoCurrencies) : Market(handlePseudoCurrencies) {}
 
     //! \name Market interface
     //@{
     //! Get the asof Date
-    Date asofDate() const { return asof_; }
+    Date asofDate() const override { return asof_; }
 
     //! Yield Curves
     Handle<YieldTermStructure> yieldCurve(const YieldCurveType& type, const string& ccy,
-                                          const string& configuration = Market::defaultConfiguration) const;
-    Handle<YieldTermStructure> discountCurve(const string& ccy,
-                                             const string& configuration = Market::defaultConfiguration) const;
+                                          const string& configuration = Market::defaultConfiguration) const override;
+    Handle<YieldTermStructure> discountCurveImpl(const string& ccy,
+                                             const string& configuration = Market::defaultConfiguration) const override;
     Handle<YieldTermStructure> yieldCurve(const string& name,
-                                          const string& configuration = Market::defaultConfiguration) const;
+                                          const string& configuration = Market::defaultConfiguration) const override;
     Handle<IborIndex> iborIndex(const string& indexName,
-                                const string& configuration = Market::defaultConfiguration) const;
+                                const string& configuration = Market::defaultConfiguration) const override;
     Handle<SwapIndex> swapIndex(const string& indexName,
-                                const string& configuration = Market::defaultConfiguration) const;
+                                const string& configuration = Market::defaultConfiguration) const override;
 
     //! Swaptions
     Handle<QuantLib::SwaptionVolatilityStructure>
-    swaptionVol(const string& ccy, const string& configuration = Market::defaultConfiguration) const;
-    const string shortSwapIndexBase(const string& ccy,
-                                    const string& configuration = Market::defaultConfiguration) const;
-    const string swapIndexBase(const string& ccy, const string& configuration = Market::defaultConfiguration) const;
+    swaptionVol(const string& key, const string& configuration = Market::defaultConfiguration) const override;
+    string shortSwapIndexBase(const string& key,
+                                    const string& configuration = Market::defaultConfiguration) const override;
+    string swapIndexBase(const string& key, const string& configuration = Market::defaultConfiguration) const override;
 
     //! Yield volatility
     Handle<QuantLib::SwaptionVolatilityStructure>
-    yieldVol(const string& securityID, const string& configuration = Market::defaultConfiguration) const;
+    yieldVol(const string& securityID, const string& configuration = Market::defaultConfiguration) const override;
 
     //! FX
-    Handle<Quote> fxSpot(const string& ccypair, const string& configuration = Market::defaultConfiguration) const;
-    Handle<BlackVolTermStructure> fxVol(const string& ccypair,
-                                        const string& configuration = Market::defaultConfiguration) const;
+    QuantLib::Handle<QuantExt::FxIndex>
+    fxIndexImpl(const string& fxIndex, const string& configuration = Market::defaultConfiguration) const override;
+    Handle<Quote> fxRateImpl(const string& ccypair,
+                             const string& configuration = Market::defaultConfiguration) const override;
+    Handle<Quote> fxSpotImpl(const string& ccypair,
+                             const string& configuration = Market::defaultConfiguration) const override;
+    Handle<BlackVolTermStructure> fxVolImpl(const string& ccypair,
+                                            const string& configuration = Market::defaultConfiguration) const override;
 
     //! Default Curves and Recovery Rates
-    Handle<DefaultProbabilityTermStructure>
-    defaultCurve(const string&, const string& configuration = Market::defaultConfiguration) const;
-    Handle<Quote> recoveryRate(const string&, const string& configuration = Market::defaultConfiguration) const;
+    Handle<QuantExt::CreditCurve> defaultCurve(const string&,
+                                  const string& configuration = Market::defaultConfiguration) const override;
+    Handle<Quote> recoveryRate(const string&, const string& configuration = Market::defaultConfiguration) const override;
 
     //! CDS volatilities
-    Handle<BlackVolTermStructure> cdsVol(const string& name,
-                                         const string& configuration = Market::defaultConfiguration) const;
+    Handle<QuantExt::CreditVolCurve> cdsVol(const string& name,
+                                            const string& configuration = Market::defaultConfiguration) const override;
 
     //! Base correlation structures
-    Handle<BaseCorrelationTermStructure<BilinearInterpolation>>
-    baseCorrelation(const string& name, const string& configuration = Market::defaultConfiguration) const;
+    Handle<QuantExt::BaseCorrelationTermStructure>
+    baseCorrelation(const string& name, const string& configuration = Market::defaultConfiguration) const override;
 
     //! CapFloor volatilities
-    Handle<OptionletVolatilityStructure> capFloorVol(const string& ccy,
-                                                     const string& configuration = Market::defaultConfiguration) const;
+    Handle<OptionletVolatilityStructure> capFloorVol(const string& key,
+                                                     const string& configuration = Market::defaultConfiguration) const override;
+    std::pair<string, QuantLib::Period>
+    capFloorVolIndexBase(const string& key, const string& configuration = Market::defaultConfiguration) const override;
 
     //! YoY Inflation CapFloor volatilities
     Handle<QuantExt::YoYOptionletVolatilitySurface>
-    yoyCapFloorVol(const string& name, const string& configuration = Market::defaultConfiguration) const;
+    yoyCapFloorVol(const string& name, const string& configuration = Market::defaultConfiguration) const override;
 
     //! Inflation Indexes
     virtual Handle<ZeroInflationIndex>
-    zeroInflationIndex(const string& indexName, const string& configuration = Market::defaultConfiguration) const;
+    zeroInflationIndex(const string& indexName, const string& configuration = Market::defaultConfiguration) const override;
     virtual Handle<YoYInflationIndex>
-    yoyInflationIndex(const string& indexName, const string& configuration = Market::defaultConfiguration) const;
+    yoyInflationIndex(const string& indexName, const string& configuration = Market::defaultConfiguration) const override;
 
     //! Inflation Cap Floor Volatility Surfaces
     virtual Handle<CPIVolatilitySurface>
     cpiInflationCapFloorVolatilitySurface(const string& indexName,
-                                          const string& configuration = Market::defaultConfiguration) const;
+                                          const string& configuration = Market::defaultConfiguration) const override;
 
     //! Equity curves
-    Handle<Quote> equitySpot(const string& eqName, const string& configuration = Market::defaultConfiguration) const;
+    Handle<Quote> equitySpot(const string& eqName, const string& configuration = Market::defaultConfiguration) const override;
     Handle<QuantExt::EquityIndex> equityCurve(const string& eqName,
-                                              const string& configuration = Market::defaultConfiguration) const;
+                                              const string& configuration = Market::defaultConfiguration) const override;
 
     Handle<YieldTermStructure> equityDividendCurve(const string& eqName,
-                                                   const string& configuration = Market::defaultConfiguration) const;
+                                                   const string& configuration = Market::defaultConfiguration) const override;
 
     //! Equity volatilities
     Handle<BlackVolTermStructure> equityVol(const string& eqName,
-                                            const string& configuration = Market::defaultConfiguration) const;
+                                            const string& configuration = Market::defaultConfiguration) const override;
 
     //! Equity forecasting curves
     Handle<YieldTermStructure> equityForecastCurve(const string& eqName,
-                                                   const string& configuration = Market::defaultConfiguration) const;
+                                                   const string& configuration = Market::defaultConfiguration) const override;
 
     //! Bond Spreads
     Handle<Quote> securitySpread(const string& securityID,
-                                 const string& configuration = Market::defaultConfiguration) const;
+                                 const string& configuration = Market::defaultConfiguration) const override;
 
     //! Cpi Base Quotes
     Handle<QuantExt::InflationIndexObserver> baseCpis(const string& index,
@@ -160,25 +152,25 @@ public:
 
     //! Commodity curves
     QuantLib::Handle<QuantExt::PriceTermStructure>
-    commodityPriceCurve(const string& commodityName, const string& configuration = Market::defaultConfiguration) const;
+    commodityPriceCurve(const string& commodityName, const string& configuration = Market::defaultConfiguration) const override;
 
     //! Commodity index
     QuantLib::Handle<QuantExt::CommodityIndex> commodityIndex(const std::string& commodityName,
-        const std::string& configuration = Market::defaultConfiguration) const;
+        const std::string& configuration = Market::defaultConfiguration) const override;
 
     //! Commodity volatility
     QuantLib::Handle<QuantLib::BlackVolTermStructure>
-    commodityVolatility(const string& commodityName, const string& configuration = Market::defaultConfiguration) const;
+    commodityVolatility(const string& commodityName, const string& configuration = Market::defaultConfiguration) const override;
     //@}
 
     //! Correlation curves
     Handle<QuantExt::CorrelationTermStructure>
     correlationCurve(const string& index1, const string& index2,
-                     const string& configuration = Market::defaultConfiguration) const;
+                     const string& configuration = Market::defaultConfiguration) const override;
     //! \name Conditional Prepayment Rates
     //@{
     QuantLib::Handle<Quote> cpr(const string& securityID,
-                                const string& configuration = Market::defaultConfiguration) const;
+                                const string& configuration = Market::defaultConfiguration) const override;
     //@}
 
     //! \name Disable copying
@@ -188,7 +180,7 @@ public:
     //@}
 
     //! Send an explicit update() call to all term structures
-    void refresh(const string& configuration = Market::defaultConfiguration);
+    void refresh(const string& configuration = Market::defaultConfiguration) override;
 
 protected:
     /*! Require a market object, this can be used in derived classes to build objects lazily. If the
@@ -206,9 +198,12 @@ protected:
         as a fallback.
 
         Notice that correlation curves are required with '&' as a delimiter between the indexes. */
-    virtual void require(const MarketObject o, const string& name, const string& configuration) const {}
-
+    virtual void require(const MarketObject o, const string& name, const string& configuration,
+                         const bool forceBuild = false) const {}
+    
     Date asof_;
+    // fx quotes / indices, this is shared between all configurations
+    boost::shared_ptr<FXTriangulation> fx_;
     // maps (configuration, key) => term structure
     mutable map<tuple<string, YieldCurveType, string>, Handle<YieldTermStructure>> yieldCurves_;
     mutable map<pair<string, string>, Handle<IborIndex>> iborIndices_;
@@ -216,13 +211,13 @@ protected:
     mutable map<pair<string, string>, Handle<QuantLib::SwaptionVolatilityStructure>> swaptionCurves_;
     mutable map<pair<string, string>, pair<string, string>> swaptionIndexBases_;
     mutable map<pair<string, string>, Handle<QuantLib::SwaptionVolatilityStructure>> yieldVolCurves_;
-    mutable map<string, FXTriangulation> fxSpots_;
     mutable map<pair<string, string>, Handle<BlackVolTermStructure>> fxVols_;
-    mutable map<pair<string, string>, Handle<DefaultProbabilityTermStructure>> defaultCurves_;
-    mutable map<pair<string, string>, Handle<BlackVolTermStructure>> cdsVols_;
-    mutable map<pair<string, string>, Handle<BaseCorrelationTermStructure<BilinearInterpolation>>> baseCorrelations_;
+    mutable map<pair<string, string>, Handle<QuantExt::CreditCurve>> defaultCurves_;
+    mutable map<pair<string, string>, Handle<QuantExt::CreditVolCurve>> cdsVols_;
+    mutable map<pair<string, string>, Handle<QuantExt::BaseCorrelationTermStructure>> baseCorrelations_;
     mutable map<pair<string, string>, Handle<Quote>> recoveryRates_;
     mutable map<pair<string, string>, Handle<OptionletVolatilityStructure>> capFloorCurves_;
+    mutable map<pair<string, string>, std::pair<string, QuantLib::Period>> capFloorIndexBase_;
     mutable map<pair<string, string>, Handle<YoYOptionletVolatilitySurface>> yoyCapFloorVolSurfaces_;
     mutable map<pair<string, string>, Handle<ZeroInflationIndex>> zeroInflationIndices_;
     mutable map<pair<string, string>, Handle<YoYInflationIndex>> yoyInflationIndices_;
@@ -237,16 +232,16 @@ protected:
     mutable map<pair<string, string>, QuantLib::Handle<QuantExt::EquityIndex>> equityCurves_;
     mutable map<pair<string, string>, Handle<Quote>> cprs_;
 
-    boost::shared_ptr<Conventions> conventions_ref_;
-    // needed for the deprecated ctor taking a reference to conventions, TODO remove
-    Conventions conventions_;
-
     //! add a swap index to the market
     void addSwapIndex(const string& swapindex, const string& discountIndex,
                       const string& configuration = Market::defaultConfiguration) const;
 
     // set of term structure pointers for refresh (per configuration)
     map<string, std::set<boost::shared_ptr<TermStructure>>> refreshTs_;
+
+private:
+    pair<string, string> swapIndexBases(const string& key,
+                                        const string& configuration = Market::defaultConfiguration) const;
 };
 
 } // namespace data

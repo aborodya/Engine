@@ -54,28 +54,22 @@ public:
     IrLgmData() {}
 
     //! Detailed constructor
-    IrLgmData(std::string currency, CalibrationType calibrationType, ReversionType revType, VolatilityType volType,
+    IrLgmData(std::string qualifier, CalibrationType calibrationType, ReversionType revType, VolatilityType volType,
               bool calibrateH, ParamType hType, std::vector<Time> hTimes, std::vector<Real> hValues, bool calibrateA,
               ParamType aType, std::vector<Time> aTimes, std::vector<Real> aValues, Real shiftHorizon = 0.0,
               Real scaling = 1.0, std::vector<std::string> optionExpiries = std::vector<std::string>(),
               std::vector<std::string> optionTerms = std::vector<std::string>(),
               std::vector<std::string> optionStrikes = std::vector<std::string>())
-        : LgmData(currency, calibrationType, revType, volType, calibrateH, hType, hTimes, hValues, calibrateA, aType,
+        : LgmData(qualifier, calibrationType, revType, volType, calibrateH, hType, hTimes, hValues, calibrateA, aType,
                   aTimes, aValues, shiftHorizon, scaling, optionExpiries, optionTerms, optionStrikes) {}
-
-    //! \name Setters/Getters
-    //@{
-    // deprecated, for backwards compatibility only, use qualifier() instead
-    std::string& ccy() { return qualifier_; }
-    //@}
 
     //! \name Serialisation
     //@{
-    void fromXML(XMLNode* node);
-    XMLNode* toXML(XMLDocument& doc);
+    void fromXML(XMLNode* node) override;
+    XMLNode* toXML(XMLDocument& doc) override;
     //@}
-    void clear() { LgmData::clear(); }
-    void reset() {
+    void clear() override { LgmData::clear(); }
+    void reset() override {
         LgmData::reset();
     }
 };

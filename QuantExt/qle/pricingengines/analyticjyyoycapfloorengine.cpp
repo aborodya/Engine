@@ -49,8 +49,8 @@ using std::sqrt;
 namespace QuantExt {
 
 AnalyticJyYoYCapFloorEngine::AnalyticJyYoYCapFloorEngine(
-    const boost::shared_ptr<CrossAssetModel>& model, Size index)
-    : model_(model), index_(index) {}
+    const boost::shared_ptr<CrossAssetModel>& model, Size index, bool indexIsInterpolated)
+    : model_(model), index_(index), indexIsInterpolated_(indexIsInterpolated) {}
 
 void AnalyticJyYoYCapFloorEngine::calculate() const {
 
@@ -72,7 +72,7 @@ void AnalyticJyYoYCapFloorEngine::calculate() const {
     auto yts = model_->irlgm1f(irIdx)->termStructure();
 
     // For each YoY optionlet, there are four scenarios:
-    // 1. The YoY optionlet payment has already occured (depends on some settings) => skip it.
+    // 1. The YoY optionlet payment has already occurred (depends on some settings) => skip it.
     // 2. The underlying YoY rate is known but has not been paid. Deterministic discounted value.
     // 3. The denominator in the underlying YoY rate is known but the numerator is not known. We have a CPI 
     //    optionlet.
@@ -121,10 +121,10 @@ void AnalyticJyYoYCapFloorEngine::calculate() const {
         // If we get to here, we are in scenario 3 or 4.
         Date denFixingDate = fixingDate - 1 * Years;
         auto zts = model_->infjy(index_)->realRate()->termStructure();
-        auto S = inflationTime(denFixingDate, *zts);
-        auto T = inflationTime(fixingDate, *zts);
+        auto S = inflationTime(denFixingDate, *zts, indexIsInterpolated_);
+        auto T = inflationTime(fixingDate, *zts, indexIsInterpolated_);
 
-        Real mean = jyExpectedIndexRatio(model_, index_, S, T);
+        Real mean = jyExpectedIndexRatio(model_, index_, S, T, indexIsInterpolated_);
         Real stdDev = sqrt(varianceLogRatio(S, T));
 
         Real payoff = 0.0;

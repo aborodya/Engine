@@ -25,6 +25,7 @@
 
 #include <ored/configuration/bootstrapconfig.hpp>
 #include <ored/configuration/curveconfig.hpp>
+#include <ored/configuration/reportconfig.hpp>
 #include <ql/termstructures/volatility/volatilitytype.hpp>
 #include <ql/time/calendar.hpp>
 #include <ql/time/daycounter.hpp>
@@ -56,10 +57,19 @@ public:
         bool extrapolate, bool flatExtrapolation, bool inlcudeAtm, const std::vector<std::string>& tenors,
         const std::vector<std::string>& strikes, const QuantLib::DayCounter& dayCounter, QuantLib::Natural settleDays,
         const QuantLib::Calendar& calendar, const QuantLib::BusinessDayConvention& businessDayConvention,
-        const std::string& iborIndex, const std::string& discountCurve,
+        const std::string& index, const QuantLib::Period& rateComputationPeriod,
+        const QuantLib::Size onCapSettlementDays, const std::string& discountCurve,
         const std::string& interpolationMethod = "BicubicSpline", const std::string& interpolateOn = "TermVolatilities",
         const std::string& timeInterpolation = "LinearFlat", const std::string& strikeInterpolation = "LinearFlat",
-        const std::vector<std::string>& atmTenors = {}, const BootstrapConfig& bootstrapConfig = BootstrapConfig());
+        const std::vector<std::string>& atmTenors = {}, const BootstrapConfig& bootstrapConfig = BootstrapConfig(),
+        const std::string& smileDynamics = "");
+
+    //! Detailled constructor for proxy config
+    CapFloorVolatilityCurveConfig(const std::string& curveID, const std::string& curveDescription,
+                                  const std::string& proxySourceCurveId, const std::string& proxySourceIndex,
+                                  const std::string& proxyTargetIndex,
+                                  const QuantLib::Period& proxySourceRateComputationPeriod = 0 * Days,
+                                  const QuantLib::Period& proxyTargetRateComputationPeriod = 0 * Days);
 
     //! \name XMLSerializable interface
     //@{
@@ -81,44 +91,68 @@ public:
     const QuantLib::Natural& settleDays() const { return settleDays_; }
     const QuantLib::Calendar& calendar() const { return calendar_; }
     const QuantLib::BusinessDayConvention& businessDayConvention() const { return businessDayConvention_; }
-    const std::string& iborIndex() const { return iborIndex_; }
+    const std::string& index() const { return index_; }
+    const QuantLib::Period& rateComputationPeriod() const { return rateComputationPeriod_; }
+    QuantLib::Size onCapSettlementDays() const { return onCapSettlementDays_; }
     const std::string& discountCurve() const { return discountCurve_; }
     QuantExt::CapFloorTermVolSurfaceExact::InterpolationMethod interpolationMethod() const;
     const std::string& interpolateOn() const { return interpolateOn_; }
     const std::string& timeInterpolation() const { return timeInterpolation_; }
     const std::string& strikeInterpolation() const { return strikeInterpolation_; }
+    bool quoteIncludesIndexName() const { return quoteIncludesIndexName_; }
     const std::vector<std::string>& atmTenors() const { return atmTenors_; }
     const BootstrapConfig& bootstrapConfig() const { return bootstrapConfig_; }
+    const std::string& smileDynamics() const { return smileDynamics_; }
     Type type() const { return type_; }
     const string& currency() const;
-    string iborTenor() const;
+    string indexTenor() const;
+    //
+    const std::string& proxySourceCurveId() const { return proxySourceCurveId_; }
+    const std::string& proxySourceIndex() const { return proxySourceIndex_; }
+    const std::string& proxyTargetIndex() const { return proxyTargetIndex_; };
+    const QuantLib::Period& proxySourceRateComputationPeriod() const { return proxySourceRateComputationPeriod_; }
+    const QuantLib::Period& proxyTargetRateComputationPeriod() const { return proxyTargetRateComputationPeriod_; }
+    //
+    const ReportConfig& reportConfig() const { return reportConfig_; }
     //@}
 
     //! Convert VolatilityType \p type to string
     std::string toString(VolatilityType type) const;
 
 private:
-    VolatilityType volatilityType_;
-    bool extrapolate_;
-    bool flatExtrapolation_;
-    bool includeAtm_;
+    VolatilityType volatilityType_ = VolatilityType::Normal;
+    bool extrapolate_ = true;
+    bool flatExtrapolation_ = true;
+    bool includeAtm_ = false;
     std::vector<std::string> tenors_;
     std::vector<std::string> strikes_;
     bool optionalQuotes_ = false;
     QuantLib::DayCounter dayCounter_;
-    QuantLib::Natural settleDays_;
+    QuantLib::Natural settleDays_ = 0;
     QuantLib::Calendar calendar_;
-    QuantLib::BusinessDayConvention businessDayConvention_;
-    std::string iborIndex_;
+    QuantLib::BusinessDayConvention businessDayConvention_ = Following;
+    std::string index_;
+    QuantLib::Period rateComputationPeriod_;
+    QuantLib::Size onCapSettlementDays_ = 0;
     std::string discountCurve_;
     std::string interpolationMethod_;
     std::string interpolateOn_;
     std::string timeInterpolation_;
     std::string strikeInterpolation_;
+    bool quoteIncludesIndexName_ = false;
     std::vector<std::string> atmTenors_;
     BootstrapConfig bootstrapConfig_;
-    Type type_;
+    std::string smileDynamics_;
+    Type type_ = Type::Surface;
     std::string extrapolation_;
+    //
+    std::string proxySourceCurveId_;
+    std::string proxySourceIndex_;
+    std::string proxyTargetIndex_;
+    QuantLib::Period proxySourceRateComputationPeriod_;
+    QuantLib::Period proxyTargetRateComputationPeriod_;
+    //
+    ReportConfig reportConfig_;
 
     //! Populate required curve ids
     void populateRequiredCurveIds();

@@ -36,10 +36,14 @@ be used in combination with the following leg types:
 \end{itemize}
 
 If specified the notional of the single coupons in the leg is scaled by one or several index prices and a quantity. The
-indices can be equity or FX indices. Notice that if notional exchanges are enabled on a leg with \lstinline!Indexings! defined, the
+indices can be equity or FX indices. Notice that if notional exchanges are enabled on a leg with the \lstinline!FromAssetLeg! flag set to \emph{true}, the
 notional exchanges are {\em not} influenced by the indexing definitions. In general we assume that notional exchanges
-are not enabled in combination with indexings, but it is not forbidden technically. Listing \ref{lst:indexings} shows an
-example of an Floating leg indexed by both an equity price and a FX rate.
+are not enabled in combination with \lstinline!FromAssetLeg! \emph{true}, but it is not forbidden technically.  Listing \ref{lst:indexings} shows an
+example of a Floating leg indexed by both an equity price and a FX rate.
+
+Another use case for Indexings is for non-deliverable IR and Cross Currency Swaps. A non-deliverable IR Swap has Currency set to the deliverable currency on both legs, Notional in the non-deliverable currency on both legs, and Indexings with an FX Index between the deliverable and non-deliverable currency on both legs. See the Swap section for an example non-deliverable IR swap where USD is the payment currency and CLP is the non-deliverable currency.
+
+A non-deliverable Cross Currency Swap has Settlement set to \emph{Cash}, and one leg is a regular leg in the deliverable currency without Indexings. The other leg has Currency set to the deliverable currency, Notional in the non-deliverable currency and Indexings with an FX Index between the deliverable and non-deliverable currency. See the Swap section for an example USD-CLP non-deliverable cross currency swap where CLP is the non-deliverable currency.
 
 \begin{listing}[H]
 %\hrule\medskip
@@ -65,8 +69,6 @@ example of an Floating leg indexed by both an equity price and a FX rate.
         </Indexing>
         <Indexing>
             <Index>FX-ECB-EUR-USD</Index>
-            <IndexFixingDays>2</IndexFixingDays>
-            <IndexFixingCalendar>EUR,USD</IndexFixingCalendar>
             <InitialFixing>1.1469</InitialFixing>
             <ValuationSchedule> ... </ValuationSchedule>
             <FixingDays>0</FixingDays>
@@ -90,7 +92,7 @@ The Indexings node contains the following elements:
 \lstinline!FromAssetLeg! is supported for the following trade types:
 
 \begin{itemize}
-\item \lstinline!EquitySwap!: Setting \lstinline!FromAssetLeg! to \emph{true}, aligns the notionals for all return periods on the non-equity funding leg, to the equity leg by deriving equity price, quantity and FX from the equity leg. \\ Note that \lstinline!FromAssetLeg! is only supported if \lstinline!NotionalReset! is \emph{true} on the equity leg - \lstinline!FromAssetLeg! is ignored otherwise.
+\item \lstinline!EquitySwap!: Setting \lstinline!FromAssetLeg! to \emph{true}, aligns the notionals for all return periods on the non-equity funding leg, to the equity leg by deriving equity price, quantity and FX from the equity leg. \\ Note that \lstinline!FromAssetLeg! is only supported if \lstinline!NotionalReset! is \emph{true} on the equity leg - \lstinline!FromAssetLeg! is ignored otherwise. Also \lstinline!FromAssetLeg! is only supported when Quantity is given on the equity leg, not InitialPrice and Notional.
 \item \lstinline!BondTRS!: Setting \lstinline!FromAssetLeg! to \emph{true}, aligns the notionals for all return periods on the funding leg (in the \lstinline!FundingData! block), to the total return leg (in the \lstinline!TotalReturnData! block) by deriving bond price, bond notional and FX from the total return leg, bond data and the reference bond. 
 \end{itemize}
 
@@ -118,13 +120,9 @@ The Indexings node contains the following elements:
   details, or ``EQ-NAME'' for Equity with ``Name'' being the general string representation for equity underlyings
   {IdentifierType}:{Name}:{Currency}:{Exchange}, see \ref{ss:underlying}.
 
-\item IndexFixingDays [Optional]: fixing days of the index, this is only used for FX indices
+%\item IndexFixingCalendar [Optional]: Fixing calendar of the index, this is only used for Bond indices
 
-  Allowable values: Non-negative whole numbers. Defaults to \emph{0} if left blank or omitted.
-
-\item IndexFixingCalendar [Optional]: Fixing calendar of the index, this is only used for FX indices and Bond indices
-
-  Allowable values: See Table \ref{tab:calendar} Calendar. Defaults to the \emph{NullCalendar} (no holidays) if left blank or omitted.
+%  Allowable values: See Table \ref{tab:calendar} Calendar. Defaults to the \emph{NullCalendar} (no holidays) if left blank or omitted.
 
 \item Dirty [Optional]: Only used for bond indices. Indicates whether to use dirty (\emph{true}) or clean
   (\emph{false}) prices.
@@ -176,7 +174,7 @@ The Indexings node contains the following elements:
 \item FixingConvention [Optional]: If given defines the business day convention to use when
   deriving the fixing dates from the valuation schedule (see above). Defaults to  \emph{Preceding} if left blank or omitted.
 
-  Allowable values: Any valid business day convention, e.g. (\emph{F, MF, P, MP, U}). See \lstinline!Roll Convention! in Table \ref{tab:allow_stand_data}.
+  Allowable values: Any valid roll convention, e.g. (\emph{F, MF, P, MP, U}). See Table \ref{tab:convention}.
 
 \item IsInArrears [Optional]: If \emph{true}, the fixing dates are derived from the period end dates,
   otherwise from the period start dates as described for \lstinline!ValuationSchedule! above.

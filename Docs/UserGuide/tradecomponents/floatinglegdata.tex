@@ -42,8 +42,8 @@ The meanings and allowable values of the elements in the \lstinline!FloatingLegD
 \item Index:  The combination of currency, index and term that
   identifies the relevant fixings and yield curve of the floating leg.  
 
-  Allowable values: An alphanumeric string of the form CCY-INDEX-TERM. CCY, INDEX and TERM must be separated by dashes (-). CCY and INDEX must be among the supported currency and index combinations. TERM must be an integer followed by D, W,
-  M or Y. See Table \ref{tab:indices}. TERM is not required for Overnight indices.
+  Allowable values: An alphanumeric string of the form CCY-INDEX-TENOR. CCY, INDEX and TENOR must be separated by dashes (-). CCY and INDEX must be among the supported currency and index combinations. TENOR must be an integer followed by D, W,
+  M or Y. See Table \ref{tab:indices}. TENOR is not required for Overnight indices, but can be set to \emph{1D}.
 
 \item IsAveraged [Optional]:  For cases where there are multiple index fixings over a period \emph{true} indicates that
   the average of the fixings is used to calculate the coupon.  \emph{false} indicates that the coupon is calculated by
@@ -189,6 +189,8 @@ in Listing \ref{lst:float_zero_coupon_leg_dates}. \begin{listing}[H]
   For overnight coupons this is the number of business days by which the value dates are shifted into the past to get
   the fixing observation dates. In the context of RFRs the FixingDays parameter is sometimes also called
   ``obervation lag''.
+  
+  The calendar used for the fixing gap, is the calendar associated with the floating index, as defined in the conventions for the index.
 
   Allowable values: A non-negative whole number.  Defaults to the index's fixing days if blank or omitted. See defaults per index in Table \ref{tab:fixingdaysdefaults}.
 
@@ -264,12 +266,14 @@ If the entire {\tt <Gearings>} section is omitted, it defaults to a gearing of \
   \end{itemize}
   The cases for Averaged coupons are:
   \begin{itemize}
-  \item IncludeSpread = true or false, LocalCapFloor = false:\\
-    $$ A = \min \left( \max \left( \cdot \frac{\sum (\tau_i f_i)}{\tau} + s, F \right), C \right)$$
+  \item IncludeSpread = false, LocalCapFloor = false:\\
+    $$ A = \min \left( \max \left( g \cdot \frac{\sum (\tau_i f_i)}{\tau} + s, F \right), C \right)$$
+  \item IncludeSpread = true, LocalCapFloor = false:\\
+    $$ A = \min \left( \max \left( \frac{\sum (\tau_i f_i)}{\tau} + s, F \right), C \right)$$
   \item IncludeSpread = false, LocalCapFloor = true:\\
     $$ A = g \cdot \frac{\sum (\tau_i \min ( \max ( f_i , F), C))}{\tau} + s $$
   \item IncludeSpread = true, LocalCapFloor = true:\\
-    $$ A = g \cdot \frac{\sum (\tau_i \min ( \max ( f_i + s , F), C))}{\tau} $$
+    $$ A = \cdot \frac{\sum (\tau_i \min ( \max ( f_i + s , F), C))}{\tau} $$
   \end{itemize}
 
 \item Floors [Optional]: This node contains child elements of type \lstinline!Floor! indicating that the coupon rate is floored at

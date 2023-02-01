@@ -25,9 +25,9 @@
 
 #include <ored/configuration/conventions.hpp>
 #include <ored/configuration/curveconfigurations.hpp>
-#include <ored/marketdata/curvespec.hpp>
+#include <ored/marketdata/defaultcurve.hpp>
 #include <ored/marketdata/loader.hpp>
-#include <ql/termstructures/volatility/equityfx/blackvoltermstructure.hpp>
+#include <qle/termstructures/creditvolcurve.hpp>
 
 namespace ore {
 namespace data {
@@ -44,32 +44,41 @@ public:
 
     //! Detailed constructor
     CDSVolCurve(QuantLib::Date asof, CDSVolatilityCurveSpec spec, const Loader& loader,
-                const CurveConfigurations& curveConfigs);
+                const CurveConfigurations& curveConfigs,
+                const std::map<std::string, boost::shared_ptr<CDSVolCurve>>& requiredCdsVolCurves = {},
+                const std::map<std::string, boost::shared_ptr<DefaultCurve>>& requiredCdsCurves = {});
     //@}
 
     //! \name Inspectors
     //@{
     const CDSVolatilityCurveSpec& spec() const { return spec_; }
-    const boost::shared_ptr<BlackVolTermStructure>& volTermStructure() { return vol_; }
+    const boost::shared_ptr<QuantExt::CreditVolCurve>& volTermStructure() { return vol_; }
     //@}
 
 private:
     CDSVolatilityCurveSpec spec_;
-    boost::shared_ptr<BlackVolTermStructure> vol_;
+    boost::shared_ptr<QuantExt::CreditVolCurve> vol_;
     QuantLib::Calendar calendar_;
     QuantLib::DayCounter dayCounter_;
+    QuantExt::CreditVolCurve::Type strikeType_;
 
-    //! Build a volatility structure from a single constant volatlity quote
+    //! Build a volatility structure from a single constant volatility quote
     void buildVolatility(const QuantLib::Date& asof, const CDSVolatilityCurveConfig& vc,
                          const ConstantVolatilityConfig& cvc, const Loader& loader);
 
-    //! Build a volatility curve from a 1-D curve of volatlity quotes
+    //! Build a volatility curve from a 1-D curve of volatility quotes
     void buildVolatility(const QuantLib::Date& asof, const CDSVolatilityCurveConfig& vc,
                          const VolatilityCurveConfig& vcc, const Loader& loader);
 
     //! Build a volatility surface from a collection of expiry and absolute strike pairs.
     void buildVolatility(const QuantLib::Date& asof, CDSVolatilityCurveConfig& vc,
-                         const VolatilityStrikeSurfaceConfig& vssc, const Loader& loader);
+                         const VolatilityStrikeSurfaceConfig& vssc, const Loader& loader,
+                         const std::map<std::string, boost::shared_ptr<DefaultCurve>>& requiredCdsCurves);
+
+    void buildVolatility(const Date& asof, const CDSVolatilityCurveSpec& spec, const CDSVolatilityCurveConfig& vc,
+                         const CDSProxyVolatilityConfig& pvc,
+                         const std::map<std::string, boost::shared_ptr<CDSVolCurve>>& requiredCdsVolCurves,
+                         const std::map<std::string, boost::shared_ptr<DefaultCurve>>& requiredCdsCurves);
 
     /*! Build a volatility surface from a collection of expiry and absolute strike pairs where the strikes and
         expiries are both explicitly configured i.e. where wild cards are not used for either the strikes or
@@ -77,7 +86,8 @@ private:
     */
     void buildVolatilityExplicit(const QuantLib::Date& asof, CDSVolatilityCurveConfig& vc,
                                  const VolatilityStrikeSurfaceConfig& vssc, const Loader& loader,
-                                 const std::vector<QuantLib::Real>& configuredStrikes);
+                                 const std::vector<QuantLib::Real>& configuredStrikes,
+                                 const std::map<std::string, boost::shared_ptr<DefaultCurve>>& requiredCdsCurves);
 
     //! Get an explicit expiry date from a CDS option quote's Expiry
     QuantLib::Date getExpiry(const QuantLib::Date& asof, const boost::shared_ptr<Expiry>& expiry) const;

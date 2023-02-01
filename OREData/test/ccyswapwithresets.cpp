@@ -40,9 +40,14 @@ namespace {
 
 class TestMarket : public MarketImpl {
 public:
-    TestMarket() {
+    TestMarket() : MarketImpl(false) {
         // valuation date
         asof_ = Date(22, Aug, 2016);
+
+        boost::shared_ptr<ore::data::Conventions> conventions = boost::make_shared<Conventions>();
+        conventions->add(boost::make_shared<ore::data::FXConvention>("EUR-USD-FX", "0", "EUR", "USD", "10000",
+                                                                     "USD,EUR", "true"));
+        InstrumentConventions::instance().setConventions(conventions);
 
         // build vectors with dates and discount factors
         vector<Date> datesEUR = {asof_,
@@ -87,7 +92,7 @@ public:
         yieldCurves_[make_tuple(Market::defaultConfiguration, YieldCurveType::Discount, "EUR")] =
             intDiscCurve(datesEUR, dfsEUR, Actual360(), TARGET());
         yieldCurves_[make_tuple(Market::defaultConfiguration, YieldCurveType::Discount, "USD")] =
-            intDiscCurve(datesUSD, dfsUSD, Actual360(), UnitedStates());
+            intDiscCurve(datesUSD, dfsUSD, Actual360(), UnitedStates(UnitedStates::Settlement));
 
         // build ibor index
         Handle<IborIndex> hEUR(parseIborIndex("EUR-EURIBOR-6M", intDiscCurve(datesEUR, dfsEUR, Actual360(), TARGET())));
@@ -96,15 +101,16 @@ public:
         // add Eurib 6M fixing
         hEUR->addFixing(Date(18, Aug, 2016), -0.00191);
         Handle<IborIndex> hUSD(
-            parseIborIndex("USD-LIBOR-3M", intDiscCurve(datesUSD, dfsUSD, Actual360(), UnitedStates())));
+            parseIborIndex("USD-LIBOR-3M", intDiscCurve(datesUSD, dfsUSD, Actual360(), UnitedStates(UnitedStates::Settlement))));
         iborIndices_[make_pair(Market::defaultConfiguration, "USD-LIBOR-3M")] = hUSD;
 
         // add Libor 3M fixing
         hUSD->addFixing(Date(18, Aug, 2016), 0.00811);
 
         // add fx rates
-        fxSpots_[Market::defaultConfiguration].addQuote("EURUSD",
-                                                        Handle<Quote>(boost::make_shared<SimpleQuote>(1.1306)));
+	std::map<std::string, Handle<Quote>> quotes;
+	quotes["EURUSD"] = Handle<Quote>(boost::make_shared<SimpleQuote>(1.1306));
+	fx_ = boost::make_shared<FXTriangulation>(quotes);
     }
 
 private:
@@ -177,7 +183,7 @@ BOOST_AUTO_TEST_CASE(testCcySwapWithResetsPrice) {
     bool isPayerEUR = true;
     string indexEUR = "EUR-EURIBOR-6M";
     bool isInArrears = false;
-    int days = 2, fxFixingDays = 0;
+    int days = 2;
     vector<Real> spreadEUR(1, 0.000261);
     string dc = "ACT/360";
     vector<Real> notionalEUR(1, 8833141.95);
@@ -191,10 +197,10 @@ BOOST_AUTO_TEST_CASE(testCcySwapWithResetsPrice) {
     auto legdataEUR = boost::make_shared<FloatingLegData>(indexEUR, days, isInArrears, spreadEUR);
     LegData legEUR1(legdataEUR, isPayerEUR, "EUR", scheduleEUR, dc, notionalEUR, vector<string>(), paymentConvention,
                     notionalInitialXNL, notionalFinalXNL, notionalAmortizingXNL, notionalFinalXNL, foreignCCY,
-                    foreignAmount, fxIndex, fxFixingDays);
+                    foreignAmount, fxIndex);
     LegData legEUR2(legdataEUR, isPayerEUR, "EUR", scheduleEUR, dc, notionalEUR, vector<string>(), paymentConvention,
                     notionalInitialXNL, notionalFinalXNL, notionalAmortizingXNL, false, foreignCCY, foreignAmount,
-                    fxIndex, fxFixingDays);
+                    fxIndex);
 
     // USD Leg without notional resets
     bool isPayerUSD = false;

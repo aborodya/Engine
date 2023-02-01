@@ -1,5 +1,5 @@
 /*
- Copyright (C) 2016-2021 Quaternion Risk Management Ltd
+ Copyright (C) 2016-2022 Quaternion Risk Management Ltd
  Copyright (C) 2021 Skandinaviska Enskilda Banken AB (publ)
  All rights reserved.
 
@@ -32,38 +32,62 @@
 #include <ored/portfolio/builders/commodityasianoption.hpp>
 #include <ored/portfolio/builders/commodityforward.hpp>
 #include <ored/portfolio/builders/commodityoption.hpp>
+#include <ored/portfolio/builders/commodityapo.hpp>
+#include <ored/portfolio/builders/commodityapomodelbuilder.hpp>
+#include <ored/portfolio/builders/commodityspreadoption.hpp>
+#include <ored/portfolio/builders/commodityswap.hpp>
+#include <ored/portfolio/builders/commodityswaption.hpp>
 #include <ored/portfolio/builders/cpicapfloor.hpp>
 #include <ored/portfolio/builders/creditdefaultswap.hpp>
 #include <ored/portfolio/builders/creditdefaultswapoption.hpp>
 #include <ored/portfolio/builders/durationadjustedcms.hpp>
 #include <ored/portfolio/builders/equityasianoption.hpp>
+#include <ored/portfolio/builders/equitybarrieroption.hpp>
+#include <ored/portfolio/builders/equitycompositeoption.hpp>
+#include <ored/portfolio/builders/equitydigitaloption.hpp>
+#include <ored/portfolio/builders/equitydoublebarrieroption.hpp>
+#include <ored/portfolio/builders/equitydoubletouchoption.hpp>
 #include <ored/portfolio/builders/equityforward.hpp>
 #include <ored/portfolio/builders/equityfuturesoption.hpp>
 #include <ored/portfolio/builders/equityoption.hpp>
+#include <ored/portfolio/builders/equitytouchoption.hpp>
 #include <ored/portfolio/builders/forwardbond.hpp>
 #include <ored/portfolio/builders/fxasianoption.hpp>
+#include <ored/portfolio/builders/fxbarrieroption.hpp>
+#include <ored/portfolio/builders/fxdigitalbarrieroption.hpp>
+#include <ored/portfolio/builders/fxdigitaloption.hpp>
+#include <ored/portfolio/builders/fxdoublebarrieroption.hpp>
+#include <ored/portfolio/builders/fxdoubletouchoption.hpp>
 #include <ored/portfolio/builders/fxforward.hpp>
 #include <ored/portfolio/builders/fxoption.hpp>
+#include <ored/portfolio/builders/fxtouchoption.hpp>
 #include <ored/portfolio/builders/quantoequityoption.hpp>
 #include <ored/portfolio/builders/swap.hpp>
 #include <ored/portfolio/builders/swaption.hpp>
 #include <ored/portfolio/builders/yoycapfloor.hpp>
+#include <ored/portfolio/builders/varianceswap.hpp>
 #include <ored/portfolio/durationadjustedcmslegbuilder.hpp>
 #include <ored/portfolio/enginefactory.hpp>
 #include <ored/portfolio/legbuilders.hpp>
+#include <ored/portfolio/commoditylegbuilder.hpp>
+#include <ored/portfolio/equityfxlegbuilder.hpp>
 #include <ored/utilities/log.hpp>
+
+#include <boost/algorithm/string/join.hpp>
 
 namespace ore {
 namespace data {
 
 namespace {
-std::string getParameter(const std::map<std::string, std::string>& m, const std::string& p, const std::string& q,
-                         const bool mandatory, const std::string& defaultValue) {
-    // first look for p_q if a qualifier is given
-    if (!q.empty()) {
-        auto r = m.find(p + "_" + q);
-        if (r != m.end())
-            return r->second;
+std::string getParameter(const std::map<std::string, std::string>& m, const std::string& p,
+                         const std::vector<std::string>& qs, const bool mandatory, const std::string& defaultValue) {
+    // first look for p_q if one or several qualifiers are given
+    for (auto const& q : qs) {
+        if (!q.empty()) {
+            auto r = m.find(p + "_" + q);
+            if (r != m.end())
+                return r->second;
+        }
     }
     // no qualifier given, or fall back on p because p_q was not found
     auto r = m.find(p);
@@ -72,20 +96,20 @@ std::string getParameter(const std::map<std::string, std::string>& m, const std:
     }
     // if parameter is mandatory throw, otherwise return the default value
     if (mandatory) {
-        QL_FAIL("parameter " << p << " not found (qualifier was \"" << q << "\")");
+        QL_FAIL("parameter " << p << " not found (qualifier list was \"" << boost::algorithm::join(qs, ", ") << "\")");
     }
     return defaultValue;
 }
 } // namespace
 
-std::string EngineBuilder::engineParameter(const std::string& p, const std::string qualifier, const bool mandatory,
-                                           const std::string& defaultValue) {
-    return getParameter(engineParameters_, p, qualifier, mandatory, defaultValue);
+std::string EngineBuilder::engineParameter(const std::string& p, const std::vector<std::string>& qualifiers,
+                                           const bool mandatory, const std::string& defaultValue) const {
+    return getParameter(engineParameters_, p, qualifiers, mandatory, defaultValue);
 }
 
-std::string EngineBuilder::modelParameter(const std::string& p, const std::string qualifier, const bool mandatory,
-                                          const std::string& defaultValue) {
-    return getParameter(modelParameters_, p, qualifier, mandatory, defaultValue);
+std::string EngineBuilder::modelParameter(const std::string& p, const std::vector<std::string>& qualifiers,
+                                          const bool mandatory, const std::string& defaultValue) const {
+    return getParameter(modelParameters_, p, qualifiers, mandatory, defaultValue);
 }
 
 EngineFactory::EngineFactory(const boost::shared_ptr<EngineData>& engineData, const boost::shared_ptr<Market>& market,
@@ -105,7 +129,6 @@ EngineFactory::EngineFactory(const boost::shared_ptr<EngineData>& engineData, co
 void EngineFactory::registerBuilder(const boost::shared_ptr<EngineBuilder>& builder) {
     const string& modelName = builder->model();
     const string& engineName = builder->engine();
-    DLOG("EngineFactory registering builder for model:" << modelName << " and engine:" << engineName);
     builders_[make_tuple(modelName, engineName, builder->tradeTypes())] = builder;
 }
 
@@ -127,15 +150,17 @@ boost::shared_ptr<EngineBuilder> EngineFactory::builder(const string& tradeType)
     QL_REQUIRE(it != builders_.end(), "No EngineBuilder for " << model << "/" << engine << "/" << tradeType);
 
     boost::shared_ptr<EngineBuilder> builder = it->second;
+    string effectiveTradeType = tradeType;
+    if(auto db = boost::dynamic_pointer_cast<DelegatingEngineBuilder>(builder))
+	effectiveTradeType = db->effectiveTradeType();
 
-    builder->init(market_, configurations_, engineData_->modelParameters(tradeType),
-                  engineData_->engineParameters(tradeType), engineData_->globalParameters());
+    builder->init(market_, configurations_, engineData_->modelParameters(effectiveTradeType),
+                  engineData_->engineParameters(effectiveTradeType), engineData_->globalParameters());
 
     return builder;
 }
 
 void EngineFactory::registerLegBuilder(const boost::shared_ptr<LegBuilder>& legBuilder) {
-    DLOG("EngineFactory registering builder for leg type " << legBuilder->legType());
     legBuilders_[legBuilder->legType()] = legBuilder;
 }
 
@@ -145,7 +170,7 @@ boost::shared_ptr<LegBuilder> EngineFactory::legBuilder(const string& legType) {
     return it->second;
 }
 
-Disposable<set<std::pair<string, boost::shared_ptr<ModelBuilder>>>> EngineFactory::modelBuilders() const {
+set<std::pair<string, boost::shared_ptr<ModelBuilder>>> EngineFactory::modelBuilders() const {
     set<std::pair<string, boost::shared_ptr<ModelBuilder>>> res;
     for (auto const& b : builders_) {
         res.insert(b.second->modelBuilders().begin(), b.second->modelBuilders().end());
@@ -172,7 +197,16 @@ void EngineFactory::addDefaultBuilders() {
     registerBuilder(boost::make_shared<FxEuropeanAsianOptionACGAPEngineBuilder>());
     registerBuilder(boost::make_shared<FxEuropeanAsianOptionADGAPEngineBuilder>());
     registerBuilder(boost::make_shared<FxEuropeanAsianOptionADGASEngineBuilder>());
-     
+    registerBuilder(boost::make_shared<FxEuropeanAsianOptionTWEngineBuilder>());
+    registerBuilder(boost::make_shared<FxBarrierOptionAnalyticEngineBuilder>());
+    registerBuilder(boost::make_shared<FxBarrierOptionFDEngineBuilder>());
+    registerBuilder(boost::make_shared<FxDoubleBarrierOptionAnalyticEngineBuilder>());
+    registerBuilder(boost::make_shared<FxTouchOptionEngineBuilder>());
+    registerBuilder(boost::make_shared<FxDoubleTouchOptionAnalyticEngineBuilder>());
+    registerBuilder(boost::make_shared<FxDigitalOptionEngineBuilder>());
+    registerBuilder(boost::make_shared<FxDigitalCSOptionEngineBuilder>());
+    registerBuilder(boost::make_shared<FxDigitalBarrierOptionEngineBuilder>());
+
     registerBuilder(boost::make_shared<CapFloorEngineBuilder>());
     registerBuilder(boost::make_shared<CapFlooredIborLegEngineBuilder>());
     registerBuilder(boost::make_shared<CapFlooredOvernightIndexedCouponLegEngineBuilder>());
@@ -188,6 +222,7 @@ void EngineFactory::addDefaultBuilders() {
 
     registerBuilder(boost::make_shared<EquityForwardEngineBuilder>());
     registerBuilder(boost::make_shared<EquityEuropeanOptionEngineBuilder>());
+    registerBuilder(boost::make_shared<EquityEuropeanCompositeEngineBuilder>());
     registerBuilder(boost::make_shared<EquityEuropeanCSOptionEngineBuilder>());
     registerBuilder(boost::make_shared<EquityAmericanOptionFDEngineBuilder>());
     registerBuilder(boost::make_shared<EquityAmericanOptionBAWEngineBuilder>());
@@ -197,7 +232,16 @@ void EngineFactory::addDefaultBuilders() {
     registerBuilder(boost::make_shared<EquityEuropeanAsianOptionACGAPEngineBuilder>());
     registerBuilder(boost::make_shared<EquityEuropeanAsianOptionADGAPEngineBuilder>());
     registerBuilder(boost::make_shared<EquityEuropeanAsianOptionADGASEngineBuilder>());
+    registerBuilder(boost::make_shared<EquityEuropeanAsianOptionTWEngineBuilder>());
     registerBuilder(boost::make_shared<EquityFutureEuropeanOptionEngineBuilder>());
+    registerBuilder(boost::make_shared<EquityBarrierOptionAnalyticEngineBuilder>());
+    registerBuilder(boost::make_shared<EquityBarrierOptionFDEngineBuilder>());
+    registerBuilder(boost::make_shared<EquityDoubleBarrierOptionAnalyticEngineBuilder>());
+    registerBuilder(boost::make_shared<EquityDigitalOptionEngineBuilder>());
+    registerBuilder(boost::make_shared<EquityDoubleTouchOptionAnalyticEngineBuilder>());
+    registerBuilder(boost::make_shared<EquityTouchOptionEngineBuilder>());
+    registerBuilder(boost::make_shared<VarSwapEngineBuilder>());
+    
 
     registerBuilder(boost::make_shared<BondDiscountingEngineBuilder>());
     registerBuilder(boost::make_shared<DiscountingForwardBondEngineBuilder>());
@@ -221,7 +265,14 @@ void EngineFactory::addDefaultBuilders() {
     registerBuilder(boost::make_shared<CommodityEuropeanAsianOptionACGAPEngineBuilder>());
     registerBuilder(boost::make_shared<CommodityEuropeanAsianOptionADGAPEngineBuilder>());
     registerBuilder(boost::make_shared<CommodityEuropeanAsianOptionADGASEngineBuilder>());
+    registerBuilder(boost::make_shared<CommodityEuropeanAsianOptionTWEngineBuilder>());
+    registerBuilder(boost::make_shared<CommoditySwapEngineBuilder>());
+    registerBuilder(boost::make_shared<CommoditySwaptionAnalyticalEngineBuilder>());
+    registerBuilder(boost::make_shared<CommoditySwaptionMonteCarloEngineBuilder>());
+    registerBuilder(boost::make_shared<CommodityApoAnalyticalEngineBuilder>());
+    registerBuilder(boost::make_shared<CommodityApoMonteCarloEngineBuilder>());
     registerBuilder(boost::make_shared<QuantoEquityEuropeanOptionEngineBuilder>());
+    registerBuilder(boost::make_shared<CommoditySpreadOptionEngineBuilder>());
 
     registerLegBuilder(boost::make_shared<DurationAdjustedCmsLegBuilder>());
     registerLegBuilder(boost::make_shared<FixedLegBuilder>());
@@ -231,10 +282,14 @@ void EngineFactory::addDefaultBuilders() {
     registerLegBuilder(boost::make_shared<CPILegBuilder>());
     registerLegBuilder(boost::make_shared<YYLegBuilder>());
     registerLegBuilder(boost::make_shared<CMSLegBuilder>());
+    registerLegBuilder(boost::make_shared<CMBLegBuilder>());
     registerLegBuilder(boost::make_shared<DigitalCMSLegBuilder>());
     registerLegBuilder(boost::make_shared<CMSSpreadLegBuilder>());
     registerLegBuilder(boost::make_shared<DigitalCMSSpreadLegBuilder>());
     registerLegBuilder(boost::make_shared<EquityLegBuilder>());
+    registerLegBuilder(boost::make_shared<CommodityFixedLegBuilder>());
+    registerLegBuilder(boost::make_shared<CommodityFloatingLegBuilder>());
+    registerLegBuilder(boost::make_shared<EquityMarginLegBuilder>());
 }
 
 void EngineFactory::addExtraBuilders(const std::vector<boost::shared_ptr<EngineBuilder>> extraEngineBuilders,

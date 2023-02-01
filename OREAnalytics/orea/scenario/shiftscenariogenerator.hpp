@@ -90,14 +90,14 @@ public:
     //! Constructor
     ShiftScenarioGenerator(const boost::shared_ptr<Scenario>& baseScenario,
                            const boost::shared_ptr<ScenarioSimMarketParameters>& simMarketData,
-			   const boost::shared_ptr<ScenarioSimMarket>& simMarket);
+			   const boost::weak_ptr<ScenarioSimMarket>& simMarket);
     //! Default destructor
     ~ShiftScenarioGenerator(){};
 
     //! Scenario Generator interface
     //@{
-    boost::shared_ptr<Scenario> next(const Date& d);
-    void reset() { counter_ = 0; }
+    boost::shared_ptr<Scenario> next(const Date& d) override;
+    void reset() override { counter_ = 0; }
     //@}
 
     //! Inspectors
@@ -184,7 +184,7 @@ public:
 protected:
     const boost::shared_ptr<Scenario> baseScenario_;
     const boost::shared_ptr<ScenarioSimMarketParameters> simMarketData_;
-    const boost::shared_ptr<ScenarioSimMarket> simMarket_;
+    const boost::weak_ptr<ScenarioSimMarket> simMarket_;
     std::vector<boost::shared_ptr<Scenario>> scenarios_;
     Size counter_;
     std::vector<ScenarioDescription> scenarioDescriptions_;
@@ -206,7 +206,7 @@ std::pair<RiskFactorKey, std::string> deconstructFactor(const std::string& facto
 //! Reconstruct the string description from a risk factor \p key and its index description \p desc
 std::string reconstructFactor(const RiskFactorKey& key, const std::string& desc);
 
-//! risk factor key parser that takes into account additional tokens occuring in sensitivity risk factor keys
+//! risk factor key parser that takes into account additional tokens occurring in sensitivity risk factor keys
 boost::shared_ptr<RiskFactorKey> parseRiskFactorKey(const std::string& str, std::vector<std::string>& addTokens);
 
 inline bool operator<(const ShiftScenarioGenerator::ScenarioDescription& lhs,

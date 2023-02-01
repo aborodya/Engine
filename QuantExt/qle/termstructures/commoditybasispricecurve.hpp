@@ -66,25 +66,25 @@ public:
 
     //! \name Observer interface
     //@{
-    void update();
+    void update() override;
     //@}
 
     //! \name LazyObject interface
     //@{
-    void performCalculations() const;
+    void performCalculations() const override;
     //@}
 
     //! \name TermStructure interface
     //@{
-    QuantLib::Date maxDate() const;
-    QuantLib::Time maxTime() const;
+    QuantLib::Date maxDate() const override;
+    QuantLib::Time maxTime() const override;
     //@}
 
     //! \name PriceTermStructure interface
     //@{
-    QuantLib::Time minTime() const;
-    std::vector<QuantLib::Date> pillarDates() const;
-    const QuantLib::Currency& currency() const { return basePts_->currency(); }
+    QuantLib::Time minTime() const override;
+    std::vector<QuantLib::Date> pillarDates() const override;
+    const QuantLib::Currency& currency() const override { return basePts_->currency(); }
     //@}
 
     //! \name Inspectors
@@ -96,7 +96,7 @@ public:
 protected:
     //! \name PriceTermStructure implementation
     //@{
-    QuantLib::Real priceImpl(QuantLib::Time t) const;
+    QuantLib::Real priceImpl(QuantLib::Time t) const override;
     //@}
 
 private:
@@ -313,9 +313,9 @@ template <class Interpolator>
 boost::shared_ptr<CommodityIndexedCashFlow>
 CommodityBasisPriceCurve<Interpolator>::makeCashflow(const QuantLib::Date& start, const QuantLib::Date& end) const {
 
-    return boost::make_shared<CommodityIndexedCashFlow>(1.0, start, end, index_, 0, QuantLib::NullCalendar(),
-                                                        QuantLib::Unadjusted, 0, QuantLib::NullCalendar(), 0.0, 1.0,
-                                                        false, true, true, true, 0, baseFec_);
+    return boost::make_shared<CommodityIndexedCashFlow>(
+        1.0, start, end, index_, 0, QuantLib::NullCalendar(), QuantLib::Unadjusted, 0, QuantLib::NullCalendar(), 0.0,
+        1.0, CommodityIndexedCashFlow::PaymentTiming::InArrears, true, true, true, 0, baseFec_);
 }
 
 } // namespace QuantExt

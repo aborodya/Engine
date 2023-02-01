@@ -17,7 +17,7 @@
 */
 
 /*! \file qle/termstructures/yoyinflationcurveobserverstatic.hpp
-    \brief Observable inflation term structure with fixed refernece date based on the
+    \brief Observable inflation term structure with fixed reference date based on the
            interpolation of yoy rate quotes.
     \ingroup termstructures
 */
@@ -82,6 +82,7 @@ protected:
     //@}
     mutable std::vector<Date> dates_;
     std::vector<Handle<Quote> > quotes_;
+    bool indexIsInterpolated_;
 };
 
 // template definitions
@@ -95,7 +96,7 @@ YoYInflationCurveObserverStatic<Interpolator>::YoYInflationCurveObserverStatic(
     : YoYInflationTermStructure(referenceDate, calendar, dayCounter, rates[0]->value(), lag, frequency,
                                 indexIsInterpolated, seasonality),
       InterpolatedCurve<Interpolator>(std::vector<Time>(), std::vector<Real>(), interpolator), dates_(dates),
-      quotes_(rates) {
+      quotes_(rates), indexIsInterpolated_(indexIsInterpolated) {
 
     QL_REQUIRE(dates_.size() > 1, "too few dates: " << dates_.size());
 
@@ -122,7 +123,7 @@ YoYInflationCurveObserverStatic<Interpolator>::YoYInflationCurveObserverStatic(
     QL_REQUIRE(this->quotes_.size() == dates_.size(),
                "quotes/dates count mismatch: " << this->quotes_.size() << " vs " << dates_.size());
 
-    // initalise data vector, values are copied from quotes in performCalculations()
+    // initialise data vector, values are copied from quotes in performCalculations()
     this->data_.resize(dates_.size());
     for (Size i = 0; i < dates_.size(); i++)
         this->data_[0] = 0.0;

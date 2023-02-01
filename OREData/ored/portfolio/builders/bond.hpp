@@ -26,6 +26,7 @@
 #include <ored/portfolio/builders/cachingenginebuilder.hpp>
 #include <ored/portfolio/enginefactory.hpp>
 #include <ored/utilities/log.hpp>
+#include <ored/utilities/marketdata.hpp>
 
 #include <qle/pricingengines/discountingriskybondengine.hpp>
 
@@ -41,14 +42,14 @@ namespace data {
 \ingroup builders
 */
 
-class BondEngineBuilder
-    : public CachingPricingEngineBuilder<string, const Currency&, const string&, const string&, const string&> {
+class BondEngineBuilder : public CachingPricingEngineBuilder<string, const Currency&, const string&, const bool,
+                                                             const string&, const string&> {
 protected:
     BondEngineBuilder(const std::string& model, const std::string& engine)
         : CachingEngineBuilder(model, engine, {"Bond"}) {}
 
-    virtual string keyImpl(const Currency& ccy, const string& creditCurveId, const string& securityId,
-                           const string& referenceCurveId) override {
+    virtual string keyImpl(const Currency& ccy, const string& creditCurveId, const bool hasCreditRisk,
+                           const string& securityId, const string& referenceCurveId) override {
         return ccy.code() + "_" + creditCurveId + "_" + securityId + "_" + referenceCurveId;
     }
 };
@@ -64,7 +65,7 @@ public:
 
 protected:
     virtual boost::shared_ptr<PricingEngine> engineImpl(const Currency& ccy, const string& creditCurveId,
-                                                        const string& securityId,
+                                                        const bool hasCreditRisk, const string& securityId,
                                                         const string& referenceCurveId) override {
 
         string tsperiodStr = engineParameter("TimestepPeriod");
@@ -73,7 +74,9 @@ protected:
         Handle<DefaultProbabilityTermStructure> dpts;
         // credit curve may not always be used. If credit curve ID is empty proceed without it
         if (!creditCurveId.empty())
-            dpts = market_->defaultCurve(creditCurveId, configuration(MarketContext::pricing));
+            dpts =
+                securitySpecificCreditCurve(market_, securityId, creditCurveId, configuration(MarketContext::pricing))
+                    ->curve();
         Handle<Quote> recovery;
         try {
             // try security recovery first
@@ -90,6 +93,10 @@ protected:
             // spread is optional, pass empty handle to engine if not given (will be treated as 0 spread there)
             spread = market_->securitySpread(securityId, configuration(MarketContext::pricing));
         } catch (...) {
+        }
+
+        if (!hasCreditRisk) {
+            dpts = Handle<DefaultProbabilityTermStructure>();
         }
 
         return boost::make_shared<QuantExt::DiscountingRiskyBondEngine>(yts, dpts, recovery, spread, tsperiod);

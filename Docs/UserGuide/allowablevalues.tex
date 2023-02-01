@@ -1,26 +1,63 @@
+\ifdefined\RiskCatalogue\renewcommand{\subsection}{\section}\fi
+\newpage
 %- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-\subsection{Allowable Values for Standard Trade Data}
+\subsection{Allowable Values}
 \label{sec:allowable_values}
 %- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-\begin{table}[H]
-\centering
-  \begin{tabular} {|p{4cm}|p{11cm}|}
-    \hline
-    \bfseries{Trade Data} & \bfseries{Allowable Values} \\
-    \hline
-    \lstinline!Date! & \begin{tabular}[l]{@{}l@{}} The following date formats are supported: \\  \emph{yyyymmdd} \\ \emph{yyyy-mm-dd} \\ \emph{yyyy/mm/dd} \\ \emph{yyyy.mm.dd} \\ \emph{dd-mm-yy} \\  \emph{dd/mm/yy} \\  \emph{dd.mm.yy} \\  \emph{dd-mm-yyyy} \\  \emph{dd/mm/yyyy} \\  \emph{dd.mm.yyyy} \\ and \\ Dates as  serial numbers, comparable to Microsoft Excel \\dates, with a minimum of 367 for Jan 1, 1901,\\ and a maximum of 109574 for Dec 31, 2199.  \end{tabular}  \\ \hline
-    \lstinline!Currency! &
-% hard coded currencies: 
-%      \emph{AED, AOA, ARS, ATS, AUD, BEF, BGN, BHD,
-%      BRL, CAD, CHF, CLF, CLP, CNH, CNY, COP, COU, CZK, DEM, DKK, EGP,
-%      ESP, ETB, EUR, FIM, FRF, GBP, GEL, GHS, GRD, HKD, HRK, HUF, IDR, 
-%      IEP, ILS, INR, ISK, ITL, JOD, JPY, KES, KRW, KWD, KZT, LKR, LUF, MAD, 
-%      MUR, MXN, MXV, MYR, NGN, NLG, NOK, NZD, OMR, PEN, PHP, PKR, PLN, 
-%      PTE, QAR, RON, RSD, RUB, SAR, SEK, SGD, THB, TND, TRY, TWD, UAH, 
-%      UGX, USD, UYU, VND, XOF, ZAR, ZMW, XAG, XAU, XPD, XPT},
-% hard coded and configured currencies:
-\emph{AED,AFN,ALL,AMD,ANG,AOA,ARS,AUD,AWG,AZN,
+
+\begin{longtable}{| p{.25\textwidth} | p{.80\textwidth} |}
+\hline
+\multicolumn{2}{|l|}{\lstinline!Date!}                    \\ \hline
+\textbf{Date Fields}                   & \textbf{Allowable Values}                       \\ \hline
+ \makecell[cl]{All Date fields: \\ \lstinline!StartDate! \\ \lstinline!EndDate! \\ \lstinline!Date! \\ \lstinline!ExerciseDate! \\ \lstinline!PayDate! \\ \lstinline!ValueDate! \\ \lstinline!NearDate! \\ \lstinline!FarDate! \\ etc} &   \begin{tabular}[l]{@{}l@{}} Any of the following date formats are supported: \\  \emph{yyyymmdd} \\ \emph{yyyy-mm-dd} \\ \emph{yyyy/mm/dd} \\ \emph{yyyy.mm.dd} \\ \emph{dd-mm-yy} \\  \emph{dd/mm/yy} \\  \emph{dd.mm.yy} \\  \emph{dd-mm-yyyy} \\  \emph{dd/mm/yyyy} \\  \emph{dd.mm.yyyy} \\ \vspace{1pt} \\ and \\ Dates as  serial numbers, comparable to Microsoft Excel \\dates, with a minimum of 367 for Jan 1, 1901,\\ and a maximum of 109574 for Dec 31, 2199.   \end{tabular} \\ \hline
+  \caption{Allowable Values for Date}
+  \label{tab:allow_stand_data}
+  \end{longtable}
+
+
+%\begin{table}[H]
+%\centering
+%  \begin{tabular} {|p{4cm}|p{11cm}|}
+%    \hline
+%    \bfseries{Trade Data} & \bfseries{Allowable Values} \\
+%    \hline
+%    \lstinline!Date! & \begin{tabular}[l]{@{}l@{}} The following date formats are supported: \\  \emph{yyyymmdd} \\ \emph{yyyy-mm-dd} \\ \emph{yyyy/mm/dd} \\ \emph{yyyy.mm.dd} \\ \emph{dd-mm-yy} \\  \emph{dd/mm/yy} \\  \emph{dd.mm.yy} \\  \emph{dd-mm-yyyy} \\  \emph{dd/mm/yyyy} \\  \emph{dd.mm.yyyy} \\ and \\ Dates as  serial numbers, comparable to Microsoft Excel \\dates, with a minimum of 367 for Jan 1, 1901,\\ and a maximum of 109574 for Dec 31, 2199.  \end{tabular}  \\ \hline
+
+%    \lstinline!Roll Convention! & \begin{tabular}[l]{@{}l@{}} 
+%\emph{F,  Following, FOLLOWING}\\ 
+%\emph{MF, ModifiedFollowing, Modified Following, MODIFIEDF}\\ 
+%\emph{P, Preceding, PRECEDING}\\ 
+%\emph{MP, ModifiedPreceding, Modified Preceding, MODIFIEDP}\\ 
+%\emph{U, Unadjusted, INDIFF }\end{tabular}  \\ \hline
+%  \end{tabular}
+%  \caption{Allowable values for standard trade data.}
+%  \label{tab:allow_stand_data}
+%\end{table}
+
+
+\begin{longtable}{| p{.30\textwidth} | p{.75\textwidth} |}
+\hline
+\multicolumn{2}{|l|}{\lstinline!Convention!}                    \\ \hline
+\textbf{Roll Convention Fields}                   & \textbf{Allowable Values}                       \\ \hline
+\makecell[cl]{ All Convention fields: \\ \lstinline!Convention! \\ \lstinline!TermConvention! \\ \lstinline!PaymentConvention! \\ etc} &   \makecell[cl]{
+ \emph{F,  Following, FOLLOWING}\\ 
+ \emph{MF, ModifiedFollowing, Modified Following, MODIFIEDF}\\ 
+ \emph{P, Preceding, PRECEDING}\\ 
+ \emph{MP, ModifiedPreceding, Modified Preceding, MODIFIEDP}\\ 
+ \emph{U, Unadjusted, INDIFF } \\
+ \emph{NEAREST } (takes future date in case of equal distance) } \\ \hline
+  \caption{Allowable Values for Roll Conventions}
+  \label{tab:convention}
+  \end{longtable}
+
+
+\newpage
+\begin{longtable}{| p{.25\textwidth} | p{.80\textwidth} |}
+\hline
+\multicolumn{2}{|l|}{\lstinline!Currency!}                    \\ \hline
+\textbf{Category}                   & \textbf{Allowable Values}                       \\ \hline
+Fiat Currencies &   \emph{AED,AFN,ALL,AMD,ANG,AOA,ARS,AUD,AWG,AZN,
 BAM,BBD,BDT,BGN,BHD,BIF,BMD,BND,BOB,BOV,
 BRL,BSD,BTN,BWP,BYN,BZD,CAD,CDF,CHE,CHF,
 CHW,CLF,CLP,CNH,CNT,CNY,COP,COU,CRC,CUC,
@@ -36,25 +73,20 @@ PKR,PLN,PYG,QAR,RON,RSD,RUB,RWF,SAR,SBD,
 SCR,SDG,SEK,SGD,SHP,SLL,SOS,SRD,SSP,STN,
 SVC,SYP,SZL,THB,TJS,TMT,TND,TOP,TRY,TTD,
 TWD,TZS,UAH,UGX,USD,USN,UYI,UYU,UYW,UZS,
-VES,VND,VUV,WST,XAF,XAG,XAU,XCD,XOF,XPD,
-XPF,XPT,XSU,XUA,YER,ZAR,ZMW,ZWL.}
-This full list of currencies is available via loading the provided {\tt currencies.xml} at start-up.
-Note: Currency codes must also match available currencies in the {\tt simulation.xml} file.  \\ \hline
-\lstinline!Minor Currencies! & \emph{GBp, GBX, ILa, ILX, ZAc, ZAC, ZAX},  
-    Note: Minor Currency codes only supported for Equity products.  \\ \hline
-    %\lstinline!DayCount!  \lstinline!Convention! & \begin{tabular}[l]{@{}l@{}}\indent Actual 360 can be expressed by:\\ \emph{A360, Actual/360, ACT/360}\\ \indent Actual 365 Fixed can be expressed by: \\ \emph{A365, A365F, Actual/365, Actual/365 (fixed)} \\ \indent Thirty 360 (US) can be expressed by: \\ \emph{T360, 30/360, 30/360 (Bond Basis), ACT/nACT} \\ \indent Thirty 360 (European) can be expressed by: \\ \emph{30E/360, 30E/360 (Eurobond Basis)}\\ \indent Thirty 360 (Italian) is expressed by: \\ \emph{30/360 (Italian)}  \\ \indent Actual Actual (ISDA) can be expressed by: \\ \emph{ActActISDA, ActualActual (ISDA), ACT/ACT, ACT} \\ \indent Actual Actual (ISMA) can be expressed by: \\ \emph{ActActISMA, ActualActual (ISMA)} \\ \indent Actual Actual (AFB) can be expressed by:\\ \emph{ActActAFB, Actual/Actual (AFB)} \end{tabular}  \\ \hline
-    \lstinline!Roll Convention! & \begin{tabular}[l]{@{}l@{}} 
-\emph{F,  Following, FOLLOWING}\\ 
-\emph{MF, ModifiedFollowing, Modified Following, MODIFIEDF}\\ 
-\emph{P, Preceding, PRECEDING}\\ 
-\emph{MP, ModifiedPreceding, Modified Preceding, MODIFIEDP}\\ 
-\emph{U, Unadjusted, INDIFF }\end{tabular}  \\ \hline
-  \end{tabular}
-  \caption{Allowable values for standard trade data.}
-  \label{tab:allow_stand_data}
-\end{table}
+VES,VND,VUV,WST,XAF,XAU,XCD,XOF,
+XPF,XSU,XUA,YER,ZAR,ZMW,ZWL}
+\\ \hline Minor Currencies &  \makecell[l]{\emph{GBp, GBX} (for pennies of GBP) \\ \emph{ILa, ILX} (for agorot of ILS)  \\ \emph{ZAc, ZAC, ZAX} (for cents of ZAR) \\ 
+    Note: Minor Currency codes are only supported for equity products. } \\ \hline
+%Pre-Eurozone Currencies   &  \emph{ATS, BEF, DEM, ESP, FIM, FRF, GRD, IEP, ITL, LUF, NLG, PTE} \\ \hline
+Precious Metals treated as Currencies   &   \emph{XAG, XAU, XPD, XPT}  \\ \hline
+Cryptocurrencies   &   \emph{BTC, XBT, ETH, ETC, BCH, XRP, LTC} \\ \hline
+\multicolumn{2}{|l|}{\makecell[l]{This full list of currencies is available via loading the provided {\tt currencies.xml} at start-up.\\
+Note: Currency codes must also match available currencies in the {\tt simulation.xml} file.  }  }                  \\ \hline
+  \caption{Allowable Values for Currency}
+  \label{tab:currency}
+  \end{longtable}
 
-\newpage
+
 
 %\begin{table}[H]
 %\centering
@@ -120,16 +152,19 @@ Note: Currency codes must also match available currencies in the {\tt simulation
     \emph{CL, CHL, CLP} & Chile Calendar \\ \hline
     \emph{CN, CHN, CNH, CNY} & China Calendar \\ \hline
     \emph{CO, COL, COP} & Colombia Calendar \\ \hline
+    \emph{CY, CYP} & Cyprus Calendar \\ \hline
     \emph{CZ, CZE, CZK} & Czech Republic Calendar \\ \hline
     \emph{DK, DNK, DKK, DEN} & Denmark Calendar \\ \hline
     \emph{FI, FIN} & Finland Calendar \\ \hline
     \emph{FR, FRF} & France Calendar \\ \hline
     \emph{DE, DEU} & Germany Calendar \\ \hline
+    \emph{GR, GRC} & Greek Calendar \\ \hline
     \emph{HK, HKG, HKD} & Hong Kong Calendar \\ \hline
     \emph{HU, HUN, HUF} & Hungary Calendar \\ \hline
     \emph{IS, ISL, ISK} & Iceland Calendar \\ \hline
     \emph{IN, IND, INR} & India Calendar \\ \hline
     \emph{ID, IDN, IDR} & Indonesia Calendar \\ \hline
+    \emph{IE, IRL} & Ireland Calendar \\ \hline
     \emph{IL, ISR, ILS} & Israel Calendar \\ \hline
     \emph{Telbor} & Tel Aviv Inter-Bank Offered Rate Calendar \\ \hline
     \emph{IT, ITA, ITL} & Italy Calendar \\ \hline
@@ -144,6 +179,7 @@ Note: Currency codes must also match available currencies in the {\tt simulation
     \emph{RO, ROU, RON} & Romania Calendar \\ \hline
     \emph{RU, RUS, RUB} & Russia Calendar \\ \hline
     \emph{SAU, SAR} & Saudi Arabia \\ \hline
+    \emph{AE, ARE, AED} & United Arab Emirates \\ \hline
     \emph{SG, SGP, SGD} & Singapore Calendar \\ \hline
     \emph{ZA, ZAF, ZAR, SA} & South Africa Calendar \\ \hline    
     \emph{KR, KOR, KRW} & South Korea Calendar \\ \hline
@@ -162,6 +198,7 @@ Note: Currency codes must also match available currencies in the {\tt simulation
     \emph{EUWA} & Germany EUWAX Calendar \\ \hline
     \emph{XJKT} & Indonesia Jakarta Stock Exchange (now IDX) Calendar \\ \hline
     \emph{XIDX} & Indonesia Indonesia Stock Exchange Calendar \\ \hline
+    \emph{XDUB} & Ireland Stock Exchange Calendar \\ \hline
     \emph{XTAE} & Israel Tel Aviv Stock Exchange Calendar \\ \hline
     \emph{XMIL} & Italy Italian Stock Exchange Calendar \\ \hline
     \emph{MISX} & Russia Moscow Exchange Calendar \\ \hline
@@ -211,9 +248,11 @@ Note: Currency codes must also match available currencies in the {\tt simulation
     \emph{A365, A365F, Actual/365 (Fixed), Actual/365 (fixed), ACT/365.FIXED, ACT/365, ACT/365L, Act/365, Act/365L} & Actual 365 Fixed \\ \hline
     \emph{A364, Actual/364, Act/364, ACT/364}& Actual 364  \\ \hline
     \emph{Actual/365 (No Leap), Act/365 (NL), NL/365, Actual/365 (JGB)} & Actual 365 Fixed (No Leap Year)\\ \hline
-    \emph{T360 ,30/360, 30/360 (Bond Basis), ACT/nACT} & Thirty 360 (US) \\ \hline
-    \emph{30E/360 (Eurobond Basis), 30E/360, 30E/360.ISDA} & Thirty 360 (European) \\ \hline
-    \emph{30/360 (Italian)} & Thirty 360 (Italian) \\ \hline
+    \emph{Act/365 (Canadian Bond)} & Actual 365 Fixed (Canadian Bond)\\ \hline
+    \emph{T360, 30/360, 30/360 (Bond Basis), ACT/nACT, 30/360 US, 30U/360, 30US/360} & Thirty 360 (US) \\ \hline
+    \emph{30E/360 (Eurobond Basis), 30E/360, 30/360 AIBD (Euro), 30E/360.ICMA, 30E/360 ICMA} & Thirty 360 (European) \\ \hline
+    \emph{30E/360E, 30E/360 ISDA, 30E/360.ISDA, 30/360 German, 30/360 (German)} & Thirty 360 (German) \\ \hline
+    \emph{30/360 Italian, 30/360 (Italian)} & Thirty 360 (Italian) \\ \hline
     \emph{ActActISDA, ACT/ACT.ISDA, Actual/Actual (ISDA), ActualActual (ISDA), ACT/ACT, ACT} & Actual Actual (ISDA) \\ \hline
     \emph{ActActISMA, Actual/Actual (ISMA), ActualActual (ISMA), ACT/ACT.ISMA} & Actual Actual (ISMA) \\ \hline
     \emph{ActActICMA, Actual/Actual (ICMA), ActualActual (ICMA), ACT/ACT.ICMA} & Actual Actual (ICMA) \\ \hline
@@ -227,7 +266,7 @@ Note: Currency codes must also match available currencies in the {\tt simulation
 
 \begin{table}[H]
 \centering
-\begin{supertabular}{|l|l|}
+\begin{tabular}{|l|l|}
 \hline
 %\multicolumn{2}{|l|}{\lstinline!Index!}   \\ \hline
 \multicolumn{2}{|l|}{\tt Index}   \\ \hline
@@ -237,7 +276,7 @@ Note: Currency codes must also match available currencies in the {\tt simulation
 CCY-INDEX                &
                            \textit{\begin{tabular}[c]{@{}l@{}}
 EUR-EONIA\\ EUR-ESTER, EUR-ESTR, EUR-STR 
-\\ EUR-EURIBOR\\ EUR-LIBOR\\ EUR-CMS\\
+\\ EUR-EURIBOR, EUR-EURIBOR365\\ EUR-LIBOR\\ EUR-CMS\\
 USD-FedFunds\\ USD-SOFR \\ USD-Prime\\ USD-LIBOR\\ USD-SIFMA\\ USD-CMS\\
 GBP-SONIA\\ GBP-LIBOR\\ GBP-CMS \\ GBP-BoEBase \\ 
 JPY-LIBOR\\ JPY-TIBOR \\ JPY-EYTIBOR \\ JPY-TONAR \\ JPY-CMS \\
@@ -254,12 +293,13 @@ IDR-IDRFIX \\
 INR-MIFOR \\
 MXN-TIIE \\
 PLN-WIBOR \\
+RUB-MOSPRIME \\
 SKK-BRIBOR \\
-THB-THBFIX\\ THB-BIBOR\\
+THB-THBFIX \\ THB-THOR \\ THB-BIBOR \\
 NZD-BKBM \\
 \end{tabular}} \\ \hline
 TENOR                    & An integer followed by \emph{D, W, M or Y}                                                                                                                                                                                                                                                 \\ \hline
-\end{supertabular}
+\end{tabular}
   \caption{Allowable values for Index.}
   \label{tab:indices}
 \end{table}
@@ -299,8 +339,8 @@ Overnight indices    &   0, except for the Overnight indices below:  \\ \hline
 %\multicolumn{2}{|l|}{\lstinline!Index!}   \\ \hline
 \multicolumn{2}{|l|}{\tt FX Index}   \\ \hline
 \textbf{Index Format} &\textbf{Allowable Values}     \\ \hline
-FX-SOURCE-CCY1-CCY2    &    
-The FX- part of the string stays constant for all currency pairs. SOURCE is the market data fixing source defined in the market configuration. CCY1 and CCY2 are the ISO currency codes of the fx pair. Fixings are expressed as amount in CCY2 for one unit of CCY1.\\ \hline
+\lstinline!FX-SOURCE-CCY1-CCY2!    &    
+The \lstinline!FX-! part of the string stays constant for all currency pairs. \lstinline!SOURCE! is the market data fixing source defined in the market configuration. \lstinline!CCY1! and \lstinline!CCY2! are the ISO currency codes of the fx pair. Fixings are expressed as amount in \lstinline!CCY2! for one unit of \lstinline!CCY1!.\\ \hline
 \end{tabular}
   \caption{Allowable values for FX index fixings.}
   \label{tab:fxindex_data}
@@ -328,7 +368,7 @@ The FX- part of the string stays constant for all currency pairs. SOURCE is the 
     \bfseries{Trade Data} & \bfseries{Allowable Values} \\
     \hline
     \lstinline!CreditCurveId!   for credit trades - single name and index & \begin{tabular}[l]{@{}l@{}} Any string (provided it is the ID of a single name or index \\ reference entity in the market 
-conguration). \\ Typically a RED-code with the \emph{RED:} prefix \\  Examples: \\  \emph{RED:2I65BRHH6}  (CDX N.A. High Yield, Series 13, Version 1) \\ \emph{RED:008CA0\textbar{}SNRFOR\textbar{}USD\textbar{}MR14}  (Agilent Tech Senior USD)
+configuration). \\ Typically a RED-code with the \emph{RED:} prefix \\  Examples: \\  \emph{RED:2I65BRHH6}  (CDX N.A. High Yield, Series 13, Version 1) \\ \emph{RED:008CA0\textbar{}SNRFOR\textbar{}USD\textbar{}MR14}  (Agilent Tech Senior USD)
 \end{tabular}  \\ \hline
   \end{tabular}
   \caption{Allowable values for credit \lstinline!CreditCurveId!}
@@ -343,7 +383,7 @@ conguration). \\ Typically a RED-code with the \emph{RED:} prefix \\  Examples: 
     \bfseries{Trade Data} & \bfseries{Allowable Values} \\
     \hline
     \lstinline!Name!   for equity trades & \begin{tabular}[l]{@{}l@{}}  Any string (provided it is the ID of an equity in the market \\
-conguration). \\ Typically a RIC-code with the \emph{RIC:} prefix \\  Examples: \\  \emph{RIC:.SPX}  (S\&P 500 Index) \\ \emph{RIC:EEM.N}  (iShares MSCI Emerging Markets ETF)    \\  
+configuration). \\ Typically a RIC-code with the \emph{RIC:} prefix \\  Examples: \\  \emph{RIC:.SPX}  (S\&P 500 Index) \\ \emph{RIC:EEM.N}  (iShares MSCI Emerging Markets ETF)    \\  
 \end{tabular}  \\ \hline
   \end{tabular}
   \caption{Allowable values for equity  \lstinline!Name!.}

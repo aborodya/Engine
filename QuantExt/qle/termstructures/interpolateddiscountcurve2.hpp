@@ -93,33 +93,35 @@ public:
     }
     //@}
 
-    Date maxDate() const { return Date::maxDate(); }
-    void update() {
+    Date maxDate() const override { return Date::maxDate(); }
+    void update() override {
         LazyObject::update();
         TermStructure::update();
     }
-    const Date& referenceDate() const {
+    const Date& referenceDate() const override {
         calculate();
         return today_;
     }
 
-    Calendar calendar() const { return NullCalendar(); }
-    Natural settlementDays() const { return 0; }
+    Calendar calendar() const override { return NullCalendar(); }
+    Natural settlementDays() const override { return 0; }
 
 protected:
-    void performCalculations() const {
+    void performCalculations() const override {
         today_ = Settings::instance().evaluationDate();
         for (Size i = 0; i < times_.size(); ++i) {
             data_[i] = quotes_[i]->value();
             QL_REQUIRE(data_[i] > 0, "InterpolatedDiscountCurve2: invalid value " << data_[i] << " at index " << i);
-            if (interpolation_ == Interpolation::linearZero) {
+        }
+        if (interpolation_ == Interpolation::linearZero) {
+            for (Size i = 0; i < times_.size(); ++i) {
                 data_[i] = -std::log(data_[std::max<Size>(i, 1)]) / times_[std::max<Size>(i, 1)];
             }
         }
         dataInterpolation_->update();
     }
 
-    DiscountFactor discountImpl(Time t) const {
+    DiscountFactor discountImpl(Time t) const override {
         calculate();
         if (t <= this->times_.back()) {
             Real tmp = (*dataInterpolation_)(t, true);

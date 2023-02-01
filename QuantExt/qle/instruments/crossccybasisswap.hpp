@@ -47,15 +47,22 @@ public:
     /*! First leg holds the pay currency cashflows and the second leg
         holds the receive currency cashflows.
     */
-    CrossCcyBasisSwap(Real payNominal, const Currency& payCurrency, const Schedule& paySchedule,
-                      const boost::shared_ptr<IborIndex>& payIndex, Spread paySpread, Real payGearing, Real recNominal,
-                      const Currency& recCurrency, const Schedule& recSchedule,
-                      const boost::shared_ptr<IborIndex>& recIndex, Spread recSpread, Real recGearing);
+    CrossCcyBasisSwap(
+        Real payNominal, const Currency& payCurrency, const Schedule& paySchedule,
+        const boost::shared_ptr<IborIndex>& payIndex, Spread paySpread, Real payGearing, Real recNominal,
+        const Currency& recCurrency, const Schedule& recSchedule, const boost::shared_ptr<IborIndex>& recIndex,
+        Spread recSpread, Real recGearing, Size payPaymentLag = 0, Size recPaymentLag = 0,
+        boost::optional<bool> payIncludeSpread = boost::none, boost::optional<Period> payLookback = boost::none,
+        boost::optional<Size> payFixingDays = boost::none, boost::optional<Size> payRateCutoff = boost::none,
+        boost::optional<bool> payIsAveraged = boost::none, boost::optional<bool> recIncludeSpread = boost::none,
+        boost::optional<Period> recLookback = boost::none, boost::optional<Size> recFixingDays = boost::none,
+        boost::optional<Size> recRateCutoff = boost::none, boost::optional<bool> recIsAveraged = boost::none,
+        const bool telescopicValueDates = false);
     //@}
     //! \name Instrument interface
     //@{
-    void setupArguments(PricingEngine::arguments* args) const;
-    void fetchResults(const PricingEngine::results*) const;
+    void setupArguments(PricingEngine::arguments* args) const override;
+    void fetchResults(const PricingEngine::results*) const override;
     //@}
     //! \name Inspectors
     //@{
@@ -91,7 +98,7 @@ public:
 protected:
     //! \name Instrument interface
     //@{
-    void setupExpired() const;
+    void setupExpired() const override;
     //@}
 
 private:
@@ -111,6 +118,21 @@ private:
     Spread recSpread_;
     Real recGearing_;
 
+    Size payPaymentLag_;
+    Size recPaymentLag_;
+    // OIS only
+    boost::optional<bool> payIncludeSpread_;
+    boost::optional<QuantLib::Period> payLookback_;
+    boost::optional<QuantLib::Size> payFixingDays_;
+    boost::optional<Size> payRateCutoff_;
+    boost::optional<bool> payIsAveraged_;
+    boost::optional<bool> recIncludeSpread_;
+    boost::optional<QuantLib::Period> recLookback_;
+    boost::optional<QuantLib::Size> recFixingDays_;
+    boost::optional<Size> recRateCutoff_;
+    boost::optional<bool> recIsAveraged_;
+    bool telescopicValueDates_;
+
     mutable Spread fairPaySpread_;
     mutable Spread fairRecSpread_;
 };
@@ -120,7 +142,7 @@ class CrossCcyBasisSwap::arguments : public CrossCcySwap::arguments {
 public:
     Spread paySpread;
     Spread recSpread;
-    void validate() const;
+    void validate() const override;
 };
 
 //! \ingroup instruments
@@ -128,7 +150,7 @@ class CrossCcyBasisSwap::results : public CrossCcySwap::results {
 public:
     Spread fairPaySpread;
     Spread fairRecSpread;
-    void reset();
+    void reset() override;
 };
 } // namespace QuantExt
 

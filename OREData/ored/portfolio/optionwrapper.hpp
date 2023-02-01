@@ -54,6 +54,7 @@ public:
     void initialise(const std::vector<QuantLib::Date>& dates) override;
     void reset() override;
     QuantLib::Real NPV() const override;
+    const std::map<std::string, boost::any>& additionalResults() const override;
     void updateQlInstruments() override {
         for (QuantLib::Size i = 0; i < underlyingInstruments_.size(); ++i)
             underlyingInstruments_[i]->update();
@@ -67,8 +68,13 @@ public:
         return underlyingInstruments_;
     }
 
-    //! return the active underlying instrument
-    const boost::shared_ptr<QuantLib::Instrument>& activeUnderlyingInstrument() const {
+    /*! return the active underlying instrument
+        Pass true if you trigger a calculation on the returned instrument and want to record
+        the timing for that calculation. If in doubt whether a calculation is triggered, pass false. */
+    const boost::shared_ptr<QuantLib::Instrument>& activeUnderlyingInstrument(const bool calculate = false) const {
+        if (calculate && activeUnderlyingInstrument_ != nullptr) {
+            getTimedNPV(activeUnderlyingInstrument_);
+        }
         return activeUnderlyingInstrument_;
     }
 
@@ -84,11 +90,16 @@ public:
     //! the underlying multiplier
     Real underlyingMultiplier() const { return undMultiplier_; }
 
+    //! the (actual) date the option was exercised
+    const QuantLib::Date& exerciseDate() const { return exerciseDate_; }
+
     //! disable exercise decisions
     void enableExercise() { exercisable_ = true; }
 
     //! enable exercise decisions
     void disableExercise() { exercisable_ = false; }
+
+    virtual bool exercise() const = 0;
 
 protected:
     bool isLong_;
@@ -101,8 +112,6 @@ protected:
     mutable bool exercised_;
     bool exercisable_;
     mutable QuantLib::Date exerciseDate_;
-
-    virtual bool exercise() const = 0;
 };
 
 //! European Option Wrapper
@@ -124,7 +133,6 @@ public:
                         std::vector<boost::shared_ptr<QuantLib::Instrument>>(1, undInst), multiplier, undMultiplier,
                         additionalInstruments, additionalMultipliers) {}
 
-protected:
     bool exercise() const override;
 };
 
@@ -148,7 +156,6 @@ public:
                         std::vector<boost::shared_ptr<QuantLib::Instrument>>(1, undInst), multiplier, undMultiplier,
                         additionalInstruments, additionalMultipliers) {}
 
-protected:
     bool exercise() const override;
 };
 
@@ -174,7 +181,6 @@ public:
                    "sizes of exercise date and underlying instrument vectors do not match");
     }
 
-protected:
     bool exercise() const override;
 
 private:

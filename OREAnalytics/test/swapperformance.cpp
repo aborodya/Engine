@@ -40,6 +40,7 @@
 #include <orea/scenario/simplescenariofactory.hpp>
 #include <ored/model/crossassetmodelbuilder.hpp>
 #include <ored/model/lgmdata.hpp>
+#include <ored/model/irlgmdata.hpp>
 #include <ored/portfolio/builders/swap.hpp>
 #include <ored/portfolio/portfolio.hpp>
 #include <ored/portfolio/swap.hpp>
@@ -64,7 +65,7 @@ using namespace ore::analytics;
 
 using testsuite::TestMarket;
 
-BOOST_FIXTURE_TEST_SUITE(OREAnalyticsPerformanceTestSuite, ore::test::OreaTopLevelFixture)
+BOOST_FIXTURE_TEST_SUITE(OREAnalyticsTestSuite, ore::test::OreaTopLevelFixture)
 
 BOOST_AUTO_TEST_SUITE(SwapPerformaceTest, *boost::unit_test::disabled())
 
@@ -89,6 +90,8 @@ boost::shared_ptr<data::Conventions> convs() {
     boost::shared_ptr<data::Convention> swapConv(
         new data::IRSwapConvention("EUR-6M-SWAP-CONVENTIONS", "TARGET", "Annual", "MF", "30/360", "EUR-EURIBOR-6M"));
     conventions->add(swapConv);
+
+    InstrumentConventions::instance().setConventions(conventions);
 
     return conventions;
 }
@@ -195,7 +198,7 @@ boost::shared_ptr<Portfolio> buildPortfolio(Size portfolioSize, boost::shared_pt
 
     // Dump stats about portfolio
     Time maturity = 0;
-    DayCounter dc = ActualActual();
+    DayCounter dc = ActualActual(ActualActual::ISDA);
     map<string, Size> fixedFreqs;
     map<string, Size> floatFreqs;
     for (Size i = 0; i < portfolioSize; ++i) {
@@ -288,10 +291,10 @@ void test_performance(Size portfolioSize, ObservationMode::Mode om, double nonZe
     parameters->setSimulateSwapVols(false);
     parameters->setSwapVolTerms("", {6 * Months, 1 * Years});
     parameters->setSwapVolExpiries("", {1 * Years, 2 * Years});
-    parameters->swapVolCcys() = ccys;
+    parameters->swapVolKeys() = ccys;
     parameters->swapVolDecayMode() = "ForwardVariance";
 
-    parameters->setFxVolExpiries(
+    parameters->setFxVolExpiries("",
         vector<Period>{1 * Months, 3 * Months, 6 * Months, 2 * Years, 3 * Years, 4 * Years, 5 * Years});
     parameters->setFxVolDecayMode(string("ConstantVariance"));
     parameters->setSimulateFXVols(false);
@@ -315,7 +318,7 @@ void test_performance(Size portfolioSize, ObservationMode::Mode om, double nonZe
     vector<Time> hTimes = {};
     vector<Time> aTimes = {};
 
-    std::vector<boost::shared_ptr<IrLgmData>> irConfigs;
+    std::vector<boost::shared_ptr<IrModelData>> irConfigs;
 
     vector<Real> hValues = {0.02};
     vector<Real> aValues = {0.008};
@@ -371,8 +374,8 @@ void test_performance(Size portfolioSize, ObservationMode::Mode om, double nonZe
                                                      sigmaTimes, sigmaValues, optionExpiries, optionStrikes));
 
     map<CorrelationKey, Handle<Quote>> corr;
-    CorrelationFactor f_1{ CrossAssetModelTypes::IR, "EUR", 0 };
-    CorrelationFactor f_2{ CrossAssetModelTypes::IR, "USD", 0 };
+    CorrelationFactor f_1{ CrossAssetModel::AssetType::IR, "EUR", 0 };
+    CorrelationFactor f_2{ CrossAssetModel::AssetType::IR, "USD", 0 };
     corr[make_pair(f_1, f_2)] = Handle<Quote>(boost::make_shared<SimpleQuote>(0.6));
 
     boost::shared_ptr<CrossAssetModelData> config(boost::make_shared<CrossAssetModelData>(irConfigs, fxConfigs, corr));
@@ -395,11 +398,11 @@ void test_performance(Size portfolioSize, ObservationMode::Mode om, double nonZe
         model, pathGen, scenarioFactory, parameters, today, dg, initMarket);
 
     // build scenario sim market
-    Conventions conventions = *convs();
-    auto simMarket = boost::make_shared<analytics::ScenarioSimMarket>(initMarket, parameters, conventions);
+    convs();
+    auto simMarket = boost::make_shared<analytics::ScenarioSimMarket>(initMarket, parameters);
     simMarket->scenarioGenerator() = scenarioGenerator;
 
-    // Build Porfolio
+    // Build Portfolio
     boost::shared_ptr<EngineData> data = boost::make_shared<EngineData>();
     data->model("Swap") = "DiscountedCashflows";
     data->engine("Swap") = "DiscountingSwapEngine";
@@ -428,11 +431,11 @@ void test_performance(Size portfolioSize, ObservationMode::Mode om, double nonZe
     Size dates = dg->dates().size();
     Size numNPVs = dates * samples * portfolioSize;
     BOOST_TEST_MESSAGE("Cube size = " << numNPVs << " elements");
-    BOOST_TEST_MESSAGE("Cube elements theortical storage " << numNPVs * sizeof(Real) / (1024 * 1024) << " MB");
+    BOOST_TEST_MESSAGE("Cube elements theoretical storage " << numNPVs * sizeof(Real) / (1024 * 1024) << " MB");
     Real pricingTimeMicroSeconds = elapsed * 1000000 / numNPVs;
     BOOST_TEST_MESSAGE("Avg Pricing time = " << pricingTimeMicroSeconds << " microseconds");
 
-    // Count the number of times we have an empty line, ie. swap exipired.
+    // Count the number of times we have an empty line, ie. swap expired.
     // cube is trades/dates/samples
     Size count = 0;
     for (Size i = 0; i < portfolioSize; ++i) {
@@ -448,7 +451,7 @@ void test_performance(Size portfolioSize, ObservationMode::Mode om, double nonZe
 
     // BOOST_TEST_MESSAGE(os::getSystemDetails());
 
-    // Compute portfolo EPE and ENE
+    // Compute portfolio EPE and ENE
     vector<Real> eeVec, eneVec;
     for (Size i = 0; i < dates; ++i) {
         Real epe = 0.0, ene = 0.0;

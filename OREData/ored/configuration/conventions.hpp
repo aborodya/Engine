@@ -30,11 +30,14 @@
 #include <ql/indexes/inflationindex.hpp>
 #include <ql/indexes/swapindex.hpp>
 #include <ql/instruments/overnightindexfuture.hpp>
+#include <ql/instruments/bond.hpp>
 #include <ql/option.hpp>
 #include <qle/cashflows/subperiodscoupon.hpp> // SubPeriodsCouponType
 #include <qle/indexes/bmaindexwrapper.hpp>
 #include <qle/indexes/commodityindex.hpp>
-#include <boost/enable_shared_from_this.hpp>
+
+#include <boost/thread/shared_mutex.hpp>
+#include <boost/thread/lock_types.hpp>
 
 namespace ore {
 namespace data {
@@ -76,7 +79,8 @@ public:
         CMSSpreadOption,
         CommodityForward,
         CommodityFuture,
-        FxOption
+        FxOption,
+	BondYield
     };
 
     //! Default destructor
@@ -88,10 +92,8 @@ public:
     Type type() const { return type_; }
     //@}
 
-    //! \name Serialisation
+    //! \name convention interface definition
     //@{
-    virtual void fromXML(XMLNode* node) = 0;
-    virtual XMLNode* toXML(XMLDocument& doc) = 0;
     virtual void build() = 0;
     //@}
 
@@ -106,7 +108,7 @@ protected:
 /*!
   \ingroup market
 */
-class Conventions : public XMLSerializable, public boost::enable_shared_from_this<Conventions> {
+class Conventions : public XMLSerializable {
 public:
     //! Default constructor
     Conventions() {}
@@ -123,6 +125,9 @@ public:
 
     /*! Get all conventions of a given type */
     std::set<boost::shared_ptr<Convention>> get(const Convention::Type& type) const;
+    
+    /*! Find a convention for an FX pair */
+    boost::shared_ptr<Convention> getFxConvention(const string& ccy1, const string& ccy2) const;
 
     //! Checks if we have a convention with the given \p id
     bool has(const std::string& id) const;
@@ -137,14 +142,38 @@ public:
         with the same id */
     void add(const boost::shared_ptr<Convention>& convention);
 
-    //! \name Serilaisation
-    //@{
-    virtual void fromXML(XMLNode* node);
-    virtual XMLNode* toXML(XMLDocument& doc);
+    //! \name Serialisation
+    //@{0
+    virtual void fromXML(XMLNode* node) override;
+    virtual XMLNode* toXML(XMLDocument& doc) override;
     //@}
 
 private:
     map<string, boost::shared_ptr<Convention>> data_;
+    mutable boost::shared_mutex mutex_;
+};
+
+//! Singleton to hold conventions
+//
+class InstrumentConventions : public QuantLib::Singleton<InstrumentConventions, std::integral_constant<bool, true>> {
+    friend class QuantLib::Singleton<InstrumentConventions, std::integral_constant<bool, true>>;
+
+private:
+    // may be empty but never uninitialised
+    InstrumentConventions() : conventions_(boost::make_shared<ore::data::Conventions>()) {}
+
+    boost::shared_ptr<ore::data::Conventions> conventions_;
+    mutable boost::shared_mutex mutex_;
+
+public:
+    const boost::shared_ptr<ore::data::Conventions>& conventions() const {
+        boost::shared_lock<boost::shared_mutex> lock(mutex_);
+        return conventions_;
+    }
+    void setConventions(const boost::shared_ptr<ore::data::Conventions>& conventions) {
+        boost::unique_lock<boost::shared_mutex> lock(mutex_);
+        conventions_ = conventions;
+    }
 };
 
 //! Container for storing Zero Rate conventions
@@ -189,9 +218,9 @@ public:
 
     //! \name Serialisation
     //@{
-    virtual void fromXML(XMLNode* node);
-    virtual XMLNode* toXML(XMLDocument& doc);
-    virtual void build();
+    virtual void fromXML(XMLNode* node) override;
+    virtual XMLNode* toXML(XMLDocument& doc) override;
+    virtual void build() override;
     //@}
 
 private:
@@ -246,9 +275,9 @@ public:
 
     //! \name Serialisation
     //@{
-    virtual void fromXML(XMLNode* node);
-    virtual XMLNode* toXML(XMLDocument& doc);
-    virtual void build();
+    virtual void fromXML(XMLNode* node) override;
+    virtual XMLNode* toXML(XMLDocument& doc) override;
+    virtual void build() override;
     //@}
 
 private:
@@ -278,36 +307,32 @@ public:
     //! \name Constructors
     //@{
     //! Default constructor
-    FutureConvention() : conventions_(nullptr) {}
-    //! Constructor taking conventions only
-    explicit FutureConvention(const Conventions* conventions) : conventions_(conventions) {}
+    FutureConvention() {}
     //! Index based constructor
-    FutureConvention(const string& id, const string& index, const Conventions* conventions = nullptr);
+    FutureConvention(const string& id, const string& index);
     //! Index based constructor taking in addition a netting type for ON indices and a date generation rule
     FutureConvention(const string& id, const string& index,
                      const QuantLib::RateAveraging::Type overnightIndexFutureNettingType,
-                     const DateGenerationRule dateGeneration, const Conventions* conventions = nullptr);
+                     const DateGenerationRule dateGeneration);
     //@}
     //! \name Inspectors
     //@{
-    const boost::shared_ptr<IborIndex>& index() const { return index_; }
+    boost::shared_ptr<IborIndex> index() const;
     QuantLib::RateAveraging::Type overnightIndexFutureNettingType() const { return overnightIndexFutureNettingType_; }
     DateGenerationRule dateGenerationRule() const { return dateGenerationRule_; }
     //@}
 
     //! Serialisation
     //@{
-    virtual void fromXML(XMLNode* node);
-    virtual XMLNode* toXML(XMLDocument& doc);
-    virtual void build() {}
+    virtual void fromXML(XMLNode* node) override;
+    virtual XMLNode* toXML(XMLDocument& doc) override;
+    virtual void build() override {}
     //@}
 
 private:
     string strIndex_;
-    boost::shared_ptr<IborIndex> index_;
     QuantLib::RateAveraging::Type overnightIndexFutureNettingType_;
     DateGenerationRule dateGenerationRule_;
-    const Conventions* conventions_;
 };
 
 //! Container for storing Forward rate Agreement conventions
@@ -319,30 +344,26 @@ public:
     //! \name Constructors
     //@{
     //! Default constructor
-    FraConvention() : conventions_(nullptr) {}
-    //! Constructor taking conventions only
-    explicit FraConvention(const Conventions* conventions) : conventions_(conventions) {}
+    FraConvention() {}
     //! Index based constructor
-    FraConvention(const string& id, const string& index, const Conventions* conventions = nullptr);
+    FraConvention(const string& id, const string& index);
     //@}
 
     //! \name Inspectors
     //@{
-    const boost::shared_ptr<IborIndex>& index() const { return index_; }
+    boost::shared_ptr<IborIndex> index() const;
     const string& indexName() const { return strIndex_; }
     //@}
 
     //! \name Serialisation
     //@{
-    virtual void fromXML(XMLNode* node);
-    virtual XMLNode* toXML(XMLDocument& doc);
-    virtual void build() {}
+    virtual void fromXML(XMLNode* node) override;
+    virtual XMLNode* toXML(XMLDocument& doc) override;
+    virtual void build() override {}
     //@}
 
 private:
     string strIndex_;
-    boost::shared_ptr<IborIndex> index_;
-    const Conventions* conventions_;
 };
 
 //! Container for storing Overnight Index Swap conventions
@@ -354,22 +375,19 @@ public:
     //! \name Constructors
     //@{
     //! Default constructor
-    OisConvention() : conventions_(nullptr) {}
-    //! Constructor taking conventions only
-    explicit OisConvention(const Conventions* conventions) : conventions_(conventions) {}
+    OisConvention() {}
     //! Detailed constructor
     OisConvention(const string& id, const string& spotLag, const string& index, const string& fixedDayCounter,
                   const string& paymentLag = "", const string& eom = "", const string& fixedFrequency = "",
                   const string& fixedConvention = "", const string& fixedPaymentConvention = "",
-                  const string& rule = "", const std::string& paymentCalendar = "",
-                  const Conventions* conventions = nullptr);
+                  const string& rule = "", const std::string& paymentCalendar = "");
     //@}
 
     //! \name Inspectors
     //@{
     Natural spotLag() const { return spotLag_; }
     const string& indexName() const { return strIndex_; }
-    const boost::shared_ptr<OvernightIndex>& index() const { return index_; }
+    boost::shared_ptr<OvernightIndex> index() const;
     const DayCounter& fixedDayCounter() const { return fixedDayCounter_; }
     Natural paymentLag() const { return paymentLag_; }
     bool eom() { return eom_; }
@@ -382,14 +400,13 @@ public:
 
     //! \name Serialisation
     //@{
-    virtual void fromXML(XMLNode* node);
-    virtual XMLNode* toXML(XMLDocument& doc);
-    virtual void build();
+    virtual void fromXML(XMLNode* node) override;
+    virtual XMLNode* toXML(XMLDocument& doc) override;
+    virtual void build() override;
     //@}
 
 private:
     Natural spotLag_;
-    boost::shared_ptr<OvernightIndex> index_;
     DayCounter fixedDayCounter_;
     Natural paymentLag_;
     bool eom_;
@@ -410,8 +427,6 @@ private:
     string strFixedPaymentConvention_;
     string strRule_;
     std::string strPaymentCal_;
-
-    const Conventions* conventions_;
 };
 
 //! Container for storing Ibor Index conventions
@@ -430,9 +445,9 @@ public:
     const string& businessDayConvention() const { return strBusinessDayConvention_; }
     const bool endOfMonth() const { return endOfMonth_; }
 
-    virtual void fromXML(XMLNode* node);
-    virtual XMLNode* toXML(XMLDocument& doc);
-    virtual void build();
+    virtual void fromXML(XMLNode* node) override;
+    virtual XMLNode* toXML(XMLDocument& doc) override;
+    virtual void build() override;
 
 private:
     string localId_;
@@ -457,9 +472,9 @@ public:
     const string& dayCounter() const { return strDayCounter_; }
     const Size settlementDays() const { return settlementDays_; }
 
-    virtual void fromXML(XMLNode* node);
-    virtual XMLNode* toXML(XMLDocument& doc);
-    virtual void build();
+    virtual void fromXML(XMLNode* node) override;
+    virtual XMLNode* toXML(XMLDocument& doc) override;
+    virtual void build() override;
 
 private:
     string strFixingCalendar_;
@@ -479,9 +494,9 @@ public:
     const string& conventions() const { return strConventions_; }
     const string& fixingCalendar() const { return fixingCalendar_; }
 
-    virtual void fromXML(XMLNode* node);
-    virtual XMLNode* toXML(XMLDocument& doc);
-    virtual void build(){};
+    virtual void fromXML(XMLNode* node) override;
+    virtual XMLNode* toXML(XMLDocument& doc) override;
+    virtual void build() override {};
 
 private:
     string strConventions_;
@@ -497,14 +512,12 @@ public:
     //! \name Constructors
     //@{
     //! Default constructor
-    IRSwapConvention() : conventions_(nullptr) {}
-    //! Constructor taking conventions only
-    explicit IRSwapConvention(const Conventions* conventions) : conventions_(conventions) {}
+    IRSwapConvention() {}
     //! Detailed constructor
     IRSwapConvention(const string& id, const string& fixedCalendar, const string& fixedFrequency,
                      const string& fixedConvention, const string& fixedDayCounter, const string& index,
                      bool hasSubPeriod = false, const string& floatFrequency = "",
-                     const string& subPeriodsCouponType = "", const Conventions* conventions = nullptr);
+                     const string& subPeriodsCouponType = "");
     //@}
 
     //! \name Inspectors
@@ -514,7 +527,7 @@ public:
     BusinessDayConvention fixedConvention() const { return fixedConvention_; }
     const DayCounter& fixedDayCounter() const { return fixedDayCounter_; }
     const string& indexName() const { return strIndex_; }
-    const boost::shared_ptr<IborIndex>& index() const { return index_; }
+    boost::shared_ptr<IborIndex> index() const;
     // For sub period
     bool hasSubPeriod() const { return hasSubPeriod_; }
     Frequency floatFrequency() const { return floatFrequency_; } // returns NoFrequency for normal swaps
@@ -523,9 +536,9 @@ public:
 
     //! \name Serialisation
     //@{
-    virtual void fromXML(XMLNode* node);
-    virtual XMLNode* toXML(XMLDocument& doc);
-    virtual void build();
+    virtual void fromXML(XMLNode* node) override;
+    virtual XMLNode* toXML(XMLDocument& doc) override;
+    virtual void build() override;
     //@}
 
 private:
@@ -533,7 +546,6 @@ private:
     Frequency fixedFrequency_;
     BusinessDayConvention fixedConvention_;
     DayCounter fixedDayCounter_;
-    boost::shared_ptr<IborIndex> index_;
     bool hasSubPeriod_;
     Frequency floatFrequency_;
     SubPeriodsCoupon1::Type subPeriodsCouponType_;
@@ -546,8 +558,6 @@ private:
     string strIndex_;
     string strFloatFrequency_;
     string strSubPeriodsCouponType_;
-
-    const Conventions* conventions_;
 };
 
 //! Container for storing Average OIS conventions
@@ -559,14 +569,12 @@ public:
     //! \name Constructors
     //@{
     //! Default constructor
-    AverageOisConvention() : conventions_(nullptr) {}
-    //! Constructor taking conventions only
-    explicit AverageOisConvention(const Conventions* conventions) : conventions_(conventions) {}
+    AverageOisConvention() {}
     //! Detailed constructor
     AverageOisConvention(const string& id, const string& spotLag, const string& fixedTenor,
                          const string& fixedDayCounter, const string& fixedCalendar, const string& fixedConvention,
-                         const string& fixedPaymentConvention, const string& index, const string& onTenor,
-                         const string& rateCutoff, const Conventions* conventions = nullptr);
+                         const string& fixedPaymentConvention, const string& fixedFrequency, const string& index,
+                         const string& onTenor, const string& rateCutoff);
     //@}
 
     //! \name Inspectors
@@ -577,17 +585,18 @@ public:
     const Calendar& fixedCalendar() const { return fixedCalendar_; }
     BusinessDayConvention fixedConvention() const { return fixedConvention_; }
     BusinessDayConvention fixedPaymentConvention() const { return fixedPaymentConvention_; }
+    Frequency fixedFrequency() const { return fixedFrequency_; }
     const string& indexName() const { return strIndex_; }
-    const boost::shared_ptr<OvernightIndex>& index() const { return index_; }
+    boost::shared_ptr<OvernightIndex> index() const;
     const Period& onTenor() const { return onTenor_; }
     Natural rateCutoff() const { return rateCutoff_; }
     //@}
 
     //! \name Serialisation
     //@{
-    virtual void fromXML(XMLNode* node);
-    virtual XMLNode* toXML(XMLDocument& doc);
-    virtual void build();
+    virtual void fromXML(XMLNode* node) override;
+    virtual XMLNode* toXML(XMLDocument& doc) override;
+    virtual void build() override;
     //@}
 private:
     Natural spotLag_;
@@ -596,7 +605,7 @@ private:
     Calendar fixedCalendar_;
     BusinessDayConvention fixedConvention_;
     BusinessDayConvention fixedPaymentConvention_;
-    boost::shared_ptr<OvernightIndex> index_;
+    Frequency fixedFrequency_;
     Period onTenor_;
     Natural rateCutoff_;
 
@@ -607,11 +616,10 @@ private:
     string strFixedCalendar_;
     string strFixedConvention_;
     string strFixedPaymentConvention_;
+    string strFixedFrequency_;
     string strIndex_;
     string strOnTenor_;
     string strRateCutoff_;
-
-    const Conventions* conventions_;
 };
 
 //! Container for storing Tenor Basis Swap conventions
@@ -623,20 +631,17 @@ public:
     //! \name Constructors
     //@{
     //! Default constructor
-    TenorBasisSwapConvention() : conventions_(nullptr) {}
-    //! Constructor taking conventions only
-    explicit TenorBasisSwapConvention(const Conventions* conventions) : conventions_(conventions) {}
+    TenorBasisSwapConvention() {}
     //! Detailed constructor
     TenorBasisSwapConvention(const string& id, const string& longIndex, const string& shortIndex,
                              const string& shortPayTenor = "", const string& spreadOnShort = "",
-                             const string& includeSpread = "", const string& subPeriodsCouponType = "",
-                             const Conventions* conventions = nullptr);
+                             const string& includeSpread = "", const string& subPeriodsCouponType = "");
     //@}
 
     //! \name Inspectors
     //@{
-    const boost::shared_ptr<IborIndex>& longIndex() const { return longIndex_; }
-    const boost::shared_ptr<IborIndex>& shortIndex() const { return shortIndex_; }
+    boost::shared_ptr<IborIndex> longIndex() const;
+    boost::shared_ptr<IborIndex> shortIndex() const;
     const string& longIndexName() const { return strLongIndex_; }
     const string& shortIndexName() const { return strShortIndex_; }
     const Period& shortPayTenor() const { return shortPayTenor_; }
@@ -647,14 +652,12 @@ public:
 
     //! \name Serialisation
     //@{
-    virtual void fromXML(XMLNode* node);
-    virtual XMLNode* toXML(XMLDocument& doc);
-    virtual void build();
+    virtual void fromXML(XMLNode* node) override;
+    virtual XMLNode* toXML(XMLDocument& doc) override;
+    virtual void build() override;
     //@}
 
 private:
-    boost::shared_ptr<IborIndex> longIndex_;
-    boost::shared_ptr<IborIndex> shortIndex_;
     Period shortPayTenor_;
     bool spreadOnShort_;
     bool includeSpread_;
@@ -667,8 +670,6 @@ private:
     string strSpreadOnShort_;
     string strIncludeSpread_;
     string strSubPeriodsCouponType_;
-
-    const Conventions* conventions_;
 };
 
 //! Container for storing conventions for Tenor Basis Swaps quoted as a spread of two interest rate swaps
@@ -680,16 +681,13 @@ public:
     //! \name Constructors
     //@{
     //! Default constructor
-    TenorBasisTwoSwapConvention() : conventions_(nullptr) {}
-    //! Constructor taking conventions only
-    explicit TenorBasisTwoSwapConvention(const Conventions* conventions) : conventions_(conventions) {}
+    TenorBasisTwoSwapConvention() {}
     //! Detailed constructor
     TenorBasisTwoSwapConvention(const string& id, const string& calendar, const string& longFixedFrequency,
                                 const string& longFixedConvention, const string& longFixedDayCounter,
                                 const string& longIndex, const string& shortFixedFrequency,
                                 const string& shortFixedConvention, const string& shortFixedDayCounter,
-                                const string& shortIndex, const string& longMinusShort = "",
-                                const Conventions* conventions = nullptr);
+                                const string& shortIndex, const string& longMinusShort = "");
     //@}
 
     //! \name Inspectors
@@ -698,19 +696,19 @@ public:
     Frequency longFixedFrequency() const { return longFixedFrequency_; }
     BusinessDayConvention longFixedConvention() const { return longFixedConvention_; }
     const DayCounter& longFixedDayCounter() const { return longFixedDayCounter_; }
-    const boost::shared_ptr<IborIndex>& longIndex() const { return longIndex_; }
+    boost::shared_ptr<IborIndex> longIndex() const;
     Frequency shortFixedFrequency() const { return shortFixedFrequency_; }
     BusinessDayConvention shortFixedConvention() const { return shortFixedConvention_; }
     const DayCounter& shortFixedDayCounter() const { return shortFixedDayCounter_; }
-    const boost::shared_ptr<IborIndex>& shortIndex() const { return shortIndex_; }
+    boost::shared_ptr<IborIndex> shortIndex() const;
     bool longMinusShort() const { return longMinusShort_; }
     //@}
 
     //! \name Serialisation
     //@{
-    virtual void fromXML(XMLNode* node);
-    virtual XMLNode* toXML(XMLDocument& doc);
-    virtual void build();
+    virtual void fromXML(XMLNode* node) override;
+    virtual XMLNode* toXML(XMLDocument& doc) override;
+    virtual void build() override;
     //@}
 
 private:
@@ -718,11 +716,9 @@ private:
     Frequency longFixedFrequency_;
     BusinessDayConvention longFixedConvention_;
     DayCounter longFixedDayCounter_;
-    boost::shared_ptr<IborIndex> longIndex_;
     Frequency shortFixedFrequency_;
     BusinessDayConvention shortFixedConvention_;
     DayCounter shortFixedDayCounter_;
-    boost::shared_ptr<IborIndex> shortIndex_;
     bool longMinusShort_;
 
     // Strings to store the inputs
@@ -736,8 +732,6 @@ private:
     string strShortFixedDayCounter_;
     string strShortIndex_;
     string strLongMinusShort_;
-
-    const Conventions* conventions_;
 };
 
 //! Container for storing Libor-BMA Basis Swap conventions
@@ -749,38 +743,30 @@ public:
     //! \name Constructors
     //@{
     //! Default constructor
-    BMABasisSwapConvention() : conventions_(nullptr) {}
-    //! Constructor taking conventions only
-    explicit BMABasisSwapConvention(const Conventions* conventions) : conventions_(conventions) {}
+    BMABasisSwapConvention() {}
     //! Detailed constructor
-    BMABasisSwapConvention(const string& id, const string& liborIndex, const string& bmaIndex,
-                           const Conventions* conventions = nullptr);
+    BMABasisSwapConvention(const string& id, const string& liborIndex, const string& bmaIndex);
     //@}
 
     //! \name Inspectors
     //@{
-    const boost::shared_ptr<IborIndex>& liborIndex() const { return liborIndex_; }
-    const boost::shared_ptr<QuantExt::BMAIndexWrapper>& bmaIndex() const { return bmaIndex_; }
+    boost::shared_ptr<IborIndex> liborIndex() const;
+    boost::shared_ptr<QuantExt::BMAIndexWrapper> bmaIndex() const;
     const string& liborIndexName() const { return strLiborIndex_; }
     const string& bmaIndexName() const { return strBmaIndex_; }
     //@}
 
     //! \name Serialisation
     //@{
-    virtual void fromXML(XMLNode* node);
-    virtual XMLNode* toXML(XMLDocument& doc);
-    virtual void build();
+    virtual void fromXML(XMLNode* node) override;
+    virtual XMLNode* toXML(XMLDocument& doc) override;
+    virtual void build() override;
     //@}
 
 private:
-    boost::shared_ptr<IborIndex> liborIndex_;
-    boost::shared_ptr<QuantExt::BMAIndexWrapper> bmaIndex_;
-
     // Strings to store the inputs
     string strLiborIndex_;
     string strBmaIndex_;
-
-    const Conventions* conventions_;
 };
 
 //! Container for storing FX Spot quote conventions
@@ -795,7 +781,8 @@ public:
     FXConvention() {}
     //! Detailed constructor
     FXConvention(const string& id, const string& spotDays, const string& sourceCurrency, const string& targetCurrency,
-                 const string& pointsFactor, const string& advanceCalendar = "", const string& spotRelative = "");
+                 const string& pointsFactor, const string& advanceCalendar = "", const string& spotRelative = "",
+                 const string& endOfMonth = "", const string& convention = "");
     //@}
 
     //! \name Inspectors
@@ -806,13 +793,15 @@ public:
     Real pointsFactor() const { return pointsFactor_; }
     const Calendar& advanceCalendar() const { return advanceCalendar_; }
     bool spotRelative() const { return spotRelative_; }
+    bool endOfMonth() const { return endOfMonth_; }
+    BusinessDayConvention convention() const { return convention_; }
     //@}
 
     //! \name Serialisation
     //
-    virtual void fromXML(XMLNode* node);
-    virtual XMLNode* toXML(XMLDocument& doc);
-    virtual void build();
+    virtual void fromXML(XMLNode* node) override;
+    virtual XMLNode* toXML(XMLDocument& doc) override;
+    virtual void build() override;
     //@}
 
 private:
@@ -822,6 +811,8 @@ private:
     Real pointsFactor_;
     Calendar advanceCalendar_;
     bool spotRelative_;
+    bool endOfMonth_;
+    BusinessDayConvention convention_;
 
     // Strings to store the inputs
     string strSpotDays_;
@@ -830,6 +821,8 @@ private:
     string strPointsFactor_;
     string strAdvanceCalendar_;
     string strSpotRelative_;
+    string strEndOfMonth_;
+    string strConvention_;
 };
 
 //! Container for storing Cross Currency Basis Swap quote conventions
@@ -841,15 +834,19 @@ public:
     //! \name Constructors
     //@{
     //! Default constructor
-    CrossCcyBasisSwapConvention() : conventions_(nullptr) {}
-    //! Constructor taking conventions only
-    explicit CrossCcyBasisSwapConvention(const Conventions* conventions) : conventions_(conventions) {}
+    CrossCcyBasisSwapConvention() {}
     //! Detailed constructor
     CrossCcyBasisSwapConvention(const string& id, const string& strSettlementDays, const string& strSettlementCalendar,
                                 const string& strRollConvention, const string& flatIndex, const string& spreadIndex,
                                 const string& strEom = "", const string& strIsResettable = "",
                                 const string& strFlatIndexIsResettable = "", const std::string& strFlatTenor = "",
-                                const std::string& strSpreadTenor = "", const Conventions* conventions = nullptr);
+                                const std::string& strSpreadTenor = "", const string& strPaymentLag = "",
+                                const string& strFlatPaymentLag = "", const string& strIncludeSpread = "",
+                                const string& strLookback = "", const string& strFixingDays = "",
+                                const string& strRateCutoff = "", const string& strIsAveraged = "",
+                                const string& strFlatIncludeSpread = "", const string& strFlatLookback = "",
+                                const string& strFlatFixingDays = "", const string& strFlatRateCutoff = "",
+                                const string& strFlatIsAveraged = "", const Conventions* conventions = nullptr);
     //@}
 
     //! \name Inspectors
@@ -857,8 +854,8 @@ public:
     Natural settlementDays() const { return settlementDays_; }
     const Calendar& settlementCalendar() const { return settlementCalendar_; }
     BusinessDayConvention rollConvention() const { return rollConvention_; }
-    const boost::shared_ptr<IborIndex>& flatIndex() const { return flatIndex_; }
-    const boost::shared_ptr<IborIndex>& spreadIndex() const { return spreadIndex_; }
+    boost::shared_ptr<IborIndex> flatIndex() const;
+    boost::shared_ptr<IborIndex> spreadIndex() const;
     const string& flatIndexName() const { return strFlatIndex_; }
     const string& spreadIndexName() const { return strSpreadIndex_; }
 
@@ -867,25 +864,51 @@ public:
     bool flatIndexIsResettable() const { return flatIndexIsResettable_; }
     const QuantLib::Period& flatTenor() const { return flatTenor_; }
     const QuantLib::Period& spreadTenor() const { return spreadTenor_; }
+
+    Size paymentLag() const { return paymentLag_; }
+    Size flatPaymentLag() const { return flatPaymentLag_; }
+
+    // only OIS
+    boost::optional<bool> includeSpread() const { return includeSpread_; }
+    boost::optional<QuantLib::Period> lookback() const { return lookback_; }
+    boost::optional<QuantLib::Size> fixingDays() const { return fixingDays_; }
+    boost::optional<Size> rateCutoff() const { return rateCutoff_; }
+    boost::optional<bool> isAveraged() const { return isAveraged_; }
+    boost::optional<bool> flatIncludeSpread() const { return flatIncludeSpread_; }
+    boost::optional<QuantLib::Period> flatLookback() const { return flatLookback_; }
+    boost::optional<QuantLib::Size> flatFixingDays() const { return flatFixingDays_; }
+    boost::optional<Size> flatRateCutoff() const { return flatRateCutoff_; }
+    boost::optional<bool> flatIsAveraged() const { return flatIsAveraged_; }
     //@}
 
     //! \name Serialisation
     //@{
-    virtual void fromXML(XMLNode* node);
-    virtual XMLNode* toXML(XMLDocument& doc);
-    virtual void build();
+    virtual void fromXML(XMLNode* node) override;
+    virtual XMLNode* toXML(XMLDocument& doc) override;
+    virtual void build() override;
     //@}
 private:
     Natural settlementDays_;
     Calendar settlementCalendar_;
     BusinessDayConvention rollConvention_;
-    boost::shared_ptr<IborIndex> flatIndex_;
-    boost::shared_ptr<IborIndex> spreadIndex_;
     bool eom_;
     bool isResettable_;
     bool flatIndexIsResettable_;
     QuantLib::Period flatTenor_;
     QuantLib::Period spreadTenor_;
+    QuantLib::Size paymentLag_;
+    QuantLib::Size flatPaymentLag_;
+    // OIS only
+    boost::optional<bool> includeSpread_;
+    boost::optional<QuantLib::Period> lookback_;
+    boost::optional<QuantLib::Size> fixingDays_;
+    boost::optional<Size> rateCutoff_;
+    boost::optional<bool> isAveraged_;
+    boost::optional<bool> flatIncludeSpread_;
+    boost::optional<QuantLib::Period> flatLookback_;
+    boost::optional<QuantLib::Size> flatFixingDays_;
+    boost::optional<Size> flatRateCutoff_;
+    boost::optional<bool> flatIsAveraged_;
 
     // Strings to store the inputs
     string strSettlementDays_;
@@ -896,10 +919,21 @@ private:
     string strEom_;
     string strIsResettable_;
     string strFlatIndexIsResettable_;
-    std::string strFlatTenor_;
-    std::string strSpreadTenor_;
-
-    const Conventions* conventions_;
+    string strFlatTenor_;
+    string strSpreadTenor_;
+    string strPaymentLag_;
+    string strFlatPaymentLag_;
+    // OIS only
+    string strIncludeSpread_;
+    string strLookback_;
+    string strFixingDays_;
+    string strRateCutoff_;
+    string strIsAveraged_;
+    string strFlatIncludeSpread_;
+    string strFlatLookback_;
+    string strFlatFixingDays_;
+    string strFlatRateCutoff_;
+    string strFlatIsAveraged_;
 };
 
 /*! Container for storing Cross Currency Fix vs Float Swap quote conventions
@@ -910,16 +944,14 @@ public:
     //! \name Constructors
     //@{
     //! Default constructor
-    CrossCcyFixFloatSwapConvention() : conventions_(nullptr) {}
-    //! Constructor taking conventions only
-    explicit CrossCcyFixFloatSwapConvention(const Conventions* conventions) : conventions_(conventions) {}
+    CrossCcyFixFloatSwapConvention() {}
     //! Detailed constructor
     CrossCcyFixFloatSwapConvention(const std::string& id, const std::string& settlementDays,
                                    const std::string& settlementCalendar, const std::string& settlementConvention,
                                    const std::string& fixedCurrency, const std::string& fixedFrequency,
                                    const std::string& fixedConvention, const std::string& fixedDayCounter,
                                    const std::string& index, const std::string& eom = "",
-                                   const Conventions* conventions = nullptr, const std::string& strIsResettable = "",
+                                   const std::string& strIsResettable = "",
                                    const std::string& strFloatIndexIsResettable = "");
     //@}
 
@@ -932,7 +964,7 @@ public:
     QuantLib::Frequency fixedFrequency() const { return fixedFrequency_; }
     QuantLib::BusinessDayConvention fixedConvention() const { return fixedConvention_; }
     const QuantLib::DayCounter& fixedDayCounter() const { return fixedDayCounter_; }
-    const boost::shared_ptr<QuantLib::IborIndex>& index() const { return index_; }
+    boost::shared_ptr<QuantLib::IborIndex> index() const;
     bool eom() const { return eom_; }
     bool isResettable() const { return isResettable_; }
     bool floatIndexIsResettable() const { return floatIndexIsResettable_; }
@@ -940,13 +972,13 @@ public:
 
     //! \name Serialisation interface
     //@{
-    void fromXML(XMLNode* node);
-    XMLNode* toXML(XMLDocument& doc);
+    void fromXML(XMLNode* node) override;
+    XMLNode* toXML(XMLDocument& doc) override;
     //@}
 
     //! \name Convention interface
     //@{
-    void build();
+    void build() override;
     //@}
 
 private:
@@ -957,7 +989,6 @@ private:
     QuantLib::Frequency fixedFrequency_;
     QuantLib::BusinessDayConvention fixedConvention_;
     QuantLib::DayCounter fixedDayCounter_;
-    boost::shared_ptr<QuantLib::IborIndex> index_;
     bool eom_;
     bool isResettable_;
     bool floatIndexIsResettable_;
@@ -973,7 +1004,6 @@ private:
     std::string strIndex_;
     std::string strEom_;
 
-    const Conventions* conventions_;
     std::string strIsResettable_;
     std::string strFloatIndexIsResettable_;
 };
@@ -1012,9 +1042,9 @@ public:
 
     //! \name Serialisation
     //@{
-    virtual void fromXML(XMLNode* node);
-    virtual XMLNode* toXML(XMLDocument& doc);
-    virtual void build();
+    virtual void fromXML(XMLNode* node0) override;
+    virtual XMLNode* toXML(XMLDocument& doc) override;
+    virtual void build() override;
     //@}
 private:
     Natural settlementDays_;
@@ -1050,20 +1080,19 @@ public:
         AfterPublicationDate
     };
 
-    InflationSwapConvention(const boost::shared_ptr<Conventions>& conventions = nullptr);
+    InflationSwapConvention();
 
     InflationSwapConvention(const string& id, const string& strFixCalendar, const string& strFixConvention,
                             const string& strDayCounter, const string& strIndex, const string& strInterpolated,
                             const string& strObservationLag, const string& strAdjustInfObsDates,
                             const string& strInfCalendar, const string& strInfConvention,
-                            const boost::shared_ptr<Conventions>& conventions = nullptr,
                             PublicationRoll publicationRoll = PublicationRoll::None,
                             const boost::shared_ptr<ScheduleData>& publicationScheduleData = nullptr);
 
     const Calendar& fixCalendar() const { return fixCalendar_; }
     BusinessDayConvention fixConvention() const { return fixConvention_; }
     const DayCounter& dayCounter() const { return dayCounter_; }
-    const boost::shared_ptr<ZeroInflationIndex> index() const { return index_; }
+    boost::shared_ptr<ZeroInflationIndex> index() const;
     const string& indexName() const { return strIndex_; }
     bool interpolated() const { return interpolated_; }
     Period observationLag() const { return observationLag_; }
@@ -1073,9 +1102,9 @@ public:
     PublicationRoll publicationRoll() const { return publicationRoll_; }
     const Schedule& publicationSchedule() const { return publicationSchedule_; }
 
-    virtual void fromXML(XMLNode* node);
-    virtual XMLNode* toXML(XMLDocument& doc);
-    virtual void build();
+    virtual void fromXML(XMLNode* node) override;
+    virtual XMLNode* toXML(XMLDocument& doc) override;
+    virtual void build() override;
 
 private:
     Calendar fixCalendar_;
@@ -1099,7 +1128,6 @@ private:
     string strAdjustInfObsDates_;
     string strInfCalendar_;
     string strInfConvention_;
-    boost::shared_ptr<Conventions> conventions_;
     PublicationRoll publicationRoll_;
     boost::shared_ptr<ScheduleData> publicationScheduleData_;
 };
@@ -1146,9 +1174,9 @@ public:
 
     //! \name Serialisation
     //@{
-    virtual void fromXML(XMLNode* node);
-    virtual XMLNode* toXML(XMLDocument& doc);
-    virtual void build();
+    virtual void fromXML(XMLNode* node) override;
+    virtual XMLNode* toXML(XMLDocument& doc) override;
+    virtual void build() override;
     //@}
 
 private:
@@ -1202,9 +1230,9 @@ public:
 
     //! \name Serialisation
     //@{
-    virtual void fromXML(XMLNode* node);
-    virtual XMLNode* toXML(XMLDocument& doc);
-    virtual void build();
+    virtual void fromXML(XMLNode* node) override;
+    virtual XMLNode* toXML(XMLDocument& doc) override;
+    virtual void build() override;
     //@}
 private:
     Period forwardStart_;
@@ -1246,6 +1274,7 @@ public:
     Natural spotDays() const { return spotDays_; }
     Real pointsFactor() const { return pointsFactor_; }
     const Calendar& advanceCalendar() const { return advanceCalendar_; }
+    string strAdvanceCalendar() const { return strAdvanceCalendar_; }
     bool spotRelative() const { return spotRelative_; }
     BusinessDayConvention bdc() const { return bdc_; }
     bool outright() const { return outright_; }
@@ -1253,9 +1282,9 @@ public:
 
     //! \name Serialisation
     //
-    virtual void fromXML(XMLNode* node);
-    virtual XMLNode* toXML(XMLDocument& doc);
-    virtual void build();
+    virtual void fromXML(XMLNode* node) override;
+    virtual XMLNode* toXML(XMLDocument& doc) override;
+    virtual void build() override;
     //@}
 
 private:
@@ -1280,7 +1309,8 @@ class CommodityFutureConvention : public Convention {
 public:
     /*! The anchor day type of commodity future convention
      */
-    enum class AnchorType { DayOfMonth, NthWeekday, CalendarDaysBefore };
+    enum class AnchorType { DayOfMonth, NthWeekday, CalendarDaysBefore, LastWeekday, BusinessDaysAfter, WeeklyDayOfTheWeek };
+    enum class OptionAnchorType { DayOfMonth, NthWeekday, BusinessDaysBefore, LastWeekday, WeeklyDayOfTheWeek };
 
     //! Classes to differentiate constructors below
     //@{
@@ -1292,6 +1322,41 @@ public:
     struct CalendarDaysBefore {
         CalendarDaysBefore(const std::string& calendarDaysBefore) : calendarDaysBefore_(calendarDaysBefore) {}
         std::string calendarDaysBefore_;
+    };
+    
+    struct BusinessDaysAfter {
+        BusinessDaysAfter(const std::string& businessDaysAfter) : businessDaysAfter_(businessDaysAfter) {}
+        std::string businessDaysAfter_;
+    };
+
+    struct WeeklyWeekday {
+        WeeklyWeekday(const std::string& weekday) : weekday_(weekday) {}
+        std::string weekday_;
+    };
+
+
+    struct OptionExpiryAnchorDateRule {
+        OptionExpiryAnchorDateRule()
+            : type_(OptionAnchorType::BusinessDaysBefore), daysBefore_("0"), expiryDay_(""), nth_(""), weekday_("") {}
+        OptionExpiryAnchorDateRule(const DayOfMonth& expiryDay)
+            : type_(OptionAnchorType::DayOfMonth), daysBefore_(""), expiryDay_(expiryDay.dayOfMonth_), nth_(""),
+              weekday_("") {}
+        OptionExpiryAnchorDateRule(const CalendarDaysBefore& businessDaysBefore)
+            : type_(OptionAnchorType::BusinessDaysBefore), daysBefore_(businessDaysBefore.calendarDaysBefore_),
+              expiryDay_(""), nth_(""), weekday_("") {}
+        OptionExpiryAnchorDateRule(const std::string& nth, const std::string& weekday)
+            : type_(OptionAnchorType::NthWeekday), daysBefore_(""), expiryDay_(""), nth_(nth), weekday_(weekday) {}
+        OptionExpiryAnchorDateRule(const std::string& lastWeekday)
+            : type_(OptionAnchorType::LastWeekday), daysBefore_(""), expiryDay_(""), nth_(""), weekday_(lastWeekday) {}
+        OptionExpiryAnchorDateRule(const WeeklyWeekday& weekday)
+            : type_(OptionAnchorType::WeeklyDayOfTheWeek), daysBefore_(""), expiryDay_(""), nth_(""),
+              weekday_(weekday.weekday_) {}
+
+        OptionAnchorType type_;
+        std::string daysBefore_;
+        std::string expiryDay_;
+        std::string nth_;
+        std::string weekday_;
     };
     //@}
 
@@ -1424,17 +1489,16 @@ public:
                               QuantLib::Size expiryMonthLag = 0, const std::string& oneContractMonth = "",
                               const std::string& offsetDays = "", const std::string& bdc = "",
                               bool adjustBeforeOffset = true, bool isAveraging = false,
-                              const std::string& optionExpiryOffset = "",
+                              const OptionExpiryAnchorDateRule& optionExpiryDateRule = OptionExpiryAnchorDateRule(),
                               const std::set<ProhibitedExpiry>& prohibitedExpiries = {},
                               QuantLib::Size optionExpiryMonthLag = 0,
-                              QuantLib::Natural optionExpiryDay = QuantLib::Null<QuantLib::Natural>(),
                               const std::string& optionBdc = "",
                               const std::map<QuantLib::Natural, QuantLib::Natural>& futureContinuationMappings = {},
                               const std::map<QuantLib::Natural, QuantLib::Natural>& optionContinuationMappings = {},
                               const AveragingData& averagingData = AveragingData(),
                               QuantLib::Natural hoursPerDay = QuantLib::Null<QuantLib::Natural>(),
                               const boost::optional<OffPeakPowerIndexData>& offPeakPowerIndexData = boost::none,
-                              const std::string& indexName = "");
+                              const std::string& indexName = "", const std::string& optionFrequency = "");
 
     //! N-th weekday based constructor
     CommodityFutureConvention(const std::string& id, const std::string& nth, const std::string& weekday,
@@ -1442,17 +1506,16 @@ public:
                               const std::string& expiryCalendar = "", QuantLib::Size expiryMonthLag = 0,
                               const std::string& oneContractMonth = "", const std::string& offsetDays = "",
                               const std::string& bdc = "", bool adjustBeforeOffset = true, bool isAveraging = false,
-                              const std::string& optionExpiryOffset = "",
+                              const OptionExpiryAnchorDateRule& optionExpiryDateRule = OptionExpiryAnchorDateRule(),
                               const std::set<ProhibitedExpiry>& prohibitedExpiries = {},
                               QuantLib::Size optionExpiryMonthLag = 0,
-                              QuantLib::Natural optionExpiryDay = QuantLib::Null<QuantLib::Natural>(),
                               const std::string& optionBdc = "",
                               const std::map<QuantLib::Natural, QuantLib::Natural>& futureContinuationMappings = {},
                               const std::map<QuantLib::Natural, QuantLib::Natural>& optionContinuationMappings = {},
                               const AveragingData& averagingData = AveragingData(),
                               QuantLib::Natural hoursPerDay = QuantLib::Null<QuantLib::Natural>(),
                               const boost::optional<OffPeakPowerIndexData>& offPeakPowerIndexData = boost::none,
-                              const std::string& indexName = "");
+                              const std::string& indexName = "", const std::string& optionFrequency = "");
 
     //! Calendar days before based constructor
     CommodityFutureConvention(const std::string& id, const CalendarDaysBefore& calendarDaysBefore,
@@ -1460,18 +1523,33 @@ public:
                               const std::string& expiryCalendar = "", QuantLib::Size expiryMonthLag = 0,
                               const std::string& oneContractMonth = "", const std::string& offsetDays = "",
                               const std::string& bdc = "", bool adjustBeforeOffset = true, bool isAveraging = false,
-                              const std::string& optionExpiryOffset = "",
+                              const OptionExpiryAnchorDateRule& optionExpiryDateRule = OptionExpiryAnchorDateRule(),
                               const std::set<ProhibitedExpiry>& prohibitedExpiries = {},
                               QuantLib::Size optionExpiryMonthLag = 0,
-                              QuantLib::Natural optionExpiryDay = QuantLib::Null<QuantLib::Natural>(),
                               const std::string& optionBdc = "",
                               const std::map<QuantLib::Natural, QuantLib::Natural>& futureContinuationMappings = {},
                               const std::map<QuantLib::Natural, QuantLib::Natural>& optionContinuationMappings = {},
                               const AveragingData& averagingData = AveragingData(),
                               QuantLib::Natural hoursPerDay = QuantLib::Null<QuantLib::Natural>(),
                               const boost::optional<OffPeakPowerIndexData>& offPeakPowerIndexData = boost::none,
-                              const std::string& indexName = "");
-    //@}
+                              const std::string& indexName = "", const std::string& optionFrequency = "");
+    
+    //! Business days before based constructor
+    CommodityFutureConvention(const std::string& id, const BusinessDaysAfter& businessDaysAfter,
+                              const std::string& contractFrequency, const std::string& calendar,
+                              const std::string& expiryCalendar = "", QuantLib::Size expiryMonthLag = 0,
+                              const std::string& oneContractMonth = "", const std::string& offsetDays = "",
+                              const std::string& bdc = "", bool adjustBeforeOffset = true, bool isAveraging = false,
+                              const OptionExpiryAnchorDateRule& optionExpiryDateRule = OptionExpiryAnchorDateRule(),
+                              const std::set<ProhibitedExpiry>& prohibitedExpiries = {},
+                              QuantLib::Size optionExpiryMonthLag = 0,
+                              const std::string& optionBdc = "",
+                              const std::map<QuantLib::Natural, QuantLib::Natural>& futureContinuationMappings = {},
+                              const std::map<QuantLib::Natural, QuantLib::Natural>& optionContinuationMappings = {},
+                              const AveragingData& averagingData = AveragingData(),
+                              QuantLib::Natural hoursPerDay = QuantLib::Null<QuantLib::Natural>(),
+                              const boost::optional<OffPeakPowerIndexData>& offPeakPowerIndexData = boost::none,
+                              const std::string& indexName = "", const std::string& optionFrequency = "");
 
     //! \name Inspectors
     //@{
@@ -1480,6 +1558,7 @@ public:
     QuantLib::Natural nth() const { return nth_; }
     QuantLib::Weekday weekday() const { return weekday_; }
     QuantLib::Natural calendarDaysBefore() const { return calendarDaysBefore_; }
+    QuantLib::Integer businessDaysAfter() const { return businessDaysAfter_; }
     QuantLib::Frequency contractFrequency() const { return contractFrequency_; }
     const QuantLib::Calendar& calendar() const { return calendar_; }
     const QuantLib::Calendar& expiryCalendar() const { return expiryCalendar_; }
@@ -1506,6 +1585,12 @@ public:
     QuantLib::Natural hoursPerDay() const { return hoursPerDay_; }
     const boost::optional<OffPeakPowerIndexData>& offPeakPowerIndexData() const { return offPeakPowerIndexData_; }
     const std::string& indexName() const { return indexName_; }
+    QuantLib::Frequency optionContractFrequency() const { return optionContractFrequency_; }
+    OptionAnchorType optionAnchorType() const { return optionAnchorType_; }
+    QuantLib::Natural optionNth() const { return optionNth_; }
+    QuantLib::Weekday optionWeekday() const { return optionWeekday_; }
+    const std::string& savingsTime() const { return savingsTime_; }
+    const std::set<QuantLib::Month>& validContractMonths() const { return validContractMonths_; }
     //@}
 
     //! Serialisation
@@ -1523,18 +1608,20 @@ private:
     QuantLib::Natural nth_;
     QuantLib::Weekday weekday_;
     QuantLib::Natural calendarDaysBefore_;
+    QuantLib::Integer businessDaysAfter_;
     QuantLib::Frequency contractFrequency_;
     QuantLib::Calendar calendar_;
     QuantLib::Calendar expiryCalendar_;
     QuantLib::Month oneContractMonth_;
     QuantLib::Integer offsetDays_;
     QuantLib::BusinessDayConvention bdc_;
-    QuantLib::Natural optionExpiryOffset_;
+    
 
     std::string strDayOfMonth_;
     std::string strNth_;
     std::string strWeekday_;
     std::string strCalendarDaysBefore_;
+    std::string strBusinessDaysAfter_;
     std::string strContractFrequency_;
     std::string strCalendar_;
     std::string strExpiryCalendar_;
@@ -1544,10 +1631,8 @@ private:
     std::string strBdc_;
     bool adjustBeforeOffset_;
     bool isAveraging_;
-    std::string strOptionExpiryOffset_;
     std::set<ProhibitedExpiry> prohibitedExpiries_;
     QuantLib::Size optionExpiryMonthLag_;
-    Natural optionExpiryDay_;
     QuantLib::BusinessDayConvention optionBdc_;
     std::string strOptionBdc_;
     std::map<QuantLib::Natural, QuantLib::Natural> futureContinuationMappings_;
@@ -1556,9 +1641,27 @@ private:
     QuantLib::Natural hoursPerDay_;
     boost::optional<OffPeakPowerIndexData> offPeakPowerIndexData_;
     std::string indexName_;
+    
+    std::string strOptionContractFrequency_;
+    
+    OptionAnchorType optionAnchorType_;
+    std::string strOptionExpiryOffset_;
+    std::string strOptionExpiryDay_;
+    std::string strOptionNth_;
+    std::string strOptionWeekday_;
+    
+    
+    QuantLib::Frequency optionContractFrequency_;
+    QuantLib::Natural optionExpiryOffset_;
+    QuantLib::Natural optionNth_;
+    QuantLib::Weekday optionWeekday_;
+    QuantLib::Natural optionExpiryDay_;
+
+    std::set<QuantLib::Month> validContractMonths_;
+    std::string savingsTime_;
 
     //! Populate and check frequency.
-    void populateFrequency();
+    Frequency parseAndValidateFrequency(const std::string& strFrequency);
 
     //! Validate the business day conventions in the ProhibitedExpiry
     bool validateBdc(const ProhibitedExpiry& pe) const;
@@ -1598,9 +1701,9 @@ public:
 
     //! \name Serialisation
     //@{
-    virtual void fromXML(XMLNode* node);
-    virtual XMLNode* toXML(XMLDocument& doc);
-    virtual void build();
+    virtual void fromXML(XMLNode* node) override;
+    virtual XMLNode* toXML(XMLDocument& doc) override;
+    virtual void build() override;
     //@}
 private:
     string fxConventionID_;
@@ -1659,6 +1762,55 @@ private:
     QuantLib::Period availabilityLag_;
     QuantLib::Currency currency_;
 };
+
+/*! Container for storing bond yield calculation conventions
+   \ingroup marketdata
+*/
+class BondYieldConvention : public Convention {
+public:
+    //! Constructor.
+    BondYieldConvention();
+
+    //! Detailed constructor.
+    BondYieldConvention(const std::string& id,
+			const std::string& compoundingName,
+			const std::string& frequencyName,
+			const std::string& priceTypeName,
+			Real accuracy,
+			Size maxEvaluations,
+			Real guess);
+
+    std::string compoundingName() const { return compoundingName_; }
+    Compounding compounding() const { return compounding_; }
+    std::string frequencyName() const { return frequencyName_; }
+    Frequency frequency() const { return frequency_; }
+    QuantLib::Bond::Price::Type priceType() const { return priceType_; }
+    std::string priceTypeName() const { return priceTypeName_; }
+    QuantLib::Real accuracy() const { return accuracy_; }
+    QuantLib::Size maxEvaluations() const { return maxEvaluations_; }
+    QuantLib::Real guess() const { return guess_; }
+
+    void fromXML(XMLNode* node) override;
+    XMLNode* toXML(XMLDocument& doc) override;
+    void build() override;
+
+private:
+    Compounding compounding_;
+    std::string compoundingName_;
+    Frequency frequency_;
+    std::string frequencyName_;
+    QuantLib::Bond::Price::Type priceType_;
+    std::string priceTypeName_;
+    QuantLib::Real accuracy_;
+    QuantLib::Size maxEvaluations_;
+    QuantLib::Real guess_;
+};
+
+/*! 
+  Flips the first two tokens in a string like CCY1-CCY2-TEXT,
+  only used in the context of CrossCcyBasisSwap convention IDs 
+*/
+std::string flip(const std::string& id, const std::string& sep = "-");
 
 } // namespace data
 } // namespace ore

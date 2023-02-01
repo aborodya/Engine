@@ -22,6 +22,7 @@
 #include <ored/portfolio/fxoption.hpp>
 #include <ored/portfolio/legdata.hpp>
 #include <ored/utilities/log.hpp>
+#include <ored/utilities/marketdata.hpp>
 #include <ql/errors.hpp>
 #include <ql/exercise.hpp>
 #include <ql/instruments/compositeinstrument.hpp>
@@ -47,7 +48,7 @@ void FxOption::build(const boost::shared_ptr<EngineFactory>& engineFactory) {
         // Note: intentionally use null calendar and 0 day fixing lag here because we will ask the FX index for its
         //       value on the expiry date without adjustment.
         index_ = buildFxIndex(fxIndex_, currency_, assetName_, market,
-                              engineFactory->configuration(MarketContext::pricing), "NullCalendar", 0);
+                              engineFactory->configuration(MarketContext::pricing));
 
         // Populate the external index name so that fixings work.
         indexName_ = fxIndex_;
@@ -55,19 +56,11 @@ void FxOption::build(const boost::shared_ptr<EngineFactory>& engineFactory) {
 
     // Build the trade using the shared functionality in the base class.
     VanillaOptionTrade::build(engineFactory);
-
-    // LOG the volatility if the trade expiry date is in the future.
-    if (expiryDate_ > Settings::instance().evaluationDate()) {
-        const string& ccyPairCode = assetName_ + currency_;
-        DLOG("Implied vol for " << tradeType_ << " on " << ccyPairCode << " with expiry " << expiryDate_
-                                << " and strike " << std::setprecision(6) << strike_ << " is "
-                                << market->fxVol(ccyPairCode)->blackVol(expiryDate_, strike_));
-    }
     
     additionalData_["boughtCurrency"] = assetName_; 
     additionalData_["boughtAmount"] = quantity_;
     additionalData_["soldCurrency"] = currency_;
-    additionalData_["soldAmount"] = quantity_ * strike_;
+    additionalData_["soldAmount"] = quantity_ * strike_.value();
 }
 
 void FxOption::fromXML(XMLNode* node) {
@@ -79,7 +72,7 @@ void FxOption::fromXML(XMLNode* node) {
     currency_ = XMLUtils::getChildValue(fxNode, "SoldCurrency", true);
     double boughtAmount = XMLUtils::getChildValueAsDouble(fxNode, "BoughtAmount", true);
     double soldAmount = XMLUtils::getChildValueAsDouble(fxNode, "SoldAmount", true);
-    strike_ = soldAmount / boughtAmount;
+    strike_ = TradeStrike(soldAmount / boughtAmount, currency_);
     quantity_ = boughtAmount;
     fxIndex_ = XMLUtils::getChildValue(fxNode, "FXIndex", false);
     QL_REQUIRE(boughtAmount > 0.0, "positive BoughtAmount required");

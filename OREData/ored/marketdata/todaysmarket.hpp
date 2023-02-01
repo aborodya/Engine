@@ -17,7 +17,7 @@
 */
 
 /*! \file marketdata/todaysmarket.hpp
-    \brief An concerte implementation of the Market class that loads todays market and builds the required curves
+    \brief An concrete implementation of the Market class that loads todays market and builds the required curves
     \ingroup marketdata
 */
 
@@ -36,6 +36,7 @@
 #include <boost/graph/directed_graph.hpp>
 #include <boost/graph/graph_traits.hpp>
 #include <boost/shared_ptr.hpp>
+#include <boost/enable_shared_from_this.hpp>
 
 #include <map>
 
@@ -46,7 +47,7 @@ class ReferenceDataManager;
 class YieldCurve;
 class FXSpot;
 class FXVolCurve;
-class SwaptionVolCurve;
+class GenericYieldVolCurve;
 class YieldVolCurve;
 class CapFloorVolCurve;
 class DefaultCurve;
@@ -64,7 +65,7 @@ class CorrelationCurve;
 // TODO: rename class
 //! Today's Market
 /*!
-  Today's Market differes from MarketImpl in that it actually loads market data
+  Today's Market differs from MarketImpl in that it actually loads market data
   and builds term structure objects.
 
   We label this object Today's Market in contrast to the Simulation Market which can
@@ -87,8 +88,6 @@ public:
         const boost::shared_ptr<Loader>& loader,
         //! Description of curve compositions
         const boost::shared_ptr<CurveConfigurations>& curveConfigs,
-        //! Repository of market conventions
-        const boost::shared_ptr<Conventions>& conventions,
         //! Continue even if build errors occur
         const bool continueOnError = false,
         //! Optional Load Fixings
@@ -100,20 +99,24 @@ public:
         //! If true, preserve link to loader quotes, this might heavily interfere with XVA simulations!
         const bool preserveQuoteLinkage = false,
         //! the ibor fallback config
-        const IborFallbackConfig& iborFallbackConfig = IborFallbackConfig::defaultConfig());
+        const IborFallbackConfig& iborFallbackConfig = IborFallbackConfig::defaultConfig(),
+        //! build calibration info?
+        const bool buildCalibrationInfo = true,
+        //! support pseudo currencies
+        const bool handlePseudoCurrencies = true);
 
     boost::shared_ptr<TodaysMarketCalibrationInfo> calibrationInfo() const { return calibrationInfo_; }
 
 private:
     // MarketImpl interface
-    void require(const MarketObject o, const string& name, const string& configuration) const override;
+    void require(const MarketObject o, const string& name, const string& configuration,
+                 const bool forceBuild = false) const override;
 
     // input parameters
 
     const boost::shared_ptr<TodaysMarketParameters> params_;
     const boost::shared_ptr<Loader> loader_;
     const boost::shared_ptr<const CurveConfigurations> curveConfigs_;
-    const boost::shared_ptr<Conventions> conventions_;
 
     const bool continueOnError_;
     const bool loadFixings_;
@@ -121,6 +124,7 @@ private:
     const bool preserveQuoteLinkage_;
     const boost::shared_ptr<ReferenceDataManager> referenceData_;
     const IborFallbackConfig iborFallbackConfig_;
+    const bool buildCalibrationInfo_;
 
     // initialise market
     void initialise(const Date& asof);
@@ -138,21 +142,15 @@ private:
     // build a single market object
     void buildNode(const std::string& configuration, Node& node) const;
 
-    // fx triangulation initially built using all fx spot quotes from the loader; this is provided to
-    // curve builders that require fx spots (e.g. xccy discount curves)
-    mutable FXTriangulation fxT_;
-
     // calibration results
     boost::shared_ptr<TodaysMarketCalibrationInfo> calibrationInfo_;
 
     // cached market objects, the key of the maps is the curve spec name, except for swap indices, see below
     mutable map<string, boost::shared_ptr<YieldCurve>> requiredYieldCurves_;
-    mutable map<string, boost::shared_ptr<YieldCurve>> requiredDiscountCurves_;
-    mutable map<string, boost::shared_ptr<FXSpot>> requiredFxSpots_;
     mutable map<string, boost::shared_ptr<FXVolCurve>> requiredFxVolCurves_;
-    mutable map<string, boost::shared_ptr<SwaptionVolCurve>> requiredSwaptionVolCurves_;
-    mutable map<string, boost::shared_ptr<YieldVolCurve>> requiredYieldVolCurves_;
-    mutable map<string, boost::shared_ptr<CapFloorVolCurve>> requiredCapFloorVolCurves_;
+    mutable map<string, boost::shared_ptr<GenericYieldVolCurve>> requiredGenericYieldVolCurves_;
+    mutable map<string, std::pair<boost::shared_ptr<CapFloorVolCurve>, std::pair<std::string, QuantLib::Period>>>
+        requiredCapFloorVolCurves_;
     mutable map<string, boost::shared_ptr<DefaultCurve>> requiredDefaultCurves_;
     mutable map<string, boost::shared_ptr<CDSVolCurve>> requiredCDSVolCurves_;
     mutable map<string, boost::shared_ptr<BaseCorrelationCurve>> requiredBaseCorrelationCurves_;

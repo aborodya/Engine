@@ -43,7 +43,7 @@ namespace {
 
 class TestMarket : public MarketImpl {
 public:
-    TestMarket() {
+    TestMarket() : MarketImpl(false) {
         asof_ = Date(3, Feb, 2016);
 
         // build discount
@@ -51,7 +51,9 @@ public:
         yieldCurves_[make_tuple(Market::defaultConfiguration, YieldCurveType::Discount, "USD")] = flatRateYts(0.075);
 
         // add fx rates
-        fxSpots_[Market::defaultConfiguration].addQuote("EURUSD", Handle<Quote>(boost::make_shared<SimpleQuote>(1.2)));
+        std::map<std::string, QuantLib::Handle<QuantLib::Quote>> quotes;
+        quotes["EURUSD"] = Handle<Quote>(boost::make_shared<SimpleQuote>(1.2));
+        fx_ = boost::make_shared<FXTriangulation>(quotes);
 
         // build fx vols
         fxVols_[make_pair(Market::defaultConfiguration, "EURUSD")] = flatRateFxv(0.10);
@@ -76,11 +78,11 @@ public:
 
 private:
     Handle<YieldTermStructure> flatRateYts(Real forward) {
-        boost::shared_ptr<YieldTermStructure> yts(new FlatForward(0, NullCalendar(), forward, ActualActual()));
+        boost::shared_ptr<YieldTermStructure> yts(new FlatForward(0, NullCalendar(), forward, ActualActual(ActualActual::ISDA)));
         return Handle<YieldTermStructure>(yts);
     }
     Handle<BlackVolTermStructure> flatRateFxv(Volatility forward) {
-        boost::shared_ptr<BlackVolTermStructure> fxv(new BlackConstantVol(0, NullCalendar(), forward, ActualActual()));
+        boost::shared_ptr<BlackVolTermStructure> fxv(new BlackConstantVol(0, NullCalendar(), forward, ActualActual(ActualActual::ISDA)));
         return Handle<BlackVolTermStructure>(fxv);
     }
 };
@@ -113,10 +115,11 @@ BOOST_AUTO_TEST_CASE(testEquityTradePrices) {
     OptionData putDataPremium("Short", "Put", "European", true, vector<string>(1, exp_str), "Cash", "",
                               PremiumData{1.0, "EUR", expiry});
     Envelope env("CP1");
-    EquityOption eqCall(env, callData, EquityUnderlying("zzzCorp"), "EUR", 95.0, 1.0);
-    EquityOption eqCallPremium(env, callDataPremium, EquityUnderlying("zzzCorp"), "EUR", 95.0, 1.0);
-    EquityOption eqPut(env, putData, EquityUnderlying("zzzCorp"), "EUR", 95.0, 1.0);
-    EquityOption eqPutPremium(env, putDataPremium, EquityUnderlying("zzzCorp"), "EUR", 95.0, 1.0);
+    TradeStrike tradeStrike(95.0, "EUR");
+    EquityOption eqCall(env, callData, EquityUnderlying("zzzCorp"), "EUR", 1.0, tradeStrike);
+    EquityOption eqCallPremium(env, callDataPremium, EquityUnderlying("zzzCorp"), "EUR", 1.0, tradeStrike);
+    EquityOption eqPut(env, putData, EquityUnderlying("zzzCorp"), "EUR", 1.0, tradeStrike);
+    EquityOption eqPutPremium(env, putDataPremium, EquityUnderlying("zzzCorp"), "EUR", 1.0, tradeStrike);
     ore::data::EquityForward eqFwd(env, "Long", EquityUnderlying("zzzCorp"), "EUR", 1.0, exp_str, 95.0);
 
     Real expectedNPV_Put = -2.4648;           // negative for sold option
@@ -179,15 +182,17 @@ BOOST_AUTO_TEST_CASE(testEquityFutureOptionPrices) {
     OptionData putDataPremium("Short", "Put", "European", true, vector<string>(1, exp_str), "Physical", "",
                               PremiumData(1.0, "EUR", expiry));
     Envelope env("CP1");
-    EquityFutureOption eqFwdCall(env, callData, "EUR", 1.0, underlying, 95.0, expiry);
-    EquityFutureOption eqFwdCallPremium(env, callDataPremium, "EUR", 1.0, underlying, 95.0, expiry);
-    EquityFutureOption eqFwdPut(env, putData, "EUR", 1.0, underlying, 95.0, expiry);
-    EquityFutureOption eqFwdPutPremium(env, putDataPremium, "EUR", 1.0, underlying, 95.0, expiry);
+    TradeStrike strike(TradeStrike::Type::Price, 95.0);
+    EquityFutureOption eqFwdCall(env, callData, "EUR", 1.0, underlying, strike, expiry);
+    EquityFutureOption eqFwdCallPremium(env, callDataPremium, "EUR", 1.0, underlying, strike, expiry);
+    EquityFutureOption eqFwdPut(env, putData, "EUR", 1.0, underlying, strike, expiry);
+    EquityFutureOption eqFwdPutPremium(env, putDataPremium, "EUR", 1.0, underlying, strike, expiry);
 
-    EquityOption eqCall(env, callData, EquityUnderlying("zzzCorp"), "EUR", 95.0, 1.0);
-    EquityOption eqCallPremium(env, callDataPremium, EquityUnderlying("zzzCorp"), "EUR", 95.0, 1.0);
-    EquityOption eqPut(env, putData, EquityUnderlying("zzzCorp"), "EUR", 95.0, 1.0);
-    EquityOption eqPutPremium(env, putDataPremium, EquityUnderlying("zzzCorp"), "EUR", 95.0, 1.0);
+    TradeStrike tradeStrike(95.0, "EUR");
+    EquityOption eqCall(env, callData, EquityUnderlying("zzzCorp"), "EUR", 1.0, tradeStrike);
+    EquityOption eqCallPremium(env, callDataPremium, EquityUnderlying("zzzCorp"), "EUR", 1.0, tradeStrike);
+    EquityOption eqPut(env, putData, EquityUnderlying("zzzCorp"), "EUR", 1.0, tradeStrike);
+    EquityOption eqPutPremium(env, putDataPremium, EquityUnderlying("zzzCorp"), "EUR", 1.0, tradeStrike);
     
     // Build and price
     boost::shared_ptr<EngineData> engineData = boost::make_shared<EngineData>();
@@ -238,7 +243,6 @@ BOOST_AUTO_TEST_CASE(testEquityFutureParity) {
     string f_exp_str = o_2.str();
     
     boost::shared_ptr<ore::data::Underlying> underlying = boost::make_shared<ore::data::EquityUnderlying>("zzzCorp");
-    double strike = 95.0;
     double spot = 100;
     // build EquityOption - expiry in 1 Year
     OptionData callData("Long", "Call", "European", true, vector<string>(1, exp_str));
@@ -248,6 +252,7 @@ BOOST_AUTO_TEST_CASE(testEquityFutureParity) {
     OptionData putDataPremium("Long", "Put", "European", true, vector<string>(1, exp_str), "Physical", "",
                               PremiumData(1.0, "EUR", expiry));
     Envelope env("CP1");
+    TradeStrike strike(TradeStrike::Type::Price, 95.0);
     EquityFutureOption eqCall(env, callData, "EUR", 1.0, underlying, strike, futureExpiry);
     EquityFutureOption eqCallPremium(env, callDataPremium, "EUR", 1.0, underlying, strike, futureExpiry);
     EquityFutureOption eqPut(env, putData, "EUR", 1.0, underlying, strike, futureExpiry);
@@ -286,8 +291,8 @@ BOOST_AUTO_TEST_CASE(testEquityFutureParity) {
 
     Real npv_fwd = spot * dividend->discount(futureExpiry) / forecast->discount(futureExpiry);;
 
-    Real put_sum = npv_put + ( npv_fwd - strike ) * discountCurve->discount(expiry);
-    Real put_premium_sum = npv_put_premium + ( npv_fwd - strike ) * discountCurve->discount(expiry);
+    Real put_sum = npv_put + ( npv_fwd - strike.value() ) * discountCurve->discount(expiry);
+    Real put_premium_sum = npv_put_premium + ( npv_fwd - strike.value() ) * discountCurve->discount(expiry);
 
     BOOST_CHECK_CLOSE(npv_call, put_sum, 0.001);         // put-call parity check
     BOOST_CHECK_CLOSE(npv_call_premium, put_premium_sum, 0.001); // put-call parity check
