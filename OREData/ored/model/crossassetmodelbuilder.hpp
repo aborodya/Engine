@@ -30,14 +30,14 @@
 #include <qle/models/crossassetmodel.hpp>
 #include <qle/models/infdkparametrization.hpp>
 #include <qle/models/infjyparameterization.hpp>
+#include <qle/models/marketobserver.hpp>
+#include <qle/models/modelbuilder.hpp>
 
 #include <ored/marketdata/market.hpp>
 #include <ored/model/crossassetmodeldata.hpp>
 #include <ored/model/inflation/infdkdata.hpp>
 #include <ored/model/inflation/infjydata.hpp>
 #include <ored/model/inflation/infjybuilder.hpp>
-#include <ored/model/marketobserver.hpp>
-#include <ored/model/modelbuilder.hpp>
 #include <ored/utilities/xmlutils.hpp>
 
 namespace ore {
@@ -52,7 +52,7 @@ using namespace QuantLib;
 
   \ingroup models
  */
-class CrossAssetModelBuilder : public ModelBuilder {
+class CrossAssetModelBuilder : public QuantExt::ModelBuilder {
 public:
     /*! The market for the calibration can possibly be different from the final market
       defining the curves attached to the marginal LGM models; for example domestic OIS
@@ -82,7 +82,9 @@ public:
         //! reference calibration grid
         const std::string& referenceCalibrationGrid_ = "",
 	//! salvaging algorithm to apply to correlation matrix
-	const SalvagingAlgorithm::Type salvaging = SalvagingAlgorithm::None);
+	const SalvagingAlgorithm::Type salvaging = SalvagingAlgorithm::None,
+        //! id of the builder
+        const std::string& id = "unknown");
 
     //! Default destructor
     ~CrossAssetModelBuilder() {}
@@ -127,7 +129,7 @@ private:
     mutable std::vector<Real> comOptionCalibrationErrors_;
 
     //! Store model builders for each asset under each asset type.
-    mutable std::map<QuantExt::CrossAssetModel::AssetType, std::map<QuantLib::Size, boost::shared_ptr<ModelBuilder>>>
+    mutable std::map<QuantExt::CrossAssetModel::AssetType, std::map<QuantLib::Size, boost::shared_ptr<QuantExt::ModelBuilder>>>
         subBuilders_;
 
     const boost::shared_ptr<ore::data::Market> market_;
@@ -138,6 +140,7 @@ private:
     const bool continueOnError_;
     const std::string referenceCalibrationGrid_;
     const SalvagingAlgorithm::Type salvaging_;
+    const std::string id_;
 
     // TODO: Move CalibrationErrorType, optimizer and end criteria parameters to data
     boost::shared_ptr<OptimizationMethod> optimizationMethod_;
@@ -147,7 +150,7 @@ private:
     bool forceCalibration_ = false;
 
     // market observer
-    boost::shared_ptr<MarketObserver> marketObserver_;
+    boost::shared_ptr<QuantExt::MarketObserver> marketObserver_;
 
     // resulting model
     mutable RelinkableHandle<QuantExt::CrossAssetModel> model_;

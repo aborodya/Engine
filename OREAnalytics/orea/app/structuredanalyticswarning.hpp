@@ -31,10 +31,14 @@ namespace analytics {
 class StructuredAnalyticsWarningMessage : public ore::data::StructuredMessage {
 public:
     StructuredAnalyticsWarningMessage(const std::string& analyticType, const std::string& warningType,
-                                      const std::string& warningWhat)
+                                      const std::string& warningWhat,
+                                      const std::map<std::string, std::string>& subFields = {})
         : StructuredMessage(
               Category::Warning, Group::Analytics, warningWhat,
-              std::map<std::string, std::string>({{"warningType", warningType}, {"analyticType", analyticType}})) {}
+              std::map<std::string, std::string>({{"warningType", warningType}, {"analyticType", analyticType}})) {
+
+        addSubFields(subFields);
+    }
 };
 
 } // namespace analytics

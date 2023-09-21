@@ -19,6 +19,7 @@ cashflow.cpp
 commodityforward.cpp
 commodityschwartzmodel.cpp
 commodityspreadoption.cpp
+computeenvironment.cpp
 correlationtermstructure.cpp
 cpicapfloor.cpp
 crcirpp.cpp
@@ -31,6 +32,7 @@ crossccyfixfloatswap.cpp
 crossccyfixfloatswaphelper.cpp
 currency.cpp
 dategeneration.cpp
+defaultableequityjumpdiffusionmodel.cpp
 deltagammavar.cpp
 deposit.cpp
 discountcurve.cpp
@@ -41,6 +43,7 @@ dynamicblackvoltermstructure.cpp
 dynamicswaptionvolmatrix.cpp
 equityforwardcurvestripper.cpp
 exactbachelierimpliedvolatility.cpp
+fddefaultableequityjumppdiffusionconvertiblebondengine.cpp
 fillemptymatrix.cpp
 forwardbond.cpp
 fxvolsmile.cpp
@@ -63,6 +66,7 @@ pricetermstructureadapter.cpp
 qle_calendars.cpp
 quadraticinterpolation.cpp
 randomvariable.cpp
+randomvariablelsmbasissystem.cpp
 ratehelpers.cpp
 stabilisedglls.cpp
 staticallycorrectedyieldtermstructure.cpp

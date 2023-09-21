@@ -25,8 +25,6 @@
 #define quantext_stripped_optionlet_adapter_h
 
 #include <algorithm>
-#include <boost/bind.hpp>
-#include <boost/lambda/lambda.hpp>
 #include <ql/math/interpolation.hpp>
 #include <ql/termstructures/interpolatedcurve.hpp>
 #include <ql/termstructures/volatility/flatsmilesection.hpp>
@@ -252,9 +250,6 @@ inline boost::shared_ptr<QuantLib::SmileSection>
 StrippedOptionletAdapter<TimeInterpolator, SmileInterpolator>::smileSectionImpl(QuantLib::Time optionTime) const {
 
     // Some localised typedefs and using declarations to make the code more readable
-    using boost::lambda::_1;
-    using boost::lambda::_2;
-    using QuantLib::close;
     using QuantLib::Null;
     using QuantLib::Rate;
     using QuantLib::Real;
@@ -275,14 +270,10 @@ StrippedOptionletAdapter<TimeInterpolator, SmileInterpolator>::smileSectionImpl(
                                                               volatilityType(), displacement());
     }
 
-    // This method can only return a valid value if the strikes are the same for all optionlet dates
+    /* we choose the strikes from the first fixing time for interpolation
+       - if only fixed strikes are used, they are the same for all times anyway
+       - if atm is used in addition, the first time's strikes are a superset of all others, i.e. the densest */
     const vector<Rate>& strikes = optionletBase_->optionletStrikes(0);
-    for (Size i = 1; i < optionletBase_->optionletMaturities(); ++i) {
-        const vector<Rate>& compStrikes = optionletBase_->optionletStrikes(i);
-        QL_REQUIRE(equal(strikes.begin(), strikes.end(), compStrikes.begin(), boost::bind(close, _1, _2)),
-                   "The strikes at the " << ordinal(i)
-                                         << " optionlet date do not equal those at the first optionlet date");
-    }
 
     // Store standard deviation at each strike
     vector<Real> stdDevs;

@@ -30,8 +30,8 @@
 #include <qle/models/lgm.hpp>
 
 #include <ored/model/irlgmdata.hpp>
-#include <ored/model/marketobserver.hpp>
-#include <ored/model/modelbuilder.hpp>
+#include <qle/models/marketobserver.hpp>
+#include <qle/models/modelbuilder.hpp>
 
 namespace ore {
 namespace data {
@@ -45,7 +45,7 @@ using namespace QuantLib;
 
   \ingroup models
  */
-class LgmBuilder : public ModelBuilder {
+class LgmBuilder : public QuantExt::ModelBuilder {
 public:
     /*! The configuration should refer to the calibration configuration here,
       alternative discounting curves are then usually set in the pricing
@@ -53,7 +53,7 @@ public:
     LgmBuilder(const boost::shared_ptr<ore::data::Market>& market, const boost::shared_ptr<IrLgmData>& data,
                const std::string& configuration = Market::defaultConfiguration, Real bootstrapTolerance = 0.001,
                const bool continueOnError = false, const std::string& referenceCalibrationGrid = "",
-               const bool setCalibrationInfo = false);
+               const bool setCalibrationInfo = false, const std::string& id = "unknwon");
     //! Return calibration error
     Real error() const;
 
@@ -93,6 +93,7 @@ private:
     const bool continueOnError_;
     const std::string referenceCalibrationGrid_;
     const bool setCalibrationInfo_;
+    const std::string id_;
     bool requiresCalibration_ = false;
     std::string currency_; // derived from data->qualifier()
 
@@ -126,7 +127,7 @@ private:
     bool forceCalibration_ = false;
 
     // LGM Observer
-    boost::shared_ptr<MarketObserver> marketObserver_;
+    boost::shared_ptr<QuantExt::MarketObserver> marketObserver_;
 };
 } // namespace data
 } // namespace ore

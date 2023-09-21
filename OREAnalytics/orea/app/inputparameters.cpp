@@ -22,6 +22,7 @@
 #include <orea/engine/observationmode.hpp>
 #include <orea/engine/sensitivityfilestream.hpp>
 #include <orea/scenario/shiftscenariogenerator.hpp>
+#include <orea/simm/simmbucketmapperbase.hpp>
 #include <ored/ored.hpp>
 #include <ored/utilities/calendaradjustmentconfig.hpp>
 #include <ored/utilities/currencyconfig.hpp>
@@ -79,13 +80,13 @@ void InputParameters::setConventionsFromFile(const std::string& fileName) {
 void InputParameters::setCurveConfigs(const std::string& xml) {
     auto curveConfig = boost::make_shared<CurveConfigurations>();
     curveConfig->fromXMLString(xml);
-    curveConfigs_.push_back(curveConfig);
+    curveConfigs_.add(curveConfig);
 }
 
 void InputParameters::setCurveConfigsFromFile(const std::string& fileName) {
     auto curveConfig = boost::make_shared<CurveConfigurations>();
     curveConfig->fromFile(fileName);
-    curveConfigs_.push_back(curveConfig);
+    curveConfigs_.add(curveConfig);
 }
 
 void InputParameters::setIborFallbackConfig(const std::string& xml) {
@@ -292,8 +293,27 @@ void InputParameters::setCovarianceDataFromFile(const std::string& fileName) {
     LOG("Read " << covarianceData_.size() << " valid covariance data lines from " << fileName);
 }
 
+void InputParameters::setCovarianceData(ore::data::CSVReader& reader) {
+    std::vector<std::string> dummy;
+    while (reader.next()) { 
+        covarianceData_[std::make_pair(*parseRiskFactorKey(reader.get(0), dummy),
+                                       *parseRiskFactorKey(reader.get(1), dummy))] =
+            ore::data::parseReal(reader.get(2));
+    }
+    LOG("Read " << covarianceData_.size() << " valid covariance data lines");
+}
+
+void InputParameters::setCovarianceDataFromBuffer(const std::string& xml) {
+    ore::data::CSVBufferReader reader(xml, false);
+    setCovarianceData(reader);
+}
+
 void InputParameters::setSensitivityStreamFromFile(const std::string& fileName) {
     sensitivityStream_ = boost::make_shared<SensitivityFileStream>(fileName);
+}
+
+void InputParameters::setSensitivityStreamFromBuffer(const std::string& buffer) {
+    sensitivityStream_ = boost::make_shared<SensitivityBufferStream>(buffer);
 }
 
 void InputParameters::setAmcTradeTypes(const std::string& s) {
@@ -366,6 +386,57 @@ void InputParameters::setCreditSimulationParametersFromFile(const std::string& f
     creditSimulationParameters_->fromFile(fileName);
 }
 
+void InputParameters::setCreditSimulationParametersFromBuffer(const std::string& xml) {
+    creditSimulationParameters_ = boost::make_shared<CreditSimulationParameters>();
+    creditSimulationParameters_->fromXMLString(xml);
+} 
+
+void InputParameters::setCrifLoader() {
+    boost::shared_ptr<SimmConfiguration> configuration =
+        buildSimmConfiguration(simmVersion_, boost::make_shared<SimmBucketMapperBase>(), mporDays());
+    bool updateMappings = true;
+    bool aggregateTrades = false;
+    crifLoader_ =
+        boost::make_shared<CrifLoader>(configuration, CrifRecord::additionalHeaders, updateMappings, aggregateTrades);
+}
+    
+void InputParameters::setCrifFromFile(const std::string& fileName, char eol, char delim, char quoteChar, char escapeChar) {
+    if (!crifLoader_)
+        setCrifLoader();
+    crifLoader_->loadFromFile(fileName, eol, delim, quoteChar, escapeChar);
+}
+
+void InputParameters::setCrifFromBuffer(const std::string& csvBuffer, char eol, char delim, char quoteChar, char escapeChar) {
+    if (!crifLoader_)
+        setCrifLoader();
+    crifLoader_->loadFromString(csvBuffer, eol, delim, quoteChar, escapeChar);
+}
+
+void InputParameters::setSimmNameMapper(const std::string& xml) {
+    simmNameMapper_ = boost::make_shared<SimmBasicNameMapper>();
+    simmNameMapper_->fromXMLString(xml);    
+}
+    
+void InputParameters::setSimmNameMapperFromFile(const std::string& fileName) {
+    simmNameMapper_ = boost::make_shared<SimmBasicNameMapper>();
+    simmNameMapper_->fromFile(fileName);    
+}
+
+void InputParameters::setSimmBucketMapper(const std::string& xml) {
+    QL_REQUIRE(simmVersion_ != "", "SIMM version not set");
+    QL_REQUIRE(simmBucketMapper_ != nullptr, "SIMMbucket mapper not set");
+    //boost::shared_ptr<SimmBucketMapperBase> sbm = boost::dynamic_pointer_cast<SimmBucketMapperBase>();
+    boost::shared_ptr<SimmBucketMapperBase> sbm = boost::dynamic_pointer_cast<SimmBucketMapperBase>(simmBucketMapper_);
+    sbm->fromXMLString(xml);
+}
+    
+void InputParameters::setSimmBucketMapperFromFile(const std::string& fileName) {
+    QL_REQUIRE(simmVersion_ != "", "SIMM version not set");
+    QL_REQUIRE(simmBucketMapper_ != nullptr, "SIMMbucket mapper not set");
+    boost::shared_ptr<SimmBucketMapperBase> sbm = boost::dynamic_pointer_cast<SimmBucketMapperBase>(simmBucketMapper_);
+    sbm->fromFile(fileName);    
+}
+
 void InputParameters::setAnalytics(const std::string& s) {
     // parse to set<string>
     auto v = parseListOfValues(s);
@@ -397,7 +468,10 @@ OutputParameters::OutputParameters(const boost::shared_ptr<Parameters>& params) 
     sensitivityScenarioFileName_ = params->get("sensitivity", "scenarioOutputFile", false);    
     stressTestFileName_ = params->get("stress", "scenarioOutputFile", false);    
     varFileName_ = params->get("parametricVar", "outputFile", false);
-    
+    parConversionOutputFileName_ = params->get("zeroToParSensiConversion", "outputFile", false);
+    parConversionJacobiFileName_ = params->get("zeroToParSensiConversion", "jacobiOutputFile", false);
+    parConversionJacobiInverseFileName_ = params->get("zeroToParSensiConversion", "jacobiInverseOutputFile", false);  
+
     // map internal report name to output file name
     fileNameMap_["npv"] = npvOutputFileName_;
     fileNameMap_["cashflow"] = cashflowOutputFileName_;
@@ -410,11 +484,14 @@ OutputParameters::OutputParameters(const boost::shared_ptr<Parameters>& params) 
     fileNameMap_["dim_evolution"] = dimEvolutionFileName_;
     fileNameMap_["sensitivity"] = sensitivityFileName_;
     fileNameMap_["sensitivity_scenario"] = sensitivityScenarioFileName_;
-    fileNameMap_["parSensitivity"] = parSensitivityFileName_;
+    fileNameMap_["par_sensitivity"] = parSensitivityFileName_;
     fileNameMap_["jacobi"] = jacobiFileName_;
     fileNameMap_["jacobi_inverse"] = jacobiInverseFileName_;
     fileNameMap_["stress"] = stressTestFileName_;
     fileNameMap_["var"] = varFileName_;
+    fileNameMap_["parConversionSensitivity"] = parConversionOutputFileName_;
+    fileNameMap_["parConversionJacobi"] = parConversionJacobiFileName_;
+    fileNameMap_["parConversionJacobi_inverse"] = parConversionJacobiInverseFileName_;
     
     vector<Size> dimOutputGridPoints;
     tmp = params->get("xva", "dimOutputGridPoints", false);
@@ -446,5 +523,47 @@ std::string OutputParameters::outputFileName(const std::string& internalName, co
         return it->second; // contains suffix
 }
 
+
+void InputParameters::setParConversionSimMarketParams(const std::string& xml) {
+    parConversionSimMarketParams_ = boost::make_shared<ScenarioSimMarketParameters>();
+    parConversionSimMarketParams_->fromXMLString(xml);
+}
+
+void InputParameters::setParConversionSimMarketParamsFromFile(const std::string& fileName) {
+    parConversionSimMarketParams_ = boost::make_shared<ScenarioSimMarketParameters>();
+    parConversionSimMarketParams_->fromFile(fileName);
+}
+
+void InputParameters::setParConversionScenarioData(const std::string& xml) {
+    parConversionScenarioData_ = boost::make_shared<SensitivityScenarioData>();
+    parConversionScenarioData_->fromXMLString(xml);
+}
+
+void InputParameters::setParConversionScenarioDataFromFile(const std::string& fileName) {
+    parConversionScenarioData_ = boost::make_shared<SensitivityScenarioData>();
+    parConversionScenarioData_->fromFile(fileName);
+}
+void InputParameters::setParConversionPricingEngine(const std::string& xml) {
+    parConversionPricingEngine_ = boost::make_shared<EngineData>();
+    parConversionPricingEngine_->fromXMLString(xml);
+}
+
+void InputParameters::setParConversionPricingEngineFromFile(const std::string& fileName) {
+    parConversionPricingEngine_ = boost::make_shared<EngineData>();
+    parConversionPricingEngine_->fromFile(fileName);
+}
+
+Date InputParameters::mporDate() {
+    if (mporDate_ == Date()) {
+        QL_REQUIRE(asof() != Date(), "Asof date is required for mpor date");
+        QL_REQUIRE(!mporCalendar().empty(), "MporCalendar or BaseCurrency is required for mpor date");
+        QL_REQUIRE(mporDays() != Null<Size>(), "mporDays is required for mpor date");
+
+        int effectiveMporDays = mporForward() ? mporDays() : -static_cast<int>(mporDays());
+
+        mporDate_ = mporCalendar().advance(asof(), effectiveMporDays, QuantExt::Days);
+    }
+    return mporDate_;
+}
 } // namespace analytics
 } // namespace ore

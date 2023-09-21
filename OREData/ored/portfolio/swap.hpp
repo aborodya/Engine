@@ -38,6 +38,8 @@ public:
     //! Default constructor
     Swap(const string swapType = "Swap") : Trade(swapType) {}
 
+    Swap(const Envelope& env, const string swapType = "Swap") : Trade(swapType, env) {}
+
     //! Constructor with vector of LegData
     Swap(const Envelope& env, const vector<LegData>& legData, const string swapType = "Swap",
          const std::string settlement = "Physical")
@@ -75,15 +77,17 @@ public:
 
 protected:
     virtual boost::shared_ptr<LegData> createLegData() const;
+
     vector<LegData> legData_;
     string settlement_;
     bool isXCCY_;
-    std::map<std::string,Size> legTypeCount_;
-    
+
 private:
     bool isResetting_;
     Size notionalTakenFromLeg_;
 };
+
+std::string isdaSubProductSwap(const std::string& tradeId, const vector<LegData>& legData);
 
 } // namespace data
 } // namespace ore

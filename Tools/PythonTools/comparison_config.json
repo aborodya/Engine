@@ -226,6 +226,9 @@
           "IMModel",
           "TradeType"
         ],
+        "optional_cols": [
+          "BaseCurrency"
+        ],
         "optional_keys": [
           "collect_regulations",
           "post_regulations"
@@ -256,6 +259,7 @@
           },
           {
             "names": [
+              "BaseCurrency",
               "IMModel",
               "TradeType"
             ],
@@ -426,6 +430,26 @@
           }
         ]
       },
+      "frtbcrif.csv": {
+        "keys": [
+            "RiskType",
+            "Qualifier",
+            "Bucket",
+            "Label1",
+            "Label2",
+            "AmountCurrency"
+            
+        ],
+        "column_settings": [
+          {
+            "names": [
+                "AmountUSD"
+            ],
+            "abs_tol": null,
+            "rel_tol": 1e-12
+          }
+        ]
+      },
       "frtb.csv": {
         "keys": [
             "CorrelationScenario",
@@ -526,7 +550,10 @@
               "Exceptions",
               "GreenUpTo",
               "AmberUpTo",
-              "Zone"
+              "Zone",
+              "Currency",
+              "SIMMResultCurrency",
+              "SIMMCalculationCurrency"
             ],
             "abs_tol": null,
             "rel_tol": null
@@ -598,6 +625,7 @@
           "ProductClass",
           "RiskClass",
           "MarginType",
+          "Bucket",
           "SimmSide"
         ],
         "rename_cols": {
@@ -605,12 +633,14 @@
           "product_class": "ProductClass",
           "riskClass": "RiskClass",
           "marginType": "MarginType",
+          "bucket": "Bucket",
           "initialMargin": "InitialMargin"
         },
         "use_cols": [
           "InitialMargin",
           "Regulation",
-          "Currency"
+          "Currency",
+          "CalculationCurrency"
         ],
         "optional_cols": [
           "InitialMargin(Report)",
@@ -629,6 +659,7 @@
             "names": [
               "Regulation",
               "Currency",
+              "CalculationCurrency",
               "ReportCurrency"
             ],
             "abs_tol": null,
@@ -673,11 +704,15 @@
         "keys": [
           "TradeId",
           "Portfolio",
-          "ProductClass"
+          "ProductClass",
+          "CollectRegulations",
+          "PostRegulations"
         ],
         "column_settings": [
           {
             "names": [
+              "Maturity",
+              "Multiplier",
               "Notional",
               "PV",
               "Notional(Base)",
@@ -686,6 +721,17 @@
             ],
             "abs_tol": 0.1,
             "rel_tol": 1e-12
+          },
+          {
+            "names": [
+              "EndDate",
+              "Label",
+              "NotionalCurrency",
+              "PVCurrency",
+              "BaseCurrency"
+            ],
+            "abs_tol": null,
+            "rel_tol": null
           }
         ]
       },

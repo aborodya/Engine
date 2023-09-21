@@ -161,15 +161,15 @@ BOOST_AUTO_TEST_CASE(testT0Pricing) {
     Handle<YieldTermStructure> discountingTS =
         Handle<YieldTermStructure>(boost::make_shared<FlatForward>(0, NullCalendar(), 0.05, dc));
     boost::shared_ptr<Index> eqIndex =
-        boost::make_shared<EquityIndex>(equityName, cal, EURCurrency(), equityPrice, yieldTS, dividendTS);
+        boost::make_shared<EquityIndex2>(equityName, cal, EURCurrency(), equityPrice, yieldTS, dividendTS);
 
     boost::shared_ptr<GeneralizedBlackScholesProcess> stochProcess(
         new BlackScholesMertonProcess(equityPrice, dividendTS, discountingTS, volTS));
 
     boost::shared_ptr<PricingEngine> engine(new GeneralisedReplicatingVarianceSwapEngine(
-        eqIndex, stochProcess, discountingTS, GeneralisedReplicatingVarianceSwapEngine::Settings()));
+        eqIndex, stochProcess, discountingTS, GeneralisedReplicatingVarianceSwapEngine::VarSwapSettings()));
 
-    QuantExt::VarianceSwap varianceSwap(Position::Long, varianceStrike, varianceNotional, today, exDate, cal, false);
+    QuantExt::VarianceSwap2 varianceSwap(Position::Long, varianceStrike, varianceNotional, today, exDate, cal, false);
     varianceSwap.setPricingEngine(engine);
 
     Real result = varianceSwap.variance();
@@ -229,15 +229,15 @@ BOOST_AUTO_TEST_CASE(testSeasonedSwapPricing) {
     Handle<YieldTermStructure> discountingTS =
         Handle<YieldTermStructure>(boost::make_shared<FlatForward>(0, cal, 0.05, dc));
     boost::shared_ptr<Index> eqIndex =
-        boost::make_shared<EquityIndex>(equityName, cal, EURCurrency(), equityPrice, yieldTS, dividendTS);
+        boost::make_shared<EquityIndex2>(equityName, cal, EURCurrency(), equityPrice, yieldTS, dividendTS);
 
     boost::shared_ptr<GeneralizedBlackScholesProcess> stochProcess(
         new BlackScholesMertonProcess(equityPrice, dividendTS, yieldTS, volTS));
 
     boost::shared_ptr<PricingEngine> engine(new GeneralisedReplicatingVarianceSwapEngine(
-        eqIndex, stochProcess, discountingTS, GeneralisedReplicatingVarianceSwapEngine::Settings()));
+        eqIndex, stochProcess, discountingTS, GeneralisedReplicatingVarianceSwapEngine::VarSwapSettings()));
 
-    QuantExt::VarianceSwap varianceSwap(Position::Long, varianceStrike, varianceNotional, startDate, exDate, cal,
+    QuantExt::VarianceSwap2 varianceSwap(Position::Long, varianceStrike, varianceNotional, startDate, exDate, cal,
                                         false);
     varianceSwap.setPricingEngine(engine);
 
@@ -291,15 +291,15 @@ BOOST_AUTO_TEST_CASE(testForwardStartPricing) {
     Handle<YieldTermStructure> discountingTS =
         Handle<YieldTermStructure>(boost::make_shared<FlatForward>(0, NullCalendar(), 0.05, dc));
     boost::shared_ptr<Index> eqIndex =
-        boost::make_shared<EquityIndex>(equityName, cal, EURCurrency(), equityPrice, yieldTS, dividendTS);
+        boost::make_shared<EquityIndex2>(equityName, cal, EURCurrency(), equityPrice, yieldTS, dividendTS);
 
     boost::shared_ptr<GeneralizedBlackScholesProcess> stochProcess(
         new BlackScholesMertonProcess(equityPrice, dividendTS, discountingTS, volTS));
 
     boost::shared_ptr<PricingEngine> engine(new GeneralisedReplicatingVarianceSwapEngine(
-        eqIndex, stochProcess, discountingTS, GeneralisedReplicatingVarianceSwapEngine::Settings()));
+        eqIndex, stochProcess, discountingTS, GeneralisedReplicatingVarianceSwapEngine::VarSwapSettings()));
 
-    QuantExt::VarianceSwap varianceSwap(Position::Long, varianceStrike, varianceNotional, today + 7, exDate, cal,
+    QuantExt::VarianceSwap2 varianceSwap(Position::Long, varianceStrike, varianceNotional, today + 7, exDate, cal,
                                         false);
     varianceSwap.setPricingEngine(engine);
 

@@ -452,54 +452,18 @@ void SyntheticCDO::build(const boost::shared_ptr<EngineFactory>& engineFactory) 
     Handle<DefaultProbabilityTermStructure> baseCurve;
     vector<Time> baseCurveTimes;
     vector<Real> expLoss;
+
+    if (cdoEngineBuilder->optimizedSensitivityCalculation()) {
+        dpts = buildPerformanceOptimizedDefaultCurves(dpts);
+    }
+
     for (Size i = 0; i < creditCurves.size(); ++i) {
         const string& cc = creditCurves[i];
         DefaultProbKey key = NorthAmericaCorpDefaultKey(ccy, SeniorSec, Period(), 1.0);
         Real recoveryRate = recoveryRates[i];
-        auto targetCurve = dpts[i];
-
-        expLoss.push_back((1 - recoveryRate) * targetCurve->defaultProbability(maturity_, true) * basketNotionals[i]);
-
-        if (!cdoEngineBuilder->optimizedSensitivityCalculation()) {
-            clientCurve = targetCurve;
-        } else {
-            // Disable sensitivites for the all but the first default probability curve
-            // Shift all other curves along with the first curve, reduce the numbers of calculations
-            // For all but the first curve use a spreaded curve, with the first curve as reference and
-            // the inital spread between the curve and the first curve, keep the spread constant
-            // in case of a spreaded curve we need to use the underlying reference curve to retrieve the
-            // correct pillar times, otherwise the interpolation grid is to coarse and we wouldnt match
-            // today's market prices
-            
-            // Extract the times of the target curve
-            vector<Time> targetCurveTimes = extractTimeGridDefaultCurve(targetCurve);
-            // Sort times we need to interpolate an all pillars of the base and target curve
-            std::sort(targetCurveTimes.begin(), targetCurveTimes.end());
-            // Use the first curve as basis curve and update times
-            if (i == 0) {
-                baseCurve = targetCurve;
-                clientCurve = baseCurve;
-                baseCurveTimes = targetCurveTimes;
-            } else {
-                std::vector<Time> times;
-                std::set_union(baseCurveTimes.begin(), baseCurveTimes.end(), targetCurveTimes.begin(),
-                               targetCurveTimes.end(), std::back_inserter(times));
-
-                vector<Handle<Quote>> spreads(times.size());
-                std::transform(times.begin(), times.end(), spreads.begin(), [&baseCurve, &targetCurve](Time t) {
-                    Probability spread = targetCurve->survivalProbability(t, true) / baseCurve->survivalProbability(t, true);
-                    return Handle<Quote>(boost::make_shared<SimpleQuote>(spread));
-                });
-                clientCurve = Handle<DefaultProbabilityTermStructure>(
-                    boost::make_shared<SpreadedSurvivalProbabilityTermStructure>(baseCurve, times, spreads));
-                if (baseCurve->allowsExtrapolation()) {
-                    clientCurve->enableExtrapolation();
-                }
-            }
-        }
-        dpts.push_back(clientCurve);
-        
-        std::pair<DefaultProbKey, Handle<DefaultProbabilityTermStructure>> p(key, clientCurve);
+        auto defaultCurve = dpts[i];
+        expLoss.push_back((1 - recoveryRate) * defaultCurve->defaultProbability(maturity_, true) * basketNotionals[i]);
+        std::pair<DefaultProbKey, Handle<DefaultProbabilityTermStructure>> p(key, defaultCurve);
         vector<pair<DefaultProbKey, Handle<DefaultProbabilityTermStructure>>> probabilities(1, p);
         // Empty default set. Adjustments have been made above to account for existing credit events.
         Issuer issuer(probabilities, DefaultEventSet());
@@ -665,8 +629,17 @@ void SyntheticCDO::build(const boost::shared_ptr<EngineFactory>& engineFactory) 
     // ISDA taxonomy
     additionalData_["isdaAssetClass"] = string("Credit");
     additionalData_["isdaBaseProduct"] = string("Index Tranche");
-    // Deferring the mapping of qualifier to CDX, LCDX, CDX Structured Tranche, iTraxx, iTraxx Structured Tranche, ABX, MCDX
-    additionalData_["isdaSubProduct"] = qualifier_; 
+    boost::shared_ptr<ReferenceDataManager> refData = engineFactory->referenceData();
+    if (refData && refData->hasData("CreditIndex", qualifier_)) {
+        auto refDatum = refData->getData("CreditIndex", qualifier_);
+        boost::shared_ptr<CreditIndexReferenceDatum> creditIndexRefDatum = boost::dynamic_pointer_cast<CreditIndexReferenceDatum>(refDatum);
+        additionalData_["isdaSubProduct"] = creditIndexRefDatum->indexFamily();
+        if (creditIndexRefDatum->indexFamily() == "") {
+            ALOG("IndexFamily is blank in credit index reference data for entity " << qualifier_);
+        }
+    } else {
+        ALOG("Credit index reference data missing for entity " << qualifier_ << ", isdaSubProduct left blank");
+    }
     // skip the transaction level mapping for now
     additionalData_["isdaTransaction"] = string("");  
 
