@@ -20,11 +20,9 @@
 #include <orea/app/reportwriter.hpp>
 #include <orea/app/structuredanalyticserror.hpp>
 #include <orea/engine/parsensitivityanalysis.hpp>
-#include <orea/engine/sensitivityanalysisplus.hpp>
 #include <orea/engine/sensitivityinmemorystream.hpp>
 #include <orea/scenario/deltascenariofactory.hpp>
 #include <orea/scenario/scenario.hpp>
-#include <orea/scenario/scenariosimmarketplus.hpp>
 #include <orea/scenario/shiftscenariogenerator.hpp>
 #include <ored/utilities/to_string.hpp>
 
@@ -122,9 +120,10 @@ void ParConversionAnalyticImpl::runAnalytic(const boost::shared_ptr<ore::data::I
                     if (it == factorToIndex.end()) {
                         if (ParSensitivityAnalysis::isParType(rf.keytype) && typesDisabled.count(rf.keytype) != 1) {
 
-                            ALOG(StructuredAnalyticsErrorMessage("Par conversion", "",
-                                                                 "Par factor " + ore::data::to_string(rf) +
-                                                                     " not found in factorToIndex map"));
+                            StructuredAnalyticsErrorMessage("Par conversion", "",
+                                                            "Par factor " + ore::data::to_string(rf) +
+                                                                " not found in factorToIndex map")
+                                .log();
                         } else {
                             SensitivityRecord sr;
                             sr.tradeId = id;

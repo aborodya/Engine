@@ -28,6 +28,15 @@
 #include <ored/configuration/conventions.hpp>
 #include <ored/portfolio/types.hpp>
 #include <ored/utilities/log.hpp>
+
+#include <qle/cashflows/commoditycashflow.hpp>
+#include <qle/currencies/configurablecurrency.hpp>
+#include <qle/indexes/bondindex.hpp>
+#include <qle/instruments/cdsoption.hpp>
+#include <qle/methods/multipathgeneratorbase.hpp>
+#include <qle/models/crossassetmodel.hpp>
+#include <qle/pricingengines/mcmultilegbaseengine.hpp>
+
 #include <ql/cashflows/cpicoupon.hpp>
 #include <ql/compounding.hpp>
 #include <ql/currency.hpp>
@@ -52,13 +61,6 @@
 #include <ql/time/daycounter.hpp>
 #include <ql/time/period.hpp>
 #include <ql/types.hpp>
-
-#include <qle/cashflows/commoditycashflow.hpp>
-#include <qle/currencies/configurablecurrency.hpp>
-#include <qle/indexes/bondindex.hpp>
-#include <qle/instruments/cdsoption.hpp>
-#include <qle/methods/multipathgeneratorbase.hpp>
-#include <qle/models/crossassetmodel.hpp>
 
 #include <boost/algorithm/string/trim.hpp>
 #include <boost/tokenizer.hpp>
@@ -265,6 +267,12 @@ void parseDateOrPeriod(const string& s, QuantLib::Date& d, QuantLib::Period& p, 
 \ingroup utilities
 */
 QuantLib::LsmBasisSystem::PolynomialType parsePolynomType(const std::string& s);
+
+//! Write QuantLib::LsmBasisSystem::PolynomialType to stream
+/*!
+\ingroup utilities
+*/
+std::ostream& operator<<(std::ostream& os, QuantLib::LsmBasisSystem::PolynomialType a);
 
 //! Convert text to QuantLib::SobolBrownianGenerator::Ordering
 /*!
@@ -557,6 +565,12 @@ std::ostream& operator<<(std::ostream& os, const CreditPortfolioSensitivityDecom
 \ingroup utilities
 */
 QuantLib::Pillar::Choice parsePillarChoice(const std::string& s);
+
+//! Convert text to QuantExt::McMultiLegBaseEngine::RegressorModel
+/*!
+\ingroup utilities
+*/
+QuantExt::McMultiLegBaseEngine::RegressorModel parseRegressorModel(const std::string& s);
 
 } // namespace data
 } // namespace ore

@@ -23,11 +23,11 @@
 
 #pragma once
 
-#include <boost/make_shared.hpp>
 #include <orea/app/inputparameters.hpp>
 #include <orea/app/parameters.hpp>
 #include <orea/app/analyticsmanager.hpp>
-#include <ored/ored.hpp>
+
+#include <boost/make_shared.hpp>
 #include <boost/timer/timer.hpp>
 
 namespace ore {
@@ -76,9 +76,7 @@ public:
     //! time for executing run(...) in seconds
     Real getRunTime();
 
-    std::string version() {
-        return std::string(OPEN_SOURCE_RISK_VERSION);
-    }
+    std::string version();
     
 protected:
     virtual void analytics();
@@ -102,7 +100,7 @@ protected:
     boost::shared_ptr<OutputParameters> outputs_;
 
     boost::shared_ptr<AnalyticsManager> analyticsManager_;
-    boost::shared_ptr<FilteredBufferedLoggerGuard> fbLogger_;
+    boost::shared_ptr<StructuredLogger> structuredLogger_;
     boost::timer::cpu_timer runTimer_;
 };
 
