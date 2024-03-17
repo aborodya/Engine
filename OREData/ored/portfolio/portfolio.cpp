@@ -82,7 +82,7 @@ void Portfolio::fromXML(XMLNode* node) {
                 // copy id and envelope
                 failedTrade->id() = id;
                 failedTrade->setUnderlyingTradeType(tradeType);
-                failedTrade->envelope() = trade->envelope();
+                failedTrade->setEnvelope(trade->envelope());
                 // and add it to the portfolio
                 add(failedTrade);
                 WLOG("Added trade id " << failedTrade->id() << " type " << failedTrade->tradeType()
@@ -216,17 +216,16 @@ bool Portfolio::hasNettingSetDetails() const {
     return hasNettingSetDetails;
 }
 
-map<string, set<Date>> Portfolio::fixings(const Date& settlementDate) const {
-
-    map<string, set<Date>> result;
-
+map<string, RequiredFixings::FixingDates> Portfolio::fixings(const Date& settlementDate) const {
+    map<string, RequiredFixings::FixingDates> result;
     for (const auto& t : trades_) {
         auto fixings = t.second->fixings(settlementDate);
-        for (const auto& kv : fixings) {
-            result[kv.first].insert(kv.second.begin(), kv.second.end());
+        for (const auto& [index, fixingDates] : fixings) {
+            if (!fixingDates.empty()) {
+                result[index].addDates(fixingDates);
+            }
         }
     }
-
     return result;
 }
 
@@ -286,7 +285,7 @@ std::pair<boost::shared_ptr<Trade>, bool> buildTrade(boost::shared_ptr<Trade>& t
             boost::shared_ptr<FailedTrade> failed = boost::make_shared<FailedTrade>();
             failed->id() = trade->id();
             failed->setUnderlyingTradeType(trade->tradeType());
-            failed->envelope() = trade->envelope();
+            failed->setEnvelope(trade->envelope());
             failed->build(engineFactory);
             failed->resetPricingStats(trade->getNumberOfPricings(), trade->getCumulativePricingTime());
             LOG("Built failed trade with id " << failed->id());

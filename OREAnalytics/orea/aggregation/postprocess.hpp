@@ -97,6 +97,8 @@ public:
         const boost::shared_ptr<Portfolio>& portfolio,
         //! Netting set manager to access CSA details for each netting set
         const boost::shared_ptr<NettingSetManager>& nettingSetManager,
+        //! Collateral balances (VM, IM, IA)
+        const boost::shared_ptr<CollateralBalances>& collateralBalances,
         //! Market data object to access e.g. discounting and funding curves
         const boost::shared_ptr<Market>& market,
         //! Market configuration to use
@@ -167,7 +169,7 @@ public:
         //! If set to true, cash flows in the margin period of risk are ignored in the collateral modelling
         bool withMporStickyDate = false,
         //! Treatment of cash flows over the margin period of risk
-        ScenarioGeneratorData::MporCashFlowMode mporCashFlowMode = ScenarioGeneratorData::MporCashFlowMode::NonePay);
+        const MporCashFlowMode mporCashFlowMode = MporCashFlowMode::Unspecified);
 
     void setDimCalculator(boost::shared_ptr<DynamicInitialMarginCalculator> dimCalculator) {
         dimCalculator_ = dimCalculator;
@@ -327,6 +329,7 @@ protected:
 
     boost::shared_ptr<Portfolio> portfolio_;
     boost::shared_ptr<NettingSetManager> nettingSetManager_;
+    boost::shared_ptr<CollateralBalances> collateralBalances_;
     boost::shared_ptr<Market> market_;
     const std::string configuration_;
     boost::shared_ptr<NPVCube> cube_;
@@ -377,7 +380,7 @@ protected:
     std::vector<std::vector<Real>> creditMigrationCdf_;
     std::vector<std::vector<Real>> creditMigrationPdf_;
     bool withMporStickyDate_;
-    ScenarioGeneratorData::MporCashFlowMode mporCashFlowMode_;
+    MporCashFlowMode mporCashFlowMode_;
 };
 
 } // namespace analytics

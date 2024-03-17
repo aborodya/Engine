@@ -21,6 +21,7 @@
 #include <orea/app/reportwriter.hpp>
 #include <orea/app/structuredanalyticserror.hpp>
 #include <orea/simm/utilities.hpp>
+#include <orea/scenario/scenariowriter.hpp>
 
 #include <ored/utilities/marketdata.hpp>
 #include <ored/portfolio/structuredtradeerror.hpp>
@@ -176,7 +177,9 @@ void ReportWriter::writeCashflow(ore::data::Report& report, const std::string& b
         .addColumn("FloorStrike", double(), 6)
         .addColumn("CapStrike", double(), 6)
         .addColumn("FloorVolatility", double(), 6)
-        .addColumn("CapVolatility", double(), 6);
+        .addColumn("CapVolatility", double(), 6)
+        .addColumn("EffectiveFloorVolatility", double(), 6)
+        .addColumn("EffectiveCapVolatility", double(), 6);
 
     std::map<std::string, boost::shared_ptr<Trade>> trades = portfolio->trades();
 
@@ -196,7 +199,7 @@ void ReportWriter::writeCashflow(ore::data::Report& report, const std::string& b
             auto addResults = trade->instrument()->additionalResults();
             auto cashFlowResults = addResults.find("cashFlowResults");
 
-            const Real multiplier = trade->instrument()->multiplier();
+            const Real multiplier = trade->instrument()->multiplier() * trade->instrument()->multiplier2();
 
             if (cashFlowResults == addResults.end()) {
 
@@ -361,6 +364,8 @@ void ReportWriter::writeCashflow(ore::data::Report& report, const std::string& b
                             Real capStrike = Null<Real>();
                             Real floorVolatility = Null<Real>();
                             Real capVolatility = Null<Real>();
+                            Real effectiveFloorVolatility = Null<Real>();
+                            Real effectiveCapVolatility = Null<Real>();
 
                             if (amount != Null<Real>())
                                 effectiveAmount = amount * multiplier;
@@ -407,7 +412,10 @@ void ReportWriter::writeCashflow(ore::data::Report& report, const std::string& b
                                     volFixingDate = tmp->underlying()->fixingDates().front();
                                     qlIndexName = tmp->index()->name();
                                     usesCapVol = true;
-                                    // for now we output the stripped caplet vol, not the effective one
+                                    if (floorStrike != Null<Real>())
+                                        effectiveFloorVolatility = tmp->effectiveFloorletVolatility();
+                                    if (capStrike != Null<Real>())
+                                        effectiveCapVolatility = tmp->effectiveCapletVolatility();
                                 } else if (auto tmp =
                                                boost::dynamic_pointer_cast<CappedFlooredAverageONIndexedCoupon>(c)) {
                                     floorStrike = tmp->effectiveFloor();
@@ -415,14 +423,20 @@ void ReportWriter::writeCashflow(ore::data::Report& report, const std::string& b
                                     volFixingDate = tmp->underlying()->fixingDates().front();
                                     qlIndexName = tmp->index()->name();
                                     usesCapVol = true;
-                                    // for now we output the stripped caplet vol, not the effective one
-                                } else if (auto tmp =
-                                               boost::dynamic_pointer_cast<CappedFlooredAverageBMACoupon>(c)) {
+                                    if (floorStrike != Null<Real>())
+                                        effectiveFloorVolatility = tmp->effectiveFloorletVolatility();
+                                    if (capStrike != Null<Real>())
+                                        effectiveCapVolatility = tmp->effectiveCapletVolatility();
+                                } else if (auto tmp = boost::dynamic_pointer_cast<CappedFlooredAverageBMACoupon>(c)) {
                                     floorStrike = tmp->effectiveFloor();
                                     capStrike = tmp->effectiveCap();
                                     volFixingDate = tmp->underlying()->fixingDates().front();
                                     qlIndexName = tmp->index()->name();
                                     usesCapVol = true;
+                                    if (floorStrike != Null<Real>())
+                                        effectiveFloorVolatility = tmp->effectiveFloorletVolatility();
+                                    if (capStrike != Null<Real>())
+                                        effectiveCapVolatility = tmp->effectiveCapletVolatility();
                                 }
 
                                 // get market volaility for cap / floor
@@ -487,7 +501,9 @@ void ReportWriter::writeCashflow(ore::data::Report& report, const std::string& b
                                 .add(floorStrike)
                                 .add(capStrike)
                                 .add(floorVolatility)
-                                .add(capVolatility);
+                                .add(capVolatility)
+                                .add(effectiveFloorVolatility)
+                                .add(effectiveCapVolatility);
                         }
                     }
                 }
@@ -521,6 +537,8 @@ void ReportWriter::writeCashflow(ore::data::Report& report, const std::string& b
                     Real capStrike = Null<Real>();
                     Real floorVolatility = Null<Real>();
                     Real capVolatility = Null<Real>();
+                    Real effectiveFloorVolatility = Null<Real>();
+                    Real effectiveCapVolatility = Null<Real>();
 
                     if (cf.amount != Null<Real>())
                         effectiveAmount = cf.amount * multiplier;
@@ -557,6 +575,10 @@ void ReportWriter::writeCashflow(ore::data::Report& report, const std::string& b
                         floorVolatility = cf.floorVolatility;
                     if (cf.capVolatility != Null<Real>())
                         capVolatility = cf.capVolatility;
+                    if (cf.effectiveFloorVolatility != Null<Real>())
+                        floorVolatility = cf.effectiveFloorVolatility;
+                    if (cf.effectiveCapVolatility != Null<Real>())
+                        capVolatility = cf.effectiveCapVolatility;
 
                     report.next()
                         .add(trade->id())
@@ -583,7 +605,9 @@ void ReportWriter::writeCashflow(ore::data::Report& report, const std::string& b
                         .add(floorStrike)
                         .add(capStrike)
                         .add(floorVolatility)
-                        .add(capVolatility);
+                        .add(capVolatility)
+                        .add(effectiveFloorVolatility)
+                        .add(effectiveCapVolatility);
                 }
             }
 
@@ -1066,7 +1090,7 @@ void ReportWriter::writeAggregationScenarioData(ore::data::Report& report, const
 }
 
 void ReportWriter::writeScenarioReport(ore::data::Report& report,
-                                       const boost::shared_ptr<SensitivityCube>& sensitivityCube,
+                                       const std::vector<boost::shared_ptr<SensitivityCube>>& sensitivityCubes,
                                        Real outputThreshold) {
 
     LOG("Writing Scenario report");
@@ -1075,31 +1099,44 @@ void ReportWriter::writeScenarioReport(ore::data::Report& report,
     report.addColumn("Factor", string());
     report.addColumn("Up/Down", string());
     report.addColumn("Base NPV", double(), 2);
+    report.addColumn("ShiftSize_1", double(), 6);
+    report.addColumn("ShiftSize_2", double(), 6);
     report.addColumn("Scenario NPV", double(), 2);
     report.addColumn("Difference", double(), 2);
 
-    auto scenarioDescriptions = sensitivityCube->scenarioDescriptions();
-    auto tradeIds = sensitivityCube->tradeIdx();
-    auto npvCube = sensitivityCube->npvCube();
+    for (auto const& sensitivityCube : sensitivityCubes) {
 
-    for (const auto& [tradeId, i] : tradeIds) {
+        auto scenarioDescriptions = sensitivityCube->scenarioDescriptions();
+        auto tradeIds = sensitivityCube->tradeIdx();
+        auto npvCube = sensitivityCube->npvCube();
 
-        Real baseNpv = npvCube->getT0(i);
-        for (const auto& [j, scenarioNpv] : npvCube->getTradeNPVs(i)) {
-            auto scenarioDescription = scenarioDescriptions[j];
-            Real difference = scenarioNpv - baseNpv;
-            if (fabs(difference) > outputThreshold) {
-                report.next();
-                report.add(tradeId);
-                report.add(prettyPrintInternalCurveName(scenarioDescription.factors()));
-                report.add(scenarioDescription.typeString());
-                report.add(baseNpv);
-                report.add(scenarioNpv);
-                report.add(difference);
-            } else if (!std::isfinite(difference)) {
-                // TODO: is this needed?
-                ALOG("sensitivity scenario for trade " << tradeId << ", factor " << scenarioDescription.factors()
-                                                       << " is not finite (" << difference << ")");
+        for (const auto& [tradeId, i] : tradeIds) {
+
+            Real baseNpv = npvCube->getT0(i);
+            for (const auto& [j, scenarioNpv] : npvCube->getTradeNPVs(i)) {
+                auto scenarioDescription = scenarioDescriptions[j];
+                Real difference = scenarioNpv - baseNpv;
+                Real shift1 = scenarioDescription.key1().keytype == RiskFactorKey::KeyType::None
+                                  ? Null<Real>()
+                                  : sensitivityCube->actualShiftSize(scenarioDescription.key1());
+                Real shift2 = scenarioDescription.key2().keytype == RiskFactorKey::KeyType::None
+                                  ? Null<Real>()
+                                  : sensitivityCube->actualShiftSize(scenarioDescription.key2());
+                if (fabs(difference) > outputThreshold) {
+                    report.next();
+                    report.add(tradeId);
+                    report.add(prettyPrintInternalCurveName(scenarioDescription.factors()));
+                    report.add(scenarioDescription.typeString());
+                    report.add(baseNpv);
+                    report.add(shift1);
+                    report.add(shift2);
+                    report.add(scenarioNpv);
+                    report.add(difference);
+                } else if (!std::isfinite(difference)) {
+                    // TODO: is this needed?
+                    ALOG("sensitivity scenario for trade " << tradeId << ", factor " << scenarioDescription.factors()
+                                                           << " is not finite (" << difference << ")");
+                }
             }
         }
     }
@@ -1491,7 +1528,7 @@ void ReportWriter::writeCube(ore::data::Report& report, const boost::shared_ptr<
 }
 
 // Ease notation again
-typedef SimmConfiguration::ProductClass ProductClass;
+typedef CrifRecord::ProductClass ProductClass;
 typedef SimmConfiguration::RiskClass RiskClass;
 typedef SimmConfiguration::MarginType MarginType;
 typedef SimmConfiguration::SimmSide SimmSide;
@@ -1660,7 +1697,7 @@ void ReportWriter::writeSIMMReport(
     }
 }
 
-void ReportWriter::writeSIMMData(const SimmNetSensitivities& simmData, const boost::shared_ptr<Report>& dataReport,
+void ReportWriter::writeSIMMData(const ore::analytics::Crif& simmData, const boost::shared_ptr<Report>& dataReport,
                                  const bool hasNettingSetDetails) {
 
     LOG("Writing SIMM data report.");
@@ -1708,7 +1745,7 @@ void ReportWriter::writeSIMMData(const SimmNetSensitivities& simmData, const boo
         // Same check as above, but for backwards compatibility, if im_model is not used
         // but Risk::Type is PV or Notional
         if (cr.imModel.empty() &&
-            (cr.riskType == SimmConfiguration::RiskType::Notional || cr.riskType == SimmConfiguration::RiskType::PV))
+            (cr.riskType == CrifRecord::RiskType::Notional || cr.riskType == CrifRecord::RiskType::PV))
             continue;
 
         // Write current netted CRIF record
@@ -1743,13 +1780,13 @@ void ReportWriter::writeSIMMData(const SimmNetSensitivities& simmData, const boo
     LOG("SIMM data report written.");
 }
 
-void ReportWriter::writeCrifReport(const boost::shared_ptr<Report>& report, const SimmNetSensitivities& crifRecords) {
+void ReportWriter::writeCrifReport(const boost::shared_ptr<Report>& report, const Crif& crif) {
 
     // If we have SIMM parameters, check if at least one of them uses netting set details optional field/s
     // It is easier to check here than to pass the flag from other places, since otherwise we'd have to handle certain edge cases
     // e.g. SIMM parameters use optional NSDs, but trades don't. So SIMM report should not display NSDs, but CRIF report still should.
     bool hasNettingSetDetails = false;
-    for (const CrifRecord& cr : crifRecords) {
+    for (const auto& cr : crif) {
         if (!cr.nettingSetDetails.emptyOptionalFields())
             hasNettingSetDetails = true;
     }
@@ -1758,7 +1795,7 @@ void ReportWriter::writeCrifReport(const boost::shared_ptr<Report>& report, cons
     bool hasCollectRegulations = false;
     bool hasPostRegulations = false;
     bool hasScheduleTrades = false;
-    for (const auto& cr : crifRecords) {
+    for (const auto& cr : crif) {
         // Check which additional fields are being used/populated
         for (const auto& af : cr.additionalFields) {
             if (std::find(addFields.begin(), addFields.end(), af.first) == addFields.end()) {
@@ -1803,8 +1840,17 @@ void ReportWriter::writeCrifReport(const boost::shared_ptr<Report>& report, cons
         .addColumn("IMModel", string())
         .addColumn("TradeType", string());
 
-    if (hasScheduleTrades)
+    if (hasScheduleTrades || crif.type() == Crif::CrifType::Frtb)
         report->addColumn("end_date", string());
+
+    if (crif.type() == Crif::CrifType::Frtb) {
+        report->addColumn("Label3", string())
+            .addColumn("CreditQuality", string())
+            .addColumn("LongShortInd", string())
+            .addColumn("CoveredBondInd", string())
+            .addColumn("TrancheThickness", string())
+            .addColumn("BB_RW", string());
+    }
 
     if (hasCollectRegulations)
         report->addColumn("collect_regulations", string());
@@ -1818,7 +1864,7 @@ void ReportWriter::writeCrifReport(const boost::shared_ptr<Report>& report, cons
     }
 
     // Write individual CRIF records
-    for (const auto& cr : crifRecords) {
+    for (const auto& cr : crif) {
         
         report->next().add(cr.tradeId).add(cr.portfolioId);
 
@@ -1840,8 +1886,17 @@ void ReportWriter::writeCrifReport(const boost::shared_ptr<Report>& report, cons
             .add(cr.imModel)
             .add(cr.tradeType);
 
-        if (hasScheduleTrades)
+        if (hasScheduleTrades || crif.type() == Crif::CrifType::Frtb)
             report->add(cr.endDate);
+
+        if (crif.type() == Crif::CrifType::Frtb) {
+            report->add(cr.label3)
+                .add(cr.creditQuality)
+                .add(cr.longShortInd)
+                .add(cr.coveredBondInd)
+                .add(cr.trancheThickness)
+                .add(cr.bb_rw);
+        }
 
         if (hasCollectRegulations) {
             string regString = escapeCommaSeparatedList(cr.collectRegulations, '\0');
@@ -1857,7 +1912,7 @@ void ReportWriter::writeCrifReport(const boost::shared_ptr<Report>& report, cons
             if (cr.additionalFields.find(af) == cr.additionalFields.end())
                 report->add("");
             else
-                report->add(cr.additionalFields.at(af));
+                report->add(cr.getAdditionalFieldAsStr(af));
         }
     }
 
@@ -1967,6 +2022,147 @@ void ReportWriter::writeScenarioDistributions(const boost::shared_ptr<ScenarioGe
         }
     }
     report.end();
+}
+
+void ReportWriter::writeHistoricalScenarioDetails(
+    const boost::shared_ptr<ore::analytics::HistoricalScenarioGenerator>& generator, ore::data::Report& report) {
+
+    report.addColumn("PLDate1", Date())
+        .addColumn("PLDate2", Date())
+        .addColumn("Key", string())
+        .addColumn("BaseValue", double(), 8)
+        .addColumn("AdjustmentFactor1", double(), 8)
+        .addColumn("AdjustmentFactor2", double(), 8)
+        .addColumn("ScenarioValue1", double(), 8)
+        .addColumn("ScenarioValue2", double(), 8)
+        .addColumn("ShiftType", string())
+        .addColumn("Return", double(), 8)
+        .addColumn("ScenarioValue", double(), 8);
+
+    Date asof = generator->baseScenario()->asof();
+    for (Size i = 0; i < generator->startDates().size(); ++i) {
+        std::ignore = generator->next(asof);
+        for (auto const& d : generator->lastHistoricalScenarioCalculationDetails()) {
+            report.next()
+                .add(d.scenarioDate1)
+                .add(d.scenarioDate2)
+                .add(ore::data::to_string(d.key))
+                .add(d.baseValue)
+                .add(d.adjustmentFactor1)
+                .add(d.adjustmentFactor2)
+                .add(d.scenarioValue1)
+                .add(d.scenarioValue2)
+                .add(ore::data::to_string(d.returnType))
+                .add(d.returnValue)
+                .add(d.scenarioValue);
+        }
+    }
+    report.end();
+}
+
+void ReportWriter::writeStockSplitReport(const boost::shared_ptr<Scenario>& baseScenario,
+                                         const boost::shared_ptr<ore::analytics::HistoricalScenarioLoader>& hsloader,
+                                         const boost::shared_ptr<ore::data::AdjustmentFactors>& adjFactors,
+                                         const boost::shared_ptr<ore::data::Report>& report) {
+
+    report->addColumn("EquityId", string())
+        .addColumn("Date", Date())
+        .addColumn("Price", double(), 8)
+        .addColumn("Factor", double(), 8)
+        .addColumn("CumulatedFactor", double(), 8)
+        .addColumn("AdjustedPrice", double(), 8);
+
+    if (adjFactors) {
+        std::set<std::string> names;
+        for (auto const& k : baseScenario->keys()) {
+            if (k.keytype == RiskFactorKey::KeyType::EquitySpot) {
+                names.insert(k.name);
+            }
+        }
+
+        std::vector<QuantLib::Date> hsdates = hsloader->dates();
+
+        for (auto const& name : names) {
+
+            std::set<QuantLib::Date> dates = adjFactors->dates(name);
+            dates.insert(hsdates.begin(), hsdates.end());
+
+            for (auto const& d : dates) {
+
+                Real price = Null<Real>();
+                if (std::find(hsdates.begin(), hsdates.end(), d) != hsdates.end()) {
+                    auto scen = hsloader->getHistoricalScenario(d);
+                    RiskFactorKey rf(RiskFactorKey::KeyType::EquitySpot, name);
+                    if (scen->has(rf))
+                        price = scen->get(rf);
+                }
+                Real factor = adjFactors->getFactorContribution(name, d);
+                Real cumFactor = adjFactors->getFactor(name, d);
+                Real adjPrice = price == Null<Real>() ? Null<Real>() : price * cumFactor;
+
+                report->next().add(name).add(d).add(price).add(factor).add(cumFactor).add(adjPrice);
+            }
+        }
+    }
+    report->end();
+}
+
+void ReportWriter::writeHistoricalScenarioDistributions(
+    boost::shared_ptr<HistoricalScenarioGenerator>& hsgen,
+    const boost::shared_ptr<ore::analytics::ScenarioSimMarket>& simMarket,
+    const boost::shared_ptr<ore::analytics::ScenarioSimMarketParameters>& simMarketParams,
+    boost::shared_ptr<ore::data::Report> histScenDetailsReport, boost::shared_ptr<ore::data::Report> statReport,
+    boost::shared_ptr<ore::data::Report> distReport, Size distSteps) {
+
+    // Don't leave it up to the caller to do this
+    simMarket->scenarioGenerator() = hsgen;
+    hsgen->baseScenario() = simMarket->baseScenario();
+
+    // If both report pointers are null, return early
+    if (!statReport && !distReport)
+        return;
+
+    // Make a transformed generator i.e. discount -> zero etc.
+    auto hsgent = boost::make_shared<HistoricalScenarioGeneratorTransform>(hsgen, simMarket, simMarketParams);
+
+    const vector<RiskFactorKey>& keys = hsgen->baseScenario()->keys();
+    Size numScen = hsgen->numScenarios();
+    Date asof = hsgen->baseScenario()->asof();
+
+    // Write the statistics report if requested
+    if (statReport) {
+        hsgent->reset();
+        writeScenarioStatistics(hsgent, keys, numScen, {asof}, *statReport);
+    }
+
+    // Write the distribution report if requested
+    if (distReport) {
+        QL_REQUIRE(distSteps != Null<Size>(),
+                   "When creating a distribution report, a valid distribution step size is required");
+        hsgent->reset();
+        writeScenarioDistributions(hsgent, keys, numScen, {asof}, distSteps, *distReport);
+    }
+
+    // Write the scenario report if requested
+    if (histScenDetailsReport) {
+        hsgent->reset();
+        writeHistoricalScenarioDetails(hsgent, *histScenDetailsReport);
+    }
+}
+
+void ReportWriter::writeHistoricalScenarios(const boost::shared_ptr<HistoricalScenarioLoader>& hsloader,
+                                            const boost::shared_ptr<ore::data::Report>& report) {
+    // each scenario might have a different set of keys, so we collect the union of all keys
+    // and write them out (missing keys will be written as NA to the report)
+    std::set<RiskFactorKey> allKeys;
+    for (const auto& s : hsloader->historicalScenarios())
+        allKeys.insert(s->keys().begin(), s->keys().end());
+    ScenarioWriter sw(nullptr, report, std::vector<RiskFactorKey>(allKeys.begin(), allKeys.end()));
+    bool writeHeader = true;
+    for (const auto& s : hsloader->historicalScenarios()) {
+        sw.writeScenario(s, writeHeader);
+        writeHeader = false;
+    }
 }
 
 } // namespace analytics

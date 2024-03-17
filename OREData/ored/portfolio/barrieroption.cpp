@@ -50,7 +50,7 @@ void BarrierOption::build(const boost::shared_ptr<EngineFactory>& engineFactory)
 
     QL_REQUIRE(barrier_.levels().size() > 0 && barrier_.levels().size() <= 2, "BarrierOption must have 1 or 2 levels");
     QL_REQUIRE(option_.style() == "European", "Option Style unknown: " << option_.style());
-    QL_REQUIRE(option_.exerciseDates().size() == 1, "Invalid number of excercise dates");
+    QL_REQUIRE(option_.exerciseDates().size() == 1, "Invalid number of exercise dates");
         
     // get the expiry date
     Date expiryDate = parseDate(option_.exerciseDates().front());
@@ -165,9 +165,9 @@ void BarrierOption::build(const boost::shared_ptr<EngineFactory>& engineFactory)
     // Add additional premium payments
     Real bsInd = (positionType == QuantLib::Position::Long ? 1.0 : -1.0);
     Date lastPremiumDate =
-        addPremiums(additionalInstruments, additionalMultipliers, tradeMultiplier(), option_.premiumData(), -bsInd,
-                    tradeCurrency(), engineFactory, engineFactory->configuration(MarketContext::pricing));
-    
+        addPremiums(additionalInstruments, additionalMultipliers, bsInd * tradeMultiplier(), option_.premiumData(),
+                    -bsInd, tradeCurrency(), engineFactory, engineFactory->configuration(MarketContext::pricing));
+
     // set the maturity
     maturity_ = std::max(lastPremiumDate, payDate);
 }

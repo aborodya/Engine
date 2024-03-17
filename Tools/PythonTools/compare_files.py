@@ -11,6 +11,8 @@ import pandas as pd
 from datacompy.core import Compare
 import re
 import jsondiff
+from lxml import etree
+from xmldiff import main, formatting
 
 
 def is_float(num: str):
@@ -253,10 +255,11 @@ def compare_files(file_1, file_2, name, config: dict = None) -> bool:
             raise ValueError('File, ' + file_1 + ', requires a comparison configuration but none given.')
         if ext_2 == '.csv':
             raise ValueError('File, ' + file_2 + ', requires a comparison configuration but none given.')
-
-    if comp_config is None:
-        # If there was no configuration then fall back to a straight file comparison.
-        result = compare_files_direct(name, file_1, file_2)
+        if ext_1 == '.xml' and ext_2 == '.xml':
+            result = compare_files_xml(name, file_1, file_2)
+        else:
+            # If there was no configuration then fall back to a straight file comparison.
+            result = compare_files_direct(name, file_1, file_2)
     else:
         config_type = comp_config.get('type')
         if config_type == 'csv':
@@ -397,6 +400,26 @@ def compare_files_df(name, file_1, file_2, config):
         if 'optional_cols' in config:
             optional_cols = copy.deepcopy(config['optional_cols'])
             logger.debug('Optional columns found: %s', str (optional_cols))
+
+            # Check that each optional col either exists in both DataFrames, or is missing in both. Otherwise, we fail the test
+            # if require_equal_optional_cols is true (or not given)
+            missing_ocols = []
+            for col in optional_cols:
+                if (col in df_1.columns and col not in df_2.columns) or (col not in df_1.columns and col in df_2.columns):
+                    missing_ocols.append(col)
+            if missing_ocols:
+                logger.warning('The columns, %s, are in one Dataframe but not the other.', str(missing_ocols))
+                if 'require_equal_optional_cols' in config:
+                    if config['require_equal_optional_cols']:
+                        logger.warning('Failing test, because require_equal_optional_cols is true')
+                        return False
+                    else:
+                        logger.warning('Ignore unequal optional cols, because because require_equal_optional_cols is false')
+                else:
+                    logger.warning('Failing test, because require_equal_optional_cols is not given, defaults to true')
+                    return False
+
+            # For each optional col, check whether it is found in each DataFrame. If so, add it.
             for col in optional_cols:
                 if col in df_1.columns and col in df_2.columns :
                     logger.debug('Adding optional column %s to list of columns for comparison', col)
@@ -538,6 +561,15 @@ def compare_files_direct(name, file_1, file_2):
 
     return match
 
+def compare_files_xml(name, file_1, file_2):
+    logger = logging.getLogger(__name__)
+    logger.debug('%s: Comparing file %s against %s using xml diff', name, file_1, file_2)
+    diff = main.diff_files(file_1, file_2, formatter=formatting.DiffFormatter())
+    if len(diff) > 0:
+        logger.warning(diff)
+        return False
+    else:
+        return True
 
 def compare_files_json(name, file_1, file_2, config) -> bool:
     # Compare JSON files using configuration.
@@ -623,8 +655,8 @@ def validate_json_diff(json_diff: dict, config: dict, path: str) -> None:
                 if settings:
                     for s in settings:
                         names = s.get('names')
-                        abs_tol = s.get('abs_tol')
-                        rel_tol = s.get('rel_tol')
+                        abs_tol = s.get('abs_tol') or 0
+                        rel_tol = s.get('rel_tol') or 0
 
                         # Number diffs
                         for n in names:
@@ -644,7 +676,6 @@ def validate_json_diff(json_diff: dict, config: dict, path: str) -> None:
                                     abs_diff = abs(val_1 - val_2)
                                     abs_check = abs_diff <= abs_tol
                                     rel_check = abs_diff <= min(abs(val_1 * rel_tol), abs(val_2 * rel_tol))
-
                                     if abs_check or rel_check:
                                         diff.clear()
 

@@ -79,7 +79,7 @@ void IndexCreditDefaultSwapOption::build(const boost::shared_ptr<EngineFactory>&
                                                     << io::iso_date(tradeDate_) << ")");
     }
 
-    // Option trade notional. This is the full notional of the the index that is being traded not reduced by any
+    // Option trade notional. This is the full notional of the index that is being traded not reduced by any
     // defaults. The notional on the trade date will be a fraction of this if there are defaults by trade date.
     auto legData = swap_.leg();
     const auto& ntls = legData.notionals();
@@ -270,6 +270,7 @@ void IndexCreditDefaultSwapOption::build(const boost::shared_ptr<EngineFactory>&
     Settlement::Type settleType = parseSettlementType(option_.settlement());
     cds->setPricingEngine(iCdsEngineBuilder->engine(ccy, creditCurveId, constituentIds, overrideCurve,
                                                     swap_.recoveryRate(), settleType == Settlement::Cash));
+    setSensitivityTemplate(*iCdsEngineBuilder);
 
     // Strike may be in terms of spread or price
     auto strikeType = parseCdsOptionStrikeType(effectiveStrikeType_);
@@ -294,6 +295,7 @@ void IndexCreditDefaultSwapOption::build(const boost::shared_ptr<EngineFactory>&
     auto p = splitCurveIdWithTenor(swap_.creditCurveId());
     volCurveId_ = p.first;
     option->setPricingEngine(iCdsOptionEngineBuilder->engine(ccy, creditCurveId, volCurveId_, constituentIds));
+    setSensitivityTemplate(*iCdsOptionEngineBuilder);
 
     // Keep this comment about the maturity date being the underlying maturity instead of the option expiry.
     // [RL] Align option product maturities with ISDA AANA/GRID guidance as of November 2020.
@@ -313,8 +315,8 @@ void IndexCreditDefaultSwapOption::build(const boost::shared_ptr<EngineFactory>&
     vector<Real> additionalMultipliers;
     string configuration = iCdsOptionEngineBuilder->configuration(MarketContext::pricing);
     maturity_ =
-        std::max(maturity_, addPremiums(additionalInstruments, additionalMultipliers, 1.0, option_.premiumData(),
-                                        -indicatorLongShort, ccy, engineFactory, configuration));
+        std::max(maturity_, addPremiums(additionalInstruments, additionalMultipliers, indicatorLongShort,
+                                        option_.premiumData(), -indicatorLongShort, ccy, engineFactory, configuration));
 
     // Instrument wrapper depends on the settlement type.
     // The instrument build should be indpednent of the evaluation date. However, the general behavior

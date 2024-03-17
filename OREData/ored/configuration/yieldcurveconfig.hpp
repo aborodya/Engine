@@ -97,6 +97,8 @@ public:
     const string& typeID() const { return typeID_; }
     const string& conventionsID() const { return conventionsID_; }
     const QuantLib::Pillar::Choice pillarChoice() const { return pillarChoice_; }
+    Size priority() const { return priority_; }
+    Size minDistance() const { return minDistance_; }
     const vector<pair<string, bool>>& quotes() const { return quotes_; }
     //@}
 
@@ -120,16 +122,14 @@ protected:
     //! Utility to build a quote, optional flag defaults to false
     pair<string, bool> quote(const string& name, bool opt = false) { return make_pair(name, opt); }
 
-    //! Utility method to read quotes from XML
-    void loadQuotesFromXML(XMLNode* node);
-    //! Utility method to write quotes to XML
-
 private:
     // TODO: why type and typeID?
     Type type_;
     string typeID_;
     string conventionsID_;
     QuantLib::Pillar::Choice pillarChoice_ = QuantLib::Pillar::LastRelevantDate;
+    Size priority_ = 0;
+    Size minDistance_ = 1;
 };
 
 //! Direct yield curve segment
@@ -656,7 +656,8 @@ public:
                      const string& discountCurveID, const vector<boost::shared_ptr<YieldCurveSegment>>& curveSegments,
                      const string& interpolationVariable = "Discount", const string& interpolationMethod = "LogLinear",
                      const string& zeroDayCounter = "A365", bool extrapolation = true,
-                     const BootstrapConfig& bootstrapConfig = BootstrapConfig());
+                     const BootstrapConfig& bootstrapConfig = BootstrapConfig(),
+                     const Size mixedInterpolationCutoff = 1);
     //! Default destructor
     virtual ~YieldCurveConfig() {}
     //@}
@@ -674,6 +675,7 @@ public:
     const vector<boost::shared_ptr<YieldCurveSegment>>& curveSegments() const { return curveSegments_; }
     const string& interpolationVariable() const { return interpolationVariable_; }
     const string& interpolationMethod() const { return interpolationMethod_; }
+    Size mixedInterpolationCutoff() const { return mixedInterpolationCutoff_; }
     const string& zeroDayCounter() const { return zeroDayCounter_; }
     bool extrapolation() const { return extrapolation_; }
     const BootstrapConfig& bootstrapConfig() const { return bootstrapConfig_; }
@@ -683,6 +685,7 @@ public:
     //@{
     string& interpolationVariable() { return interpolationVariable_; }
     string& interpolationMethod() { return interpolationMethod_; }
+    Size& mixedInterpolationCutoff() { return mixedInterpolationCutoff_; }
     string& zeroDayCounter() { return zeroDayCounter_; }
     bool& extrapolation() { return extrapolation_; }
     void setBootstrapConfig(const BootstrapConfig& bootstrapConfig) { bootstrapConfig_ = bootstrapConfig; }
@@ -704,6 +707,7 @@ private:
     string zeroDayCounter_;
     bool extrapolation_;
     BootstrapConfig bootstrapConfig_;
+    Size mixedInterpolationCutoff_;
 };
 
 // Map form curveID to YieldCurveConfig

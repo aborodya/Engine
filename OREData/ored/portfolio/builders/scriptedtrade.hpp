@@ -43,7 +43,14 @@ public:
     //! constructor that builds an AMC - enabled pricing engine
     ScriptedTradeEngineBuilder(const boost::shared_ptr<QuantExt::CrossAssetModel>& amcCam,
                                const std::vector<Date>& amcGrid)
-        : EngineBuilder("Generic", "Generic", {"ScriptedTrade"}), amcCam_(amcCam), amcGrid_(amcGrid) {}
+        : EngineBuilder("Generic", "Generic", {"ScriptedTrade"}), buildingAmc_(true), amcCam_(amcCam),
+          amcGrid_(amcGrid) {}
+
+    //! constructor that builds an AMCCG pricing engine
+    ScriptedTradeEngineBuilder(const boost::shared_ptr<ore::data::ModelCG>& amcCgModel,
+                               const std::vector<Date>& amcGrid)
+        : EngineBuilder("Generic", "Generic", {"ScriptedTrade"}), buildingAmc_(true), amcCgModel_(amcCgModel),
+          amcGrid_(amcGrid) {}
 
     boost::shared_ptr<QuantExt::ScriptedInstrument::engine>
     engine(const std::string& id, const ScriptedTrade& scriptedTrade,
@@ -55,6 +62,7 @@ public:
     const QuantLib::Date& lastRelevantDate() const { return lastRelevantDate_; }
     const std::string& simmProductClass() const { return simmProductClass_; }
     const std::string& scheduleProductClass() const { return scheduleProductClass_; }
+    const std::string& sensitivityTemplate() const { return sensitivityTemplate_; }
     const std::map<std::string, std::set<Date>>& fixings() const { return fixings_; }
 
 protected:
@@ -83,8 +91,11 @@ protected:
     void buildLocalVol(const std::string& id, const IborFallbackConfig& iborFallbackConfig);
     void buildGaussianCam(const std::string& id, const IborFallbackConfig& iborFallbackConfig,
                           const std::vector<std::string>& conditionalExpectationModelStates);
+    void buildFdGaussianCam(const std::string& id, const IborFallbackConfig& iborFallbackConfig);
     void buildGaussianCamAMC(const std::string& id, const IborFallbackConfig& iborFallbackConfig,
                              const std::vector<std::string>& conditionalExpectationModelStates);
+    void buildAMCCGModel(const std::string& id, const IborFallbackConfig& iborFallbackConfig,
+                         const std::vector<std::string>& conditionalExpectationModelStates);
     void addAmcGridToContext(boost::shared_ptr<Context>& context) const;
     void setupCalibrationStrikes(const ScriptedTradeScriptData& script, const boost::shared_ptr<Context>& context);
 
@@ -94,8 +105,10 @@ protected:
     // gets comm ccy from market
     std::string getCommCcy(const IndexInfo& e);
 
-    // input data
+    // input data (for amc, amcCam_, amcCgModel_ are mutually exclusive)
+    bool buildingAmc_ = false;
     const boost::shared_ptr<QuantExt::CrossAssetModel> amcCam_;
+    const boost::shared_ptr<ore::data::ModelCG> amcCgModel_;
     const std::vector<Date> amcGrid_;
 
     // cache for parsed asts
@@ -107,6 +120,7 @@ protected:
     QuantLib::Date lastRelevantDate_;
     std::string simmProductClass_;
     std::string scheduleProductClass_;
+    std::string sensitivityTemplate_;
     std::map<std::string, std::set<Date>> fixings_;
 
     // temporary variables used during engine building

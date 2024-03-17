@@ -313,7 +313,8 @@ Schedule makeSchedule(const ScheduleDerived& data, const Schedule& baseSchedule)
         derivedDates.push_back(derivedDate);
     }
     return Schedule(vector<Date>(derivedDates.begin(), derivedDates.end()), calendar, convention, boost::none,
-                    baseSchedule.tenor(), boost::none, baseSchedule.endOfMonth());
+                    baseSchedule.tenor(), boost::none, baseSchedule.endOfMonth(), std::vector<bool>(0), 
+                    data.removeFirstDate(), data.removeLastDate());
 }
 
 Schedule makeSchedule(const ScheduleRules& data, const Date& openEndDateReplacement) {
@@ -336,6 +337,9 @@ Schedule makeSchedule(const ScheduleRules& data, const Date& openEndDateReplacem
 
     Date firstDate = parseDate(data.firstDate());
     Date lastDate = parseDate(data.lastDate());
+    if (firstDate != Date() && lastDate != Date())
+        QL_REQUIRE(firstDate <= lastDate, "Schedule::makeSchedule firstDate must be before lastDate");
+
     Period tenor = parsePeriod(data.tenor());
 
     // defaults
@@ -368,7 +372,7 @@ Schedule makeSchedule(const ScheduleRules& data, const Date& openEndDateReplacem
             auto dates = weeklyDates(startDate, endDate, firstDate, data.rule() == "CalendarWeek");
             for (auto& d : dates)
                 d = calendar.adjust(d, bdc);
-            return Schedule(dates, calendar, bdc, bdcEnd, tenor, rule, endOfMonth);
+            return Schedule(dates, calendar, bdc, bdcEnd, tenor, rule, endOfMonth, std::vector<bool>(0), data.removeFirstDate(), data.removeLastDate());
         }
 
         // parse rule for further processing below
@@ -392,12 +396,14 @@ Schedule makeSchedule(const ScheduleRules& data, const Date& openEndDateReplacem
             dates.front() = firstDate;
         if (lastDate != Date())
             dates.back() = lastDate;
-        return Schedule(dates, calendar, bdc, bdcEnd, tenor, rule, endOfMonth);
+        return Schedule(dates, calendar, bdc, bdcEnd, tenor, rule, endOfMonth, std::vector<bool>(0),
+                        data.removeFirstDate(), data.removeLastDate());
     }
 
     // default handling (QuantLib scheduler)
 
-    return Schedule(startDate, endDate, tenor, calendar, bdc, bdcEnd, rule, endOfMonth, firstDate, lastDate);
+    return Schedule(startDate, endDate, tenor, calendar, bdc, bdcEnd, rule, endOfMonth, firstDate, lastDate,
+                    data.removeFirstDate(), data.removeLastDate());
 }
 
 namespace {

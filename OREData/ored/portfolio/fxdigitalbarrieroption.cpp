@@ -46,7 +46,7 @@ void FxDigitalBarrierOption::build(const boost::shared_ptr<EngineFactory>& engin
     // Only American supported for now
     QL_REQUIRE(tradeActions().empty(), "TradeActions not supported for FxOption");
     QL_REQUIRE(option_.style() == "European", "Option Style unknown: " << option_.style());
-    QL_REQUIRE(option_.exerciseDates().size() == 1, "Invalid number of excercise dates");
+    QL_REQUIRE(option_.exerciseDates().size() == 1, "Invalid number of exercise dates");
     QL_REQUIRE(strike_ > 0.0 && strike_ != Null<Real>(), "Invalid strike " << strike_);
 
     Currency boughtCcy = parseCurrency(foreignCurrency_);
@@ -130,6 +130,7 @@ void FxDigitalBarrierOption::build(const boost::shared_ptr<EngineFactory>& engin
     QL_REQUIRE(builder, "No builder found for FxDigitalOption");
     boost::shared_ptr<FxDigitalOptionEngineBuilder> fxOptBuilder =
         boost::dynamic_pointer_cast<FxDigitalOptionEngineBuilder>(builder);
+    setSensitivityTemplate(*builder);
 
     barrier->setPricingEngine(fxBarrierOptBuilder->engine(boughtCcy, soldCcy, expiryDate));
     vanilla->setPricingEngine(fxOptBuilder->engine(boughtCcy, soldCcy, flipResults));
@@ -142,7 +143,8 @@ void FxDigitalBarrierOption::build(const boost::shared_ptr<EngineFactory>& engin
     // 2) add fee payment as additional trade leg for cash flow reporting
     std::vector<boost::shared_ptr<Instrument>> additionalInstruments;
     std::vector<Real> additionalMultipliers;
-    Date lastPremiumDate = addPremiums(additionalInstruments, additionalMultipliers, 1.0, option_.premiumData(), -bsInd,
+    Date lastPremiumDate = addPremiums(additionalInstruments, additionalMultipliers,
+                                       positionType == Position::Long ? 1.0 : -1.0, option_.premiumData(), -bsInd,
                                        soldCcy, engineFactory, fxOptBuilder->configuration(MarketContext::pricing));
 
     Settlement::Type settleType = parseSettlementType(option_.settlement());

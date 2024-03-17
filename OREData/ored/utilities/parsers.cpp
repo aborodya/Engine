@@ -284,6 +284,22 @@ DayCounter parseDayCounter(const string& s) {
 
 Currency parseCurrency(const string& s) { return CurrencyParser::instance().parseCurrency(s); }
 
+QuantExt::ConfigurableCurrency::Type parseCurrencyType(const string& s) {
+    static map<string, QuantExt::ConfigurableCurrency::Type> m = {
+        {"Major", QuantExt::ConfigurableCurrency::Type::Major}, {"Fiat Currency", QuantExt::ConfigurableCurrency::Type::Major},
+        {"Fiat", QuantExt::ConfigurableCurrency::Type::Major}, {"Metal", QuantExt::ConfigurableCurrency::Type::Metal}, 
+        {"Precious Metal", QuantExt::ConfigurableCurrency::Type::Metal}, {"Crypto", QuantExt::ConfigurableCurrency::Type::Crypto},
+        {"Cryptocurrency", QuantExt::ConfigurableCurrency::Type::Crypto}};
+
+    auto it = m.find(s);
+    if (it != m.end()) {
+        return it->second;
+    } else {
+        QL_FAIL("Currency type \"" << s << "\" not recognised");
+    }
+}
+
+
 Currency parseMinorCurrency(const string& s) { return CurrencyParser::instance().parseMinorCurrency(s); }
 
 Currency parseCurrencyWithMinors(const string& s) { return CurrencyParser::instance().parseCurrencyWithMinors(s); }
@@ -645,10 +661,12 @@ AmortizationType parseAmortizationType(const std::string& s) {
 }
 
 SequenceType parseSequenceType(const std::string& s) {
-    static map<string, SequenceType> seq = {{"MersenneTwister", SequenceType::MersenneTwister},
-                                            {"MersenneTwisterAntithetic", SequenceType::MersenneTwisterAntithetic},
-                                            {"Sobol", SequenceType::Sobol},
-                                            {"SobolBrownianBridge", SequenceType::SobolBrownianBridge}};
+    static map<string, SequenceType> seq = {
+        {"MersenneTwister", SequenceType::MersenneTwister},
+        {"MersenneTwisterAntithetic", SequenceType::MersenneTwisterAntithetic},
+        {"Sobol", SequenceType::Sobol},
+        {"SobolBrownianBridge", SequenceType::SobolBrownianBridge},
+        {"Burley2020SobolBrownianBridge", SequenceType::Burley2020SobolBrownianBridge}};
     auto it = seq.find(s);
     if (it != seq.end())
         return it->second;
@@ -667,11 +685,15 @@ QuantLib::CPI::InterpolationType parseObservationInterpolation(const std::string
 }
 
 FdmSchemeDesc parseFdmSchemeDesc(const std::string& s) {
-    static std::map<std::string, FdmSchemeDesc> m = {
-        {"Hundsdorfer", FdmSchemeDesc::Hundsdorfer()},     {"Douglas", FdmSchemeDesc::Douglas()},
-        {"CraigSneyd", FdmSchemeDesc::CraigSneyd()},       {"ModifiedCraigSneyd", FdmSchemeDesc::ModifiedCraigSneyd()},
-        {"ImplicitEuler", FdmSchemeDesc::ImplicitEuler()}, {"ExplicitEuler", FdmSchemeDesc::ExplicitEuler()},
-        {"MethodOfLines", FdmSchemeDesc::MethodOfLines()}, {"TrBDF2", FdmSchemeDesc::TrBDF2()}};
+    static std::map<std::string, FdmSchemeDesc> m = {{"CrankNicolson", FdmSchemeDesc::CrankNicolson()},
+                                                     {"Hundsdorfer", FdmSchemeDesc::Hundsdorfer()},
+                                                     {"Douglas", FdmSchemeDesc::Douglas()},
+                                                     {"CraigSneyd", FdmSchemeDesc::CraigSneyd()},
+                                                     {"ModifiedCraigSneyd", FdmSchemeDesc::ModifiedCraigSneyd()},
+                                                     {"ImplicitEuler", FdmSchemeDesc::ImplicitEuler()},
+                                                     {"ExplicitEuler", FdmSchemeDesc::ExplicitEuler()},
+                                                     {"MethodOfLines", FdmSchemeDesc::MethodOfLines()},
+                                                     {"TrBDF2", FdmSchemeDesc::TrBDF2()}};
 
     auto it = m.find(s);
     if (it != m.end())
@@ -1392,6 +1414,36 @@ QuantExt::McMultiLegBaseEngine::RegressorModel parseRegressorModel(const std::st
     else {
         QL_FAIL("RegressorModel '" << s << "' not recognized, expected Simple, LaggedFX");
     }
+}
+
+MporCashFlowMode parseMporCashFlowMode(const string& s){
+    static map<string, MporCashFlowMode> m = {{"Unspecified", MporCashFlowMode::Unspecified},
+                                              {"NonePay", MporCashFlowMode::NonePay},
+                                              {"BothPay", MporCashFlowMode::BothPay},
+                                              {"WePay", MporCashFlowMode::WePay},
+                                              {"TheyPay", MporCashFlowMode::TheyPay}};
+    auto it = m.find(s);
+    if (it != m.end()) {
+        return it->second;
+    } else {
+        QL_FAIL("Mpor cash flow mode \"" << s << "\" not recognized");
+    }
+}
+std::ostream& operator<<(std::ostream& out, MporCashFlowMode t) {
+    if (t == MporCashFlowMode::Unspecified)
+        out << "Unspecified";
+    else if (t == MporCashFlowMode::NonePay)
+        out << "NonePay";
+    else if (t == MporCashFlowMode::BothPay)
+        out << "BothPay";
+    else if (t == MporCashFlowMode::WePay)
+        out << "WePay";
+    else if (t == MporCashFlowMode::TheyPay)
+        out << "TheyPay";
+    else
+        QL_FAIL("Mpor cash flow mode not covered, expected one of 'Unspecified', 'NonePay', 'BothPay', 'WePay', "
+                "'TheyPay'.");
+    return out;
 }
 
 } // namespace data

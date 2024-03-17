@@ -18,6 +18,7 @@
 
 #include <orea/app/analytics/parconversionanalytic.hpp>
 #include <orea/app/analytics/pricinganalytic.hpp>
+#include <orea/app/analytics/scenarioanalytic.hpp>
 #include <orea/app/analytics/scenariostatisticsanalytic.hpp>
 #include <orea/app/analytics/simmanalytic.hpp>
 #include <orea/app/analytics/varanalytic.hpp>
@@ -53,11 +54,13 @@ AnalyticsManager::AnalyticsManager(const boost::shared_ptr<InputParameters>& inp
     
     addAnalytic("MARKETDATA", boost::make_shared<MarketDataAnalytic>(inputs));
     addAnalytic("PRICING", boost::make_shared<PricingAnalytic>(inputs));
-    addAnalytic("VAR", boost::make_shared<VarAnalytic>(inputs_));
+    addAnalytic("PARAMETRIC_VAR", boost::make_shared<ParametricVarAnalytic>(inputs_));
+    addAnalytic("HISTSIM_VAR", boost::make_shared<HistoricalSimulationVarAnalytic>(inputs_));
     addAnalytic("XVA", boost::make_shared<XvaAnalytic>(inputs_));
     addAnalytic("SIMM", boost::make_shared<SimmAnalytic>(inputs_));
     addAnalytic("PARCONVERSION", boost::make_shared<ParConversionAnalytic>(inputs_));
     addAnalytic("SCENARIO_STATISTICS", boost::make_shared<ScenarioStatisticsAnalytic>(inputs_));
+    addAnalytic("SCENARIO", boost::make_shared<ScenarioAnalytic>(inputs_));
 }
 
 void AnalyticsManager::clear() {

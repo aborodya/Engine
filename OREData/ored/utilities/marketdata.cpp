@@ -62,6 +62,20 @@ Handle<YieldTermStructure> xccyYieldCurve(const boost::shared_ptr<Market>& marke
     return curve;
 }
 
+Handle<YieldTermStructure> indexOrYieldCurve(const boost::shared_ptr<Market>& market, const std::string& name,
+                                             const std::string& configuration) {
+    try {
+        return market->iborIndex(name, configuration)->forwardingTermStructure();
+    } catch (...) {
+    }
+    try {
+        return market->yieldCurve(name, configuration);
+    } catch (...) {
+    }
+    QL_FAIL("Could not find index or yield curve with name '" << name << "' under configuration '" << configuration
+                                                              << "' or default configuration.");
+}
+
 std::string securitySpecificCreditCurveName(const std::string& securityId, const std::string& creditCurveId) {
     auto tmp = "__SECCRCRV_" + securityId + "_&_" + creditCurveId + "_&_";
     return tmp;
@@ -187,6 +201,11 @@ std::tuple<Natural, Calendar, BusinessDayConvention> getFxIndexConventions(const
         TLOG("getFxIndexConvention(" << index << "): " << fxCon->spotDays() << " / " << fxCon->advanceCalendar().name()
                                      << " from convention.");
         return std::make_tuple(fxCon->spotDays(), fxCon->advanceCalendar(), fxCon->convention());
+    } else if (auto comCon = boost::dynamic_pointer_cast<CommodityForwardConvention>(con); comCon !=nullptr
+               && (isPseudoCurrency(ccy1) || isPseudoCurrency(ccy2))) {
+        TLOG("getFxIndexConvention(" << index << "): " << fxCon->spotDays() << " / " << fxCon->advanceCalendar().name()
+                                     << " from convention.");
+        return std::make_tuple(0, comCon->advanceCalendar(), comCon->bdc());
     }
 
     // default calendar for pseudo currencies is USD

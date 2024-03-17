@@ -65,7 +65,7 @@ void FxDoubleTouchOption::build(const boost::shared_ptr<EngineFactory>& engineFa
     Calendar cal = ore::data::parseCalendar(calendar_);
 
     QL_REQUIRE(tradeActions().empty(), "TradeActions not supported for FxOption");
-    QL_REQUIRE(option_.exerciseDates().size() == 1, "Invalid number of excercise dates");
+    QL_REQUIRE(option_.exerciseDates().size() == 1, "Invalid number of exercise dates");
     QL_REQUIRE(barrier_.levels().size() == 2, "Invalid number of barrier levels");
     QL_REQUIRE(barrier_.style().empty() || barrier_.style() == "American", "Only american barrier style suppported");
 
@@ -144,6 +144,7 @@ void FxDoubleTouchOption::build(const boost::shared_ptr<EngineFactory>& engineFa
     boost::shared_ptr<FxDoubleTouchOptionEngineBuilder> fxDoubleTouchOptBuilder =
         boost::dynamic_pointer_cast<FxDoubleTouchOptionEngineBuilder>(builder);
     doubleTouch->setPricingEngine(fxDoubleTouchOptBuilder->engine(fgnCcy, domCcy, payDate, flipResults));
+    setSensitivityTemplate(*fxDoubleTouchOptBuilder);
 
     // if a knock-in option is triggered it becomes a simple forward cashflow
     // which we price as a swap
@@ -151,15 +152,16 @@ void FxDoubleTouchOption::build(const boost::shared_ptr<EngineFactory>& engineFa
     QL_REQUIRE(builder, "No builder found for Swap");
     boost::shared_ptr<SwapEngineBuilderBase> swapBuilder =
         boost::dynamic_pointer_cast<SwapEngineBuilderBase>(builder);
-    underlying->setPricingEngine(swapBuilder->engine(parseCurrency(payoffCurrency_)));
+    underlying->setPricingEngine(swapBuilder->engine(parseCurrency(payoffCurrency_), std::string(), std::string()));
 
     bool isLong = (positionType == Position::Long) ? true : false;
 
     std::vector<boost::shared_ptr<Instrument>> additionalInstruments;
     std::vector<Real> additionalMultipliers;
-    Date lastPremiumDate = addPremiums(additionalInstruments, additionalMultipliers, payoffAmount_,
-                                       option_.premiumData(), isLong ? -1.0 : 1.0, parseCurrency(payoffCurrency_),
-                                       engineFactory, builder->configuration(MarketContext::pricing));
+    Date lastPremiumDate =
+        addPremiums(additionalInstruments, additionalMultipliers, (isLong ? 1.0 : -1.0) * payoffAmount_,
+                    option_.premiumData(), isLong ? -1.0 : 1.0, parseCurrency(payoffCurrency_), engineFactory,
+                    builder->configuration(MarketContext::pricing));
 
     Handle<Quote> spot = market->fxSpot(fgnCcy.code() + domCcy.code());
     instrument_ = boost::make_shared<DoubleBarrierOptionWrapper>(
